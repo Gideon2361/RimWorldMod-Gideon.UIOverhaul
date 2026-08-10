@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXAMPLE. Not loaded from Help/; copy into your own mod's Patches folder, not its Defs folder.
+
+  Adding your own named color to a palette you do not own, so your color is themeable per palette
+  rather than fixed in your code.
+
+  Two operations are shown because the shipped UIPalette_Default has no <custom> list at all. Patching
+  into a list that is not there fails, so the first operation creates it and the second appends. If
+  the palette you are targeting already has a <custom> list, use only the PatchOperationAdd.
+
+  Worth doing when the color should change with the theme. If it should look the same whatever theme
+  is loaded, keep it in your own code and leave the palette alone.
+
+  Reference: Help/UIColorPaletteDef.md
+-->
+<Patches>
+
+  <!-- Create the list, but only if it is missing. PatchOperationConditional tests the xpath and runs
+       its nomatch branch when nothing is found, which is why this does not log an error on the normal
+       path where the list is already there. -->
+  <Operation Class="PatchOperationConditional">
+    <xpath>/Defs/Gideon.UIFramework.Defs.UIColorPaletteDef[defName="UIPalette_Default"]/custom</xpath>
+    <nomatch Class="PatchOperationAdd">
+      <xpath>/Defs/Gideon.UIFramework.Defs.UIColorPaletteDef[defName="UIPalette_Default"]</xpath>
+      <value>
+        <custom />
+      </value>
+    </nomatch>
+  </Operation>
+
+  <!-- Append the entry. -->
+  <Operation Class="PatchOperationAdd">
+    <xpath>/Defs/Gideon.UIFramework.Defs.UIColorPaletteDef[defName="UIPalette_Default"]/custom</xpath>
+    <value>
+      <li>
+        <name>MyMod.RadiationGlow</name>
+        <value>#7FFF3C</value>
+      </li>
+    </value>
+  </Operation>
+
+</Patches>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXAMPLE. Not loaded from Help/; copy into your own mod's Defs folder.
+
+  The smallest useful palette. Every role has a built-in default in code, so a palette only names
+  what it wants to change. This one restyles the accent and nothing else, and is a complete, valid
+  palette.
+
+  Reference: Help/UIColorPaletteDef.md
+-->
+<Defs>
+
+  <Gideon.UIFramework.Defs.UIColorPaletteDef>
+    <defName>MyMod_Crimson</defName>
+    <label>crimson</label>
+    <description>The default look with a red accent.</description>
+    <accent>#C0392B</accent>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+</Defs>

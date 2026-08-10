@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXAMPLE. Copy into your own mod at:
+
+      Mods/YourMod/Mods/gideon.uioverhaul/LoadingScreen.xml
+
+  Not into a Defs folder. The nested Mods/<packageId> folder names the mod you are handing the data
+  TO, so the game never scans it and each framework reads only its own subtree. UILoadingScreenConfig
+  reads it directly off disk, from the root of every active mod, on first use.
+
+  That is why it lives outside Defs: defs are not created until three quarters of the way through
+  startup, long after the loading screen has begun drawing. It also means no PatchOperation support
+  and no ParentName inheritance, neither of which could have worked in time anyway.
+
+  Reference: Help/LoadingScreenConfig.md
+-->
+<LoadingScreens>
+
+  <!-- An image backdrop. Cover scales the image to fill whatever aspect ratio the monitor is,
+       cropping the overflow, which is what a full-screen backdrop wants; Contain would leave bars
+       down the sides.
+
+       The path has no file extension: .dds, .png, .jpg and .jpeg are tried in that order.
+
+       Nothing here dims the whole image, because the panel behind the text does that job only where
+       it is needed. An overlay is the alternative when the art is busy everywhere. -->
+  <LoadingScreen>
+    <name>MyMod_Backdrop</name>
+    <label>my backdrop</label>
+    <description>A full-screen image with the stage, step and progress bar.</description>
+
+    <background>MyMod/Loading/Backdrop</background>
+    <backgroundFit>Cover</backgroundFit>
+
+    <showStage>true</showStage>
+    <showStep>true</showStep>
+    <showProgressBar>true</showProgressBar>
+
+    <showPanel>true</showPanel>
+    <panelPadding>16</panelPadding>
+  </LoadingScreen>
+
+
+  <!-- A backdrop that dims globally instead, with a heavier hand-picked panel on top. Both are shown
+       together here only to demonstrate the fields; pick one in real use. panelColor's last two hex
+       digits are its alpha, and they are what stops the panel becoming a solid slab. -->
+  <LoadingScreen>
+    <name>MyMod_Busy</name>
+    <label>busy art</label>
+    <description>For a backdrop with no dark area to put text on.</description>
+
+    <background>MyMod/Loading/Backdrop</background>
+    <overlay>#000000A0</overlay>
+
+    <panelColor>#0E1218CC</panelColor>
+    <panelPadding>22</panelPadding>
+  </LoadingScreen>
+
+
+  <!-- No image, and no per-step chatter. The background falls back to a flat fill of the active
+       palette's window background, so this is still themed rather than blank. With no photograph
+       underneath, the panel has nothing to protect the text from, so it is turned off.
+
+       Turning off showStep is worth considering: during def processing it changes every few
+       milliseconds, which some people read as noise. -->
+  <LoadingScreen>
+    <name>MyMod_Quiet</name>
+    <label>quiet</label>
+    <description>Palette-colored, stage and bar only.</description>
+
+    <showStep>false</showStep>
+    <showPanel>false</showPanel>
+  </LoadingScreen>
+
+
+  <!-- A screen drawn by your own class. Resolved with GenTypes.GetTypeInAnyAssembly, so a bare name
+       works as well as a namespace-qualified one. Must derive from UILoadingScreenControl and have a
+       parameterless constructor; anything else logs once and falls back to the stock drawer. -->
+  <LoadingScreen>
+    <name>MyMod_Custom</name>
+    <label>custom drawer</label>
+    <background>MyMod/Loading/Backdrop</background>
+    <drawerClass>MyMod.MyLoadingScreen</drawerClass>
+  </LoadingScreen>
+
+</LoadingScreens>

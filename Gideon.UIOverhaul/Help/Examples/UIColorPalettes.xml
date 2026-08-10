@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXAMPLE. Nothing in Help/ is loaded by the game; RimWorld only reads XML from a version folder's
+  Defs and Patches directories. Copy what you need into your own mod's Defs folder.
+
+  This is the shipped palette file with one addition: the <custom> block on the light palette, which
+  the live file leaves out because a named color nothing reads would just be load-time weight.
+
+  Reference: Help/UIColorPaletteDef.md
+-->
+<Defs>
+
+  <!-- A template. Abstract, so it never becomes a palette in its own right; it exists to be
+       inherited. Put the colors every variant should agree on here, and let each variant own its
+       surfaces and text, which is precisely what a light or dark variant exists to change. -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef Abstract="True" Name="ExamplePaletteBase">
+    <success>#61C461</success>
+    <warning>#CCA633</warning>
+    <danger>#E54D33</danger>
+    <info>#4A90D9</info>
+    <accent>#73BFFF</accent>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+
+  <!-- A dark variant. Names every surface and text role, and inherits the state colors above. -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef ParentName="ExamplePaletteBase">
+    <defName>Example_Dark</defName>
+    <label>example dark</label>
+    <description>Deep neutral surfaces with a cool blue accent.</description>
+
+    <windowBackground>#15191D</windowBackground>
+    <panelBackground>#1B1F23</panelBackground>
+    <surfaceRaised>#2F3337</surfaceRaised>
+    <surfaceSunken>#0E1013</surfaceSunken>
+
+    <border>#345673</border>
+    <borderFocused>#73BFFF</borderFocused>
+
+    <textPrimary>#E3E3E3</textPrimary>
+    <textSecondary>#9EA6B2</textSecondary>
+    <textDisabled>#6C7480</textDisabled>
+
+    <accentMuted>#274157</accentMuted>
+
+    <!-- Overlays are drawn on top of whatever is already there, so the alpha in the last two hex
+         digits is the entire point. White washes lift a dark surface. -->
+    <hoverOverlay>#FFFFFF0C</hoverOverlay>
+    <pressedOverlay>#FFFFFF1F</pressedOverlay>
+    <selectionOverlay>#73BFFF24</selectionOverlay>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+
+  <!-- A light variant from the same template. Note two things: it overrides the accent it inherited,
+       because the dark theme's accent has too little contrast on a pale surface, and its overlays are
+       black rather than white. A white wash does nothing useful on a light surface. -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef ParentName="ExamplePaletteBase">
+    <defName>Example_Light</defName>
+    <label>example light</label>
+    <description>Pale surfaces with dark text and a deeper blue accent.</description>
+
+    <windowBackground>#E8EAED</windowBackground>
+    <panelBackground>#F5F6F8</panelBackground>
+    <surfaceRaised>#FFFFFF</surfaceRaised>
+    <surfaceSunken>#D8DBE0</surfaceSunken>
+
+    <border>#A8B4C4</border>
+    <borderFocused>#2F7FD0</borderFocused>
+
+    <textPrimary>#1B1F23</textPrimary>
+    <textSecondary>#4E5866</textSecondary>
+    <textDisabled>#8A93A0</textDisabled>
+
+    <accent>#2F7FD0</accent>
+    <accentMuted>#BBD4EE</accentMuted>
+
+    <hoverOverlay>#0000000C</hoverOverlay>
+    <pressedOverlay>#0000001F</pressedOverlay>
+    <selectionOverlay>#2F7FD024</selectionOverlay>
+
+    <!-- Named colors outside the fixed roles, for anything the role list does not cover. Prefix the
+         name with something you own: custom colors share one flat namespace per palette. Read it
+         back with palette.Custom("MyMod.RadiationGlow", Color.green), and always pass a fallback that
+         makes sense, because another palette will not define your color. -->
+    <custom>
+      <li>
+        <name>MyMod.RadiationGlow</name>
+        <value>#7FFF3C</value>
+      </li>
+      <li>
+        <name>MyMod.ContaminationWash</name>
+        <value>#7FFF3C28</value>
+      </li>
+    </custom>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+</Defs>

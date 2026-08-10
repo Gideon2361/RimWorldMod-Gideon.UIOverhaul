@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ModMetaData>
+  <name>Gideon's UI Overhaul</name>
+  <author>Gideon</author>
+  <packageId>gideon.uioverhaul</packageId>
+  <modVersion>1.6.4871.14081</modVersion>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+  <url></url>
+  <description>
+    A modern overhaul for RimWorld's UI.  Supports themes and has a framework API for other mods to implement custom UI elements with.
+  </description>
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+      <downloadUrl>https://github.com/pardeike/Harmony/releases/latest</downloadUrl>
+    </li>
+  </modDependencies>
+  <incompatibleWith>
+  </incompatibleWith>
+  <loadAfter />
+</ModMetaData>

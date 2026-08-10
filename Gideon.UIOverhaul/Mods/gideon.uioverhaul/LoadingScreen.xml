@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Loading screens for this mod.
+
+  This file is NOT a Defs file and the game never reads it. UILoadingScreenConfig reads it directly
+  off disk, from the root of every active mod, on first use.
+
+  That is deliberate. Defs are not created until LoadedModManager.ParseAndProcessXML, roughly three
+  quarters of the way through startup, so a loading screen described by a def spends almost the whole
+  load as a compiled-in fallback and only becomes itself moments before the main menu appears. Read
+  from here, it is correct on the first frame the screen draws.
+
+  Consequences of living outside Defs, all intended:
+    * No PatchOperation support. Patches run after the window this file matters in, so they could
+      never have applied in time anyway.
+    * No ParentName inheritance and no def database entry.
+    * Unknown fields are reported as warnings rather than silently ignored.
+
+  Full documentation: Help/LoadingScreenConfig.md
+-->
+<LoadingScreens>
+
+  <!-- The name is not arbitrary: UILoadingScreenConfig.DefaultScreenName hardcodes it, so this is
+       what draws until the player picks something else. Renaming it here means renaming it there. -->
+  <LoadingScreen>
+    <name>UILoadingScreen_Default</name>
+    <label>Modern</label>
+    <description>The default loading screen. Full-screen backdrop, with the current stage, the step being performed, and a progress bar.</description>
+
+    <!-- No file extension: UIImageLoader tries .dds, .png, .jpg and .jpeg in that order, and the art
+         is a .dds. Cover fills whatever aspect ratio the monitor is and crops the remainder; the art
+         is 16:9, so an ultrawide loses top and bottom while a 16:10 loses the sides.
+
+         No overlay, because the panel below now does that job locally instead of dimming the whole
+         image. Add one if a replacement backdrop is busy enough to need it. -->
+    <background>UIOverhaul/UI/LoadingScreen.Default</background>
+    <backgroundFit>Cover</backgroundFit>
+
+    <showStage>true</showStage>
+    <showStep>true</showStep>
+    <showProgressBar>true</showProgressBar>
+
+    <!-- The panel behind the stage, step and bar. Without it, legibility depends on what the backdrop
+         happens to look like behind the text, which is not something a backdrop can be relied on for.
+         Unset panelColor takes the palette's panel background at 85% alpha. -->
+    <showPanel>true</showPanel>
+    <panelPadding>16</panelPadding>
+  </LoadingScreen>
+
+</LoadingScreens>

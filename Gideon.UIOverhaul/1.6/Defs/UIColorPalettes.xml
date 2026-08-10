@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===========================================================================================
+       Color palettes for the UI framework.
+
+       Every role has a built-in default in code, so a palette only names the roles it wants to
+       change. Anything left out is inherited from ParentName, and anything neither named nor
+       inherited falls back to the compiled-in value.
+
+       The element name is fully qualified. The short form <UIColorPaletteDef> also works, but the
+       qualified name cannot be made ambiguous by another mod defining a type with the same name.
+
+       Full documentation: Help/UIColorPaletteDef.md
+       =========================================================================================== -->
+
+  <!-- Template. Abstract, so it never becomes a palette of its own; it exists to be inherited.
+       It holds what every theme should agree on: the meaning-carrying state colors, and the accent
+       that gives the suite its identity. Surfaces and text belong to the individual themes, because
+       those are exactly what a light or dark variant has to change. -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef Abstract="True" Name="UIPaletteBase">
+    <success>#61C461</success>
+    <warning>#CCA633</warning>
+    <danger>#E54D33</danger>
+    <info>#4A90D9</info>
+    <accent>#73BFFF</accent>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+
+  <!-- Dark Theme. This defName is not arbitrary: UIColorPaletteDef.DefaultPaletteDefName hardcodes
+       it, so this def is what the framework uses until the player picks something else. Renaming it
+       here means renaming it there too. -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef ParentName="UIPaletteBase">
+    <defName>UIPalette_Default</defName>
+    <label>Modern Dark</label>
+    <description>The default dark theme. Deep neutral surfaces with a cool blue accent.</description>
+
+    <windowBackground>#15191D</windowBackground>
+    <panelBackground>#1B1F23</panelBackground>
+    <surfaceRaised>#2F3337</surfaceRaised>
+    <surfaceSunken>#0E1013</surfaceSunken>
+
+    <border>#345673</border>
+    <borderFocused>#73BFFF</borderFocused>
+
+    <textPrimary>#E3E3E3</textPrimary>
+    <textSecondary>#9EA6B2</textSecondary>
+    <textDisabled>#6C7480</textDisabled>
+
+    <accentMuted>#274157</accentMuted>
+
+    <hoverOverlay>#FFFFFF0C</hoverOverlay>
+    <pressedOverlay>#FFFFFF1F</pressedOverlay>
+    <selectionOverlay>#73BFFF24</selectionOverlay>
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+
+  <!-- Light Theme -->
+  <Gideon.UIFramework.Defs.UIColorPaletteDef ParentName="UIPaletteBase">
+    <defName>UIPalette_Light</defName>
+    <label>Modern Light</label>
+    <description>A light theme. Pale surfaces with dark text and a deeper blue accent.</description>
+
+    <windowBackground>#E8EAED</windowBackground>
+    <panelBackground>#F5F6F8</panelBackground>
+    <surfaceRaised>#FFFFFF</surfaceRaised>
+    <surfaceSunken>#D8DBE0</surfaceSunken>
+
+    <border>#A8B4C4</border>
+    <borderFocused>#2F7FD0</borderFocused>
+
+    <textPrimary>#1B1F23</textPrimary>
+    <textSecondary>#4E5866</textSecondary>
+    <textDisabled>#8A93A0</textDisabled>
+
+    <accent>#2F7FD0</accent>
+    <accentMuted>#BBD4EE</accentMuted>
+
+    <hoverOverlay>#0000000C</hoverOverlay>
+    <pressedOverlay>#0000001F</pressedOverlay>
+    <selectionOverlay>#2F7FD024</selectionOverlay>
+
+  </Gideon.UIFramework.Defs.UIColorPaletteDef>
+
+</Defs>

@@ -1,0 +1,19 @@
+# Build output. The shipped assembly under Gideon.UIOverhaul/1.6/Assemblies is tracked
+# deliberately -- that copy is the mod, not a build artifact.
+bin/
+obj/
+
+# Rider / VS
+.idea/
+.vs/
+*.user
+*.suo
+*.DotSettings.user
+
+# Claude Code
+.claude/
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
