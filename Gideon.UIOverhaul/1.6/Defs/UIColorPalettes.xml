@@ -37,10 +37,10 @@
 
     <windowBackground>#15191D</windowBackground>
     <panelBackground>#1B1F23</panelBackground>
-    <surfaceRaised>#2F3337</surfaceRaised>
+    <surfaceRaised>#15191D</surfaceRaised>
     <surfaceSunken>#0E1013</surfaceSunken>
 
-    <border>#345673</border>
+    <border>#2F3337</border>
     <borderFocused>#73BFFF</borderFocused>
 
     <textPrimary>#E3E3E3</textPrimary>

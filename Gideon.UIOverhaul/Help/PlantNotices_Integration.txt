@@ -1,0 +1,353 @@
+﻿===============================================================================
+GROWING ZONES PLUS -- MOD INTEGRATION
+How to describe your plants' hazards and benefits
+===============================================================================
+
+Growing Zones Plus replaces the growing zone bill tab with a plant browser. Each
+plant gets a card showing grow time, lifespan, beauty, skill, nutrition,
+temperature range and light needs.
+
+A plant can also carry a NOTICE -- a highlighted row calling out that the plant
+is dangerous, or that it does something useful:
+
+    confirmed hazard    biohazard icon over a deep red wash
+    possible hazard     question-mark icon over an orange wash
+    benefit             caduceus over a green wash
+
+Clicking the plant shows the full explanation in the right-hand panel.
+
+Growing Zones Plus ships a table covering vanilla, the official DLCs, and a
+number of popular plant mods. That table is guesswork on our part, based on
+reading your code from the outside. THIS FILE EXPLAINS HOW TO OVERRIDE IT.
+
+If you supply your own entries, yours win. We stop guessing about your plants,
+and you do not have to wait for us to notice when you change them.
+
+
+-------------------------------------------------------------------------------
+1. WHERE THE FILE GOES
+-------------------------------------------------------------------------------
+
+Inside YOUR mod's folder, create:
+
+    <YourModFolder>/Mods/babylettuce.growingzone/GZP_PlantHazardCache.xml
+
+So a mod at
+
+    .../294100/1234567890/
+
+would place the file at
+
+    .../294100/1234567890/Mods/babylettuce.growingzone/GZP_PlantHazardCache.xml
+
+Notes:
+
+  * The folder name "babylettuce.growingzone" is our packageId. Do not rename it.
+  * The file name must be exactly GZP_PlantHazardCache.xml.
+  * This is NOT a Defs file. Do not put it in your Defs folder. RimWorld never
+    loads it; Growing Zones Plus reads it directly.
+  * You do NOT need to reference our assembly, add a mod dependency, or load
+    after us. If Growing Zones Plus is not installed, the file is simply never
+    read and costs your users nothing.
+  * If you ship versioned folders (1.5, 1.6, ...), put the file in your mod's
+    ROOT, not inside a version folder.
+
+
+-------------------------------------------------------------------------------
+2. FILE SHAPE
+-------------------------------------------------------------------------------
+
+<?xml version="1.0" encoding="utf-8"?>
+<GZP_PlantHazardCache>
+
+  <entry>
+    <plant>MyMod_Plant_Screamer</plant>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Screams when harvested</cardLabel>
+    <detail>Lets out a psychic shriek when cut, briefly stunning anyone nearby. Harvest it with someone you do not need for the next few seconds.</detail>
+  </entry>
+
+  <entry>
+    <thingClass>MyMod.Plant_Soothing</thingClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Calms nearby colonists</cardLabel>
+    <detail>Emits a mild sedative pollen that raises the mood of anyone working in the zone.</detail>
+  </entry>
+
+</GZP_PlantHazardCache>
+
+The root element must be <GZP_PlantHazardCache>. Each notice is one <entry>.
+There is no limit on the number of entries.
+
+
+-------------------------------------------------------------------------------
+3. MATCH KEYS -- WHICH PLANTS AN ENTRY APPLIES TO
+-------------------------------------------------------------------------------
+
+Set EXACTLY ONE of these four per entry. They are tried in the order below,
+most specific first, and the first hit wins.
+
+  <plant>            A single plant's defName.
+                     Example: <plant>VPE_Plant_Stinker</plant>
+
+                     USE WHEN: the notice is about one specific plant, or you
+                     need to override a broader rule that is catching it. This
+                     beats every other key, including ours.
+
+  <thingClass>       The plant's thingClass. Either the namespace-qualified name
+                     or the bare class name works.
+                     Example: <thingClass>MyMod.Plant_ReleasesGas</thingClass>
+                     Example: <thingClass>Plant_Boomshroom</thingClass>
+
+                     USE WHEN: you route several plants through one class. One
+                     entry then covers all of them, including plants you add
+                     later -- you will not need to update this file again.
+
+                     A bare name matches that class name in ANY namespace. That
+                     is useful for catching similar classes across mods, but it
+                     can over-match. Use the qualified form when you want the
+                     entry to apply only to your own class.
+
+  <compClass>        The class name of a CompProperties the plant carries.
+                     Qualified or bare, same rules as thingClass.
+                     Example: <compClass>CompProperties_PollutionPump</compClass>
+
+                     USE WHEN: the behavior lives in a comp rather than a
+                     custom plant class. This is the common case for plants that
+                     use the stock Plant class and get their behavior bolted on.
+
+  <harvestedThing>   The defName of what the plant harvests into.
+                     Example: <harvestedThing>MedicineHerbal</harvestedThing>
+
+                     USE WHEN: the notice is really about the product, not the
+                     plant. Our built-in "Yields medicine" benefit works this
+                     way, so any plant of yours harvesting into MedicineHerbal
+                     is already covered without you doing anything.
+
+If an entry sets no match key, it is reported in the log and skipped.
+
+
+-------------------------------------------------------------------------------
+4. <kind> -- REQUIRED
+-------------------------------------------------------------------------------
+
+Exactly one of these five values. This is the ONLY thing that decides whether a
+card shows the red hazard treatment, the orange unconfirmed treatment, or the
+green benefit treatment.
+
+  CreatesHazard    The plant produces the hazard itself, simply by growing or by
+                   being harvested. Venting gas, exploding when cut, discharging
+                   electricity, releasing something when felled.
+
+                   CHOOSE THIS when the danger is a consequence of having the
+                   plant. The player needs to think about WHERE to put the zone.
+
+  RequiresHazard   The plant will not grow unless the hazard is already present.
+                   Growth scales with rot gas, corpse bile, pollution, toxins.
+
+                   CHOOSE THIS when the plant is not itself dangerous, but
+                   farming it means deliberately maintaining something nasty.
+                   The player needs to think about WHETHER the crop is worth it.
+
+                   The distinction matters: CreatesHazard is a warning, whereas
+                   RequiresHazard is a prerequisite. Players filtering for safe
+                   crops treat them differently.
+
+  PossibleHazard   Something about the plant suggests it may be dangerous, but
+                   nobody has confirmed what it actually does. Shown in orange
+                   rather than red.
+
+                   CHOOSE THIS when you are describing a plant you have not
+                   verified -- most often someone else's. It is the honest
+                   option when you can see that a plant hooks into gas, damage
+                   or spawning code but you have not watched it in play.
+
+                   It is also the right choice for a broad thingClass or
+                   compClass rule meant to catch plants that do not exist yet.
+                   Such a rule will one day match something nobody has looked
+                   at, and orange says so.
+
+                   Write the detail text to match: say plainly what you saw and
+                   what you did not confirm. Do not dress a suspicion up as a
+                   finding -- players make siting decisions from these notices.
+
+  CreatesBenefit   The plant confers something useful beyond its harvest.
+                   Cleaning pollution, producing breathable air, acting as a
+                   meditation focus, disposing of corpses, sheltering allies.
+
+                   CHOOSE THIS when the reason to plant it is the side effect,
+                   not the yield. A plant that merely produces a good crop does
+                   not need an entry -- the card already shows the yield.
+
+  None             Explicitly no notice. The card shows nothing.
+
+                   CHOOSE THIS to cancel a rule that is catching one of your
+                   plants wrongly. For example, if one of your plants harvests
+                   into MedicineHerbal but is not really a medicine plant, add
+                   an entry with <plant>YourDefName</plant> and <kind>None</kind>
+                   and our broad rule stops applying to it.
+
+
+-------------------------------------------------------------------------------
+5. <cardLabel> -- OPTIONAL
+-------------------------------------------------------------------------------
+
+The short text on the card row. Keep it under about 30 characters; the card is
+narrow and longer text is clipped.
+
+Write it as a statement about the plant, not a category:
+
+    GOOD: Explodes when damaged
+    GOOD: Vents gas while growing
+    GOOD: Cleans pollution
+    POOR: Hazard
+    POOR: Warning: dangerous plant!
+
+If you omit it, a generic phrase is used based on <kind>:
+    CreatesHazard   -> "Creates Hazard"
+    RequiresHazard  -> "Growth Requires Hazard Present"
+    PossibleHazard  -> "Possible Hazard"
+    CreatesBenefit  -> "Provides Benefit"
+
+Supplying your own is strongly preferred. The generic phrases tell the player
+almost nothing.
+
+
+-------------------------------------------------------------------------------
+6. <detail> -- OPTIONAL BUT RECOMMENDED
+-------------------------------------------------------------------------------
+
+The full explanation, shown in the right-hand panel when the plant is selected,
+and as the tooltip on the card row. It wraps, so length is not a problem --
+two or three sentences is about right.
+
+Say what happens and what the player should do about it:
+
+    Vents toxic gas into the surrounding tiles as it grows. Site the zone away
+    from bedrooms and work areas, or vent it to the outside.
+
+Avoid restating the label, and avoid vague warnings. "This plant is dangerous"
+helps nobody decide anything.
+
+
+-------------------------------------------------------------------------------
+7. <light> -- OPTIONAL
+-------------------------------------------------------------------------------
+
+The card's light figure is worked out from the plant's own <diesToLight> and
+<growMinGlow>. That is correct for anything that leaves light handling to
+vanilla -- but if your thingClass implements light damage itself, those fields
+still describe a plant that tolerates light, and the card will say so.
+
+<light> overrides what the card shows. Three values:
+
+    Deadly    Light harms the plant. Shown in red.
+    Any       Genuinely indifferent to light level.
+    Normal    Wants ordinary crop light.
+
+<lightDetail> supplies the tooltip. Say what actually happens, because the
+label is only one word:
+
+    <entry>
+      <plant>MyMod_Plant_Palegrowth</plant>
+      <kind>None</kind>
+      <light>Deadly</light>
+      <lightDetail>Withers in sunlight. Its def permits any light level, but the
+      plant damages itself once the sun reaches it, so it needs a roof.</lightDetail>
+    </entry>
+
+Note <kind>None</kind> there. A light override is a correction to a stat, not a
+notice, so an entry can carry one WITHOUT putting a hazard or benefit row on the
+card. <kind> is still required -- use None when the light fix is all you want.
+
+An entry may of course carry both: a real notice and a light override together.
+
+A value we do not recognize is reported and ignored, and the rest of the entry
+is kept -- unlike <kind>, a bad <light> does not cost you the whole entry.
+
+
+-------------------------------------------------------------------------------
+8. OVERRIDING OUR ENTRIES
+-------------------------------------------------------------------------------
+
+Contributed entries are merged AFTER our built-in table. An entry replaces ours
+whenever it uses the SAME match key and value.
+
+So if we ship:
+
+    <thingClass>YourMod.Plant_Whatever</thingClass>  ->  "Creates Hazard"
+
+and you ship an entry with that same thingClass, yours is used and ours is
+discarded entirely -- label, detail and kind.
+
+To override an entry of ours that uses a DIFFERENT key than you would prefer,
+use <plant>, which is checked before everything else. For example, if our
+<harvestedThing>MedicineHerbal</harvestedThing> rule is catching your plant and
+you want different wording, add a <plant> entry for that specific defName.
+
+If two mods contribute entries with the same key, the one loading later wins.
+
+
+-------------------------------------------------------------------------------
+9. CHECKING YOUR WORK
+-------------------------------------------------------------------------------
+
+Start RimWorld with your mod and Growing Zones Plus both active, and look in the
+log for:
+
+    [Growing Zones Plus] Loaded N plant notice entries from '<your mod name>'.
+
+If you do not see it, the file is not where we expect -- re-read section 1.
+
+Problems with individual entries are reported with the entry number and the
+file path, and only that entry is skipped:
+
+    [Growing Zones Plus] Entry 3 in <path> has an unrecognized kind 'Hazard'.
+        PossibleHazard, CreatesBenefit and None.
+        Skipped.
+
+A malformed file is reported and skipped whole; it never prevents the game or
+the rest of the table from loading.
+
+Then open a growing zone, press Add Bill, and find your plant in the list. A
+plant with a notice sits taller than its neighbours and carries a colored wash.
+
+
+-------------------------------------------------------------------------------
+10. IF YOU WOULD RATHER DO IT IN C#
+-------------------------------------------------------------------------------
+
+If your mod already has an assembly and you would prefer to tag plants directly,
+put a DefModExtension on the plant def instead. This beats every table entry,
+ours and yours:
+
+    <ThingDef>
+      <defName>MyMod_Plant_Screamer</defName>
+      ...
+      <modExtensions>
+        <li Class="Growing_Zones_Plus.PlantHazardExtension">
+          <kind>CreatesHazard</kind>
+          <cardLabel>Screams when harvested</cardLabel>
+          <detail>Lets out a psychic shriek when cut.</detail>
+        </li>
+      </modExtensions>
+    </ThingDef>
+
+The extension takes <light> and <lightDetail> as well, with the same meanings as
+in section 7.
+
+This requires Growing Zones Plus to be loaded, so guard it with a LoadFolders
+entry (IfModActive="babylettuce.growingzone") or your def will error for players
+who do not have it. The XML cache file has no such constraint, which is why it
+is the recommended route.
+
+
+-------------------------------------------------------------------------------
+QUESTIONS
+-------------------------------------------------------------------------------
+
+If a plant of yours does not fit any of the four kinds, or you need a match key
+we do not offer, say so -- the table is meant to describe your plants the way
+you would describe them, and we would rather extend it than have you work
+around it.
+

@@ -65,6 +65,12 @@
             <HintPath>$(RimWorldManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath>
             <Private>false</Private>
         </Reference>
+        <!-- UnityEngine.Input, for the mouse-button state a pressed button is drawn from. Legacy is
+             the right module: it is the input API RimWorld itself uses. -->
+        <Reference Include="UnityEngine.InputLegacyModule">
+            <HintPath>$(RimWorldManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
         <Reference Include="UnityEngine.IMGUIModule">
             <HintPath>$(RimWorldManagedDir)\UnityEngine.IMGUIModule.dll</HintPath>
             <Private>false</Private>
@@ -80,7 +86,7 @@
     </ItemGroup>
     <ItemGroup>
       <Folder Include="UIFramework\Stages\" />
-      <Folder Include="UIOverhaul\" />
+      <Folder Include="UIOverhaul\Features\GrowZones\" />
       <Folder Include="UIOverhaul\Patches\" />
     </ItemGroup>
 

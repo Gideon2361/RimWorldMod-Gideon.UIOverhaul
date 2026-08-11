@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Placeholder recipe backing every Bill_Growing. RimWorld's Bill requires a non-null RecipeDef:
+    Bill.ExposeData dereferences recipe.fixedIngredientFilter, so a null one crashes on save.
+    Nothing in the bill row UI reads the recipe, so a single shared def serves every plant bill.
+    Referenced from C# as GZPDefOf.GZP_GrowPlant.
+  -->
+  <RecipeDef>
+    <defName>GZP_GrowPlant</defName>
+    <label>grow plant</label>
+    <description>Internal placeholder used by Growing Zones Plus growing-zone bills. It is never available on a workbench.</description>
+    <jobString>Growing.</jobString>
+    <workAmount>1</workAmount>
+  </RecipeDef>
+
+  <!--
+    Repeat modes with no vanilla equivalent. Forever and TargetCount are reused from
+    BillRepeatModeDefOf as-is; these two back the nutrition-threshold bill types.
+  -->
+  <BillRepeatModeDef>
+    <defName>GZP_NutritionBelow</defName>
+    <label>nutrition &lt; X</label>
+    <listOrder>100</listOrder>
+  </BillRepeatModeDef>
+
+  <BillRepeatModeDef>
+    <defName>GZP_PlantNutritionBelow</defName>
+    <label>plant nutrition &lt; X</label>
+    <listOrder>110</listOrder>
+  </BillRepeatModeDef>
+
+  <!--
+    Colony-wide growing zone list, alongside Animals in the bottom button row. order sits between
+    vanilla's Wildlife (56) and Research (60) so it lands next to the other census tabs.
+  -->
+  <MainButtonDef>
+    <defName>GZP_GrowZones</defName>
+    <label>grow zones</label>
+    <description>Every growing zone on this map: what it is growing, how far along its bill is, whether the temperature suits the crop, and what harvesting it would yield. Click a zone to jump to it.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.GrowZones.UI.MainTabWindow_GrowZones</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <order>58</order>
+  </MainButtonDef>
+
+</Defs>

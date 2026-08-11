@@ -1,0 +1,204 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Growing Zones Plus' own plant notice table.
+
+  This uses exactly the format documented in Help/Mod_Integration_Instructions.txt, and sits at the
+  same path other mods are asked to use. Nothing here is special-cased: our rows are simply loaded
+  first, so a contributing mod's row always replaces ours when they share a match key.
+
+  Set exactly one match key per entry. They are tried most specific first:
+      plant  ->  thingClass  ->  compClass  ->  harvestedThing
+
+  kind:
+    CreatesHazard   - the plant produces a hazard as it grows
+    RequiresHazard  - the hazard must already be present or the plant will not grow
+    PossibleHazard  - something suggests hazardous behavior, but it is unconfirmed
+    CreatesBenefit  - the plant confers something useful
+    None            - explicitly no notice
+-->
+<GZP_PlantHazardCache>
+
+  <!-- ============================= HAZARDS: vanilla + DLC ============================= -->
+
+  <entry>
+    <thingClass>Plant_Boomshroom</thingClass>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Explodes when damaged</cardLabel>
+    <detail>Detonates when cut, harvested or set alight. The blast sets off other boomshrooms in range and ignites anything flammable nearby, fuel tanks included. Space the zone out and keep it well away from stored fuel and structures.</detail>
+  </entry>
+
+  <!-- ============================= HAZARDS: mods ============================= -->
+
+  <entry>
+    <thingClass>VanillaPlantsExpandedMushrooms.Plant_HandlesLowLightAndReleasesRot</thingClass>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Vents rot stink</cardLabel>
+    <detail>Vents gas into the surrounding tiles as it grows. Site the zone away from bedrooms and work areas, or vent it.</detail>
+  </entry>
+
+  <!--
+    Toxpuff is currently the only plant using Plant_ReleasesGas, so this defName row does the real
+    work. The thingClass row below is a fallback in case that mod routes further plants through the
+    same class later; it is marked PossibleHazard because it would be describing a plant nobody has
+    looked at yet.
+  -->
+  <entry>
+    <plant>VPE_Plant_Toxpuff</plant>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Tox gas when stepped on</cardLabel>
+    <detail>Puffs out tox gas when a pawn or animal walks over it. Keep the zone off routes colonists use, and away from doorways and corridors, or route paths around it.</detail>
+  </entry>
+
+  <entry>
+    <plant>VPE_Plant_Blisscap</plant>
+    <kind>PossibleHazard</kind>
+    <cardLabel>Mood booster, drug</cardLabel>
+    <detail>Produces a mood enhancing edible.  Be careful of addiction and drowsiness.</detail>
+  </entry>
+  
+  <entry>
+    <thingClass>VanillaPlantsExpandedMushrooms.Plant_ReleasesGas</thingClass>
+    <kind>PossibleHazard</kind>
+    <cardLabel>May release gas</cardLabel>
+    <detail>This plant is built on code that releases gas into the surrounding tiles, so it is probably not safe to grow next to living space. We have not confirmed which gas it produces or what triggers it, so treat this as a caution rather than a finding, and watch it before committing a large plot.</detail>
+  </entry>
+
+  <entry>
+    <thingClass>VanillaPlantsExpandedMushrooms.ZapcapPlant</thingClass>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Electrical discharge</cardLabel>
+    <detail>Joins the power grid as it grows and can short-circuit nearby conduits and batteries. Keep it clear of wiring.</detail>
+  </entry>
+
+  <entry>
+    <thingClass>VanillaPlantsExpandedMushrooms.Plant_NeedsCorpseBile</thingClass>
+    <kind>RequiresHazard</kind>
+    <cardLabel>Needs corpse bile</cardLabel>
+    <detail>Grows only in corpse bile. Its growth rate scales with how much bile filth covers the zone, so the plot has to be kept deliberately foul.</detail>
+  </entry>
+
+  <entry>
+    <thingClass>VanillaPlantsExpandedMushrooms.Plant_NeedsRotstink</thingClass>
+    <kind>RequiresHazard</kind>
+    <cardLabel>Needs rot stink</cardLabel>
+    <detail>Grows only in rot stink gas. Its growth rate scales with the gas present, so the zone needs a steady source of rot nearby.</detail>
+  </entry>
+
+  <entry>
+    <thingClass>MedievalOverhaul.Plant_SpawnerOnDestroy</thingClass>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Spawns hostiles when felled</cardLabel>
+    <detail>Cutting this tree down releases hostile creatures that will attack the colony. Fell it only with colonists armed and nearby, or leave it standing.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_GasOnDestroy</compClass>
+    <kind>CreatesHazard</kind>
+    <cardLabel>Bursts into gas when cut</cardLabel>
+    <detail>Releases a cloud of gas when destroyed or harvested. Harvest it with the wind at your back, or not at all.</detail>
+  </entry>
+
+  <!-- ============================= POSSIBLE HAZARDS: drug crops =============================
+
+    Matched on the harvested crop rather than the plant defName, so mod-added variants that yield
+    the same raw material are covered by the same rows. harvestedThing is the last key tried, so a
+    more specific row for any individual plant still wins.
+  -->
+
+  <entry>
+    <harvestedThing>PsychoidLeaves</harvestedThing>
+    <kind>PossibleHazard</kind>
+    <cardLabel>Feeds addictive drugs</cardLabel>
+    <detail>The crop itself is harmless, but its leaves refine into flake and yayo. Both are strongly addictive: colonists who use them repeatedly form a chemical dependency, and going without then brings withdrawal, a heavy mood penalty and a risk of overdose. Long-term use can also cause permanent organ damage. Worth growing for trade or for controlled medical use, but set drug policies before the yield reaches your stockpile, and watch consumption closely.</detail>
+  </entry>
+
+  <entry>
+    <harvestedThing>SmokeleafLeaves</harvestedThing>
+    <kind>PossibleHazard</kind>
+    <cardLabel>Feeds addictive drugs</cardLabel>
+    <detail>The crop itself is harmless, but its leaves roll into smokeleaf joints. They lift mood and dull pain, and colonists with a chemical interest will help themselves from an unguarded stockpile. Regular use builds tolerance and then addiction, leaving pawns slowed and unproductive while high and miserable in withdrawal. A useful mood crop when rationed by drug policy, and a steady drain on the colony when it is not.</detail>
+  </entry>
+
+  <entry>
+    <harvestedThing>RawHops</harvestedThing>
+    <kind>PossibleHazard</kind>
+    <cardLabel>Feeds addictive drugs</cardLabel>
+    <detail>The crop itself is harmless, but its hops ferment into beer. Beer lifts mood and eases pain, and colonists with a chemical interest will drink from an unguarded stockpile without being told to. Drinkers are slowed and clumsy while drunk, and wake with a hangover; sustained use builds tolerance, then alcohol dependency, and eventually permanent liver damage. One of the cheapest mood crops in the colony when rationed by drug policy, and one of the easiest to let get out of hand.</detail>
+  </entry>
+
+  <entry>
+    <harvestedThing>VBE_RawTobacco</harvestedThing>
+    <kind>PossibleHazard</kind>
+    <cardLabel>Feeds addictive drugs</cardLabel>
+    <detail>The crop itself is harmless, but its leaves dry and roll into smokes. They take the edge off a bad mood and colonists with a chemical interest will help themselves from an open stockpile. Regular use builds tolerance and then dependency, so a habit costs a steady share of the harvest and leaves pawns in withdrawal whenever supply runs short, and sustained smoking carries a long-term health cost on top of that. Rationing it by drug policy is the difference between a trade crop and a colony-wide habit.</detail>
+  </entry>
+
+  <!-- ============================= BENEFITS ============================= -->
+
+  <!--
+    Carries a light correction as well as its notice: the tree sets growMinGlow to 0, so its own
+    def reads as "grows at any light level", while its thingClass withers it in sunlight.
+  -->
+  <entry>
+    <plant>DE_Plant_TreeMycelial</plant>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Consumes corpses</cardLabel>
+    <detail>Draws in and consumes nearby corpses, disposing of bodies that would otherwise rot and stink up the area, and harvests into a large amount of raw fungus. It must be kept out of the sun -- see the light note -- so it suits a roofed or underground plot.</detail>
+    <light>Deadly</light>
+    <lightDetail>Withers in sunlight. Its def permits any light level, but the tree damages itself once the sun reaches it, so it needs a roof or a cave.</lightDetail>
+  </entry>
+
+  <!--
+    Matched by defName so it beats the CompProperties_MeditationFocus rule below, which would
+    otherwise supply the generic meditation wording and miss the point of planting one.
+  -->
+  <entry>
+    <plant>Plant_TreeHarbinger</plant>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Consumes corpses</cardLabel>
+    <detail>Draws in and consumes nearby corpses, disposing of bodies that would otherwise rot and fill the area with stink. It doubles as a meditation focus. Anomalous in origin, and it resists being cut once established.</detail>
+  </entry>
+
+  <entry>
+    <harvestedThing>MedicineHerbal</harvestedThing>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Yields medicine</cardLabel>
+    <detail>Harvests into herbal medicine, the backbone of any colony that cannot yet buy or make the manufactured kind.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_PollutionPump</compClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Cleans pollution</cardLabel>
+    <detail>Draws pollution out of the surrounding terrain as it matures, slowly reclaiming ground that nothing else will grow in.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_OxygenPusher</compClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Produces breathable air</cardLabel>
+    <detail>Pushes oxygen into the surrounding space and terraforms the ground around it. Valuable anywhere the air is not already breathable.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_TreeConnection</compClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Supports dryads</cardLabel>
+    <detail>A colonist can form a connection with this tree to gain dryads, which can be shaped into several working castes.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_MeditationFocus</compClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Meditation focus</cardLabel>
+    <detail>Acts as a meditation focus, raising the psyfocus a colonist gains from meditating beside it.</detail>
+  </entry>
+
+  <entry>
+    <compClass>CompProperties_VacResistAOEProjector</compClass>
+    <kind>CreatesBenefit</kind>
+    <cardLabel>Holds back vacuum</cardLabel>
+    <detail>Projects vacuum resistance across the tiles around it, keeping a pocket of survivable space without machinery.</detail>
+  </entry>
+
+</GZP_PlantHazardCache>

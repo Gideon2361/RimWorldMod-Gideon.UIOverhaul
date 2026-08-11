@@ -5,8 +5,9 @@ This mod is two things at once:
 - **A framework.** Reusable UI controls other mods can instantiate, configure and extend. Everything
   under the `Gideon.UIFramework` namespace is public API, documented here, and used by this mod
   through exactly the same surface your mod would use. There is no private fast path.
-- **A UI overhaul.** This mod's own tabs and windows, built by consuming those controls. Namespace
-  `Gideon.UIOverhaul`. Not API — do not depend on it.
+- **A UI overhaul.** This mod's own tabs and windows, plus the direct restyling of RimWorld's, built by
+  consuming those controls. Namespace `Gideon.UIOverhaul`. Not API — do not depend on it. What it
+  changes about the game, and the patches behind it, are listed in [GameChanges.md](GameChanges.md).
 
 If something is awkward to use from outside, it is awkward from inside too, and that is a bug worth
 reporting rather than working around.
