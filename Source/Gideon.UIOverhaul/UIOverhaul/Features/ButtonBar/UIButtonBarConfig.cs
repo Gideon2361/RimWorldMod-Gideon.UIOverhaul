@@ -53,6 +53,21 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// <summary>defNames revealed by this menu, in order. Empty on a tab.</summary>
         public List<string> children = new List<string>();
 
+        /// <summary>
+        /// Keeps this slot at the end of the bar, after anything appended.
+        ///
+        /// The bar appends every MainButtonDef the layout does not name, so that installing a mod cannot make
+        /// its tab vanish. That is right for a tab and wrong for the pause menu, which belongs at the end no
+        /// matter what arrives: without this, every unknown modded tab lands to the *right* of it.
+        ///
+        /// Naming every tab the game ships also fixed the position, but only for tabs known when the file was
+        /// written -- this holds against tabs nobody has heard of yet, which is the actual requirement.
+        ///
+        /// Honored wherever the entry sits in the list, so a player who drags it around still gets it last.
+        /// Several entries may set it; they keep their order relative to each other.
+        /// </summary>
+        public bool last;
+
         public bool IsMenu => !menu.NullOrEmpty();
 
         /// <summary>The MainButtonDef this slot shows, or null if it is a menu or the mod is gone.</summary>
@@ -129,10 +144,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         public List<UIButtonBarEntry> Resolve()
         {
             List<UIButtonBarEntry> result = new List<UIButtonBarEntry>();
+
+            // Slots that asked to stay at the end. Held back until the appended unknowns are in, then added,
+            // so a modded tab nobody has heard of cannot get between them and the edge of the bar.
+            List<UIButtonBarEntry> trailing = new List<UIButtonBarEntry>();
+
             HashSet<string> placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (UIButtonBarEntry entry in entries)
             {
+                List<UIButtonBarEntry> target = entry.last ? trailing : result;
+
                 if (entry.IsMenu)
                 {
                     // A menu whose every child is gone would be an empty button that does nothing.
@@ -147,7 +169,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     }
 
                     if (anyChild)
-                        result.Add(entry);
+                        target.Add(entry);
 
                     continue;
                 }
@@ -155,8 +177,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 if (entry.Def == null || IsHidden(entry.tab))
                     continue;
 
+                // Marked placed either way, so the append pass below does not add a second copy of a slot that
+                // is only being held back.
                 placed.Add(entry.tab);
-                result.Add(entry);
+                target.Add(entry);
             }
 
             foreach (MainButtonDef def in DefDatabase<MainButtonDef>.AllDefsListForReading)
@@ -166,6 +190,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                 result.Add(new UIButtonBarEntry { tab = def.defName });
             }
+
+            result.AddRange(trailing);
 
             return result;
         }
@@ -334,6 +360,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                             Log.Warning($"[Gideon.UIOverhaul] '{value}' is not a button mode; using Default.");
                         break;
 
+                    case "last":
+                        entry.last = value.EqualsIgnoreCase("true");
+                        break;
+
                     case "children":
                         foreach (XmlNode child in field.ChildNodes)
                         {
@@ -400,6 +430,11 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                         if (entry.mode != UIBarButtonMode.Default)
                             writer.WriteElementString("mode", entry.mode.ToString());
+
+                        // Written so a player's own layout keeps the pause menu pinned to the end after they
+                        // rearrange the bar, rather than losing it the first time they save.
+                        if (entry.last)
+                            writer.WriteElementString("last", "true");
 
                         if (entry.children.Count > 0)
                         {

@@ -70,8 +70,18 @@
   <entry><tab>Research</tab></entry>
   <entry><tab>Mechs</tab></entry>
 
-  <!-- Last, so it sits immediately left of the UI options button. -->
-  <entry><tab>Menu</tab></entry>
+  <!--
+    The pause menu, pinned to the end.
+
+    <last> is what guarantees the position. Naming every tab above fixes the order of the ones we know
+    about, but the bar appends any MainButtonDef the layout does not mention, so a tab from a mod nobody
+    has heard of would otherwise land to the right of the menu. This entry is held back until those
+    appends are in, which puts it immediately left of the UI options button whatever else is installed.
+  -->
+  <entry>
+    <tab>Menu</tab>
+    <last>true</last>
+  </entry>
 
   <!--
     Hidden by default, because the pawns tab covers what they do.
