@@ -197,6 +197,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// A missing file is not an error. It means the bar falls back to the game's own button order, which is
         /// what happened before a default shipped at all.
         /// </summary>
+        /// <summary>
+        /// The layout this mod ships, or an empty one if that file is missing.
+        ///
+        /// Public because "reset to default" in the bar editor has to mean the same default a fresh install
+        /// gets. It used to build an empty config and resolve that, which returned the game's own button order
+        /// -- so once a shipped default existed, resetting took the player somewhere they had never been.
+        /// </summary>
+        public static UIButtonBarConfig ShippedDefault()
+        {
+            return LoadShippedDefault() ?? new UIButtonBarConfig();
+        }
+
         private static UIButtonBarConfig LoadShippedDefault()
         {
             List<ModContentPack> mods = LoadedModManager.RunningModsListForReading;
@@ -244,7 +256,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 // an absent file keeps meaning "never customized" and a later change to the shipped default
                 // still reaches players who never touched it.
                 if (!File.Exists(path))
-                    return LoadShippedDefault() ?? new UIButtonBarConfig();
+                    return ShippedDefault();
 
                 XmlDocument doc = new XmlDocument();
                 doc.Load(path);

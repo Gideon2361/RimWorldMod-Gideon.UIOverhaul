@@ -10,46 +10,52 @@
   The root element and the entry shape match what the options page writes, so this file can be copied
   straight into the config folder and hand-edited from there if that is ever useful.
 
-  Order here is the order on the bar. Anything not listed is appended, so a newly installed mod's tab
-  lands at the end rather than disappearing. The list is still deliberately complete for the tabs that
-  ship with the game and its expansions: an appended tab arrives in def-database order, which is not the
-  same as the game's own button order, so naming them is what guarantees the arrangement below.
+  Order here is the order on the bar. Anything not listed is appended after everything that is.
 
-  Entries naming a tab that is not loaded are skipped and left alone, which is why the expansion tabs can
-  be listed unconditionally.
-
-  The one deliberate placement: Pawns sits directly after Architect. Vanilla's own orders are Architect 1
-  and Work 10, and Pawns answers the question asked before opening Work or Schedule, which is who needs
-  attention and who is doing what.
+  The UI options button is not listed and cannot be: it is drawn at the far right of the bar, outside the
+  entry list entirely, so it is always last no matter what this file says.
 -->
 <ButtonBar>
 
-  <entry><tab>Inspect</tab></entry>
   <entry><tab>Architect</tab></entry>
 
-  <!-- This mod's pawns tab. -->
+  <!-- This mod's tab. It answers the question asked before opening anything else: who needs attention. -->
   <entry><tab>Gideon_Pawns</tab></entry>
 
-  <entry><tab>Work</tab></entry>
-  <entry><tab>Schedule</tab></entry>
-  <entry><tab>Assign</tab></entry>
   <entry><tab>Animals</tab></entry>
-  <entry><tab>Wildlife</tab></entry>
 
-  <!-- Also this mod's. It lists growing zones, so it belongs beside the other census tabs. -->
+  <!-- Also this mod's. -->
   <entry><tab>GZP_GrowZones</tab></entry>
 
-  <entry><tab>Research</tab></entry>
+  <!-- Dimensions RePocketed. Skipped without that mod, so listing it is free. -->
+  <entry><tab>KB_PocketDimension_Tab</tab></entry>
+
   <entry><tab>Quests</tab></entry>
-  <entry><tab>World</tab></entry>
-  <entry><tab>History</tab></entry>
   <entry><tab>Factions</tab></entry>
 
-  <!-- Expansion tabs. Skipped without the expansion, so listing them is free. -->
+  <!-- Ideology. Skipped without the expansion. -->
   <entry><tab>Ideos</tab></entry>
-  <entry><tab>Mechs</tab></entry>
 
-  <!-- Last, as vanilla has it: order 500 against everything else's double digits. -->
+  <entry><tab>History</tab></entry>
+  <entry><tab>World</tab></entry>
+
+  <!-- The pause menu, last of the orderable entries as vanilla has it. -->
   <entry><tab>Menu</tab></entry>
+
+  <!--
+    Hidden by default, because the pawns tab covers what they do.
+
+    Work priorities, the daily schedule and the assignment policies are all reachable from a colonist's row
+    there, which makes three separate tabs for the same three things redundant on a fresh install.
+
+    Hiding is not removing. Every one of these is still offered in the UI options page's bar editor as
+    something to add, and adding a tab takes it back off this list, so a player who wants the vanilla
+    tabs back has them in two clicks with no file editing.
+  -->
+  <hidden>
+    <li>Work</li>
+    <li>Schedule</li>
+    <li>Assign</li>
+  </hidden>
 
 </ButtonBar>

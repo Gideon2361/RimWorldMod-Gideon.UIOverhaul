@@ -739,9 +739,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             if (SmallButton(new Rect(x, r.y, buttonWidth, 32f), "Reset to default", palette))
             {
-                working.entries.Clear();
+                // The layout this mod ships, not an empty config resolved against the game's own button order.
+                // Those were the same thing until a default shipped; now they are not, and resetting has to mean
+                // "what a fresh install looks like" -- hidden tabs included, or reset would silently unhide the
+                // three tabs the default keeps out of the way.
+                UIButtonBarConfig shipped = UIButtonBarConfig.ShippedDefault();
+
+                working.entries = shipped.Resolve();
                 working.hidden.Clear();
-                working.entries = new UIButtonBarConfig().Resolve();
+                working.hidden.AddRange(shipped.hidden);
+
                 SoundDefOf.Click.PlayOneShotOnCamera();
             }
 
