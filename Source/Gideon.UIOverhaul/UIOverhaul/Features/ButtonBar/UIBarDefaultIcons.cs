@@ -42,7 +42,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 { "Research", Folder + "Research" },
                 { "Quests", Folder + "Quests" },
                 { "World", Folder + "World" },
-                { "Mechs", Folder + "Mechanoids" }
+                { "Mechs", Folder + "Mechanoids" },
+
+                // This mod's own tabs. The rule above is about not guessing at *other* mods' defNames --
+                // these are ours, so there is no contract being invented, and a tab we ship should arrive
+                // with the icon we drew for it rather than waiting for the player to find the picker.
+                { "Gideon_Pawns", Folder + "Pawns" },
+                { "GZP_GrowZones", Folder + "GrowZones" }
             };
 
         /// <summary>
