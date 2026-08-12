@@ -67,17 +67,21 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             float optionsWidth = UIButtonBarRenderer.MinimizedWidth;
             float gap = UIButtonBarRenderer.ButtonGap;
 
-            // Icon-only buttons are fixed at icon width, and only the ones showing text share out what is
-            // left. Giving every button an equal share made minimizing pointless: the button got narrower
-            // content but kept the same footprint, so nothing was reclaimed.
+            // Fixed-width slots take what they need and only the ones showing text share out what is left.
+            // Giving every button an equal share made minimizing pointless: the button got narrower content
+            // but kept the same footprint, so nothing was reclaimed. Widgets are fixed-width for a different
+            // reason -- a readout sized to a share of the bar would have its text cut off on a crowded bar
+            // and swim in space on an empty one.
             int slots = entries.Count;
             int labelled = 0;
             float narrowTotal = 0f;
 
             foreach (UIButtonBarEntry entry in entries)
             {
-                if (IsIconOnly(entry))
-                    narrowTotal += optionsWidth;
+                float fixedWidth = FixedWidthOf(entry);
+
+                if (fixedWidth >= 0f)
+                    narrowTotal += fixedWidth;
                 else
                     labelled++;
             }
@@ -92,10 +96,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             foreach (UIButtonBarEntry entry in entries)
             {
-                float width = IsIconOnly(entry) ? optionsWidth : slotWidth;
+                float fixedWidth = FixedWidthOf(entry);
+                float width = fixedWidth >= 0f ? fixedWidth : slotWidth;
                 Rect slot = new Rect(x, bar.y, width, bar.height);
 
-                if (entry.IsMenu)
+                if (entry.IsWidget)
+                    DrawWidgetSlot(slot, entry, palette);
+                else if (entry.IsMenu)
                     DrawMenuSlot(slot, entry, palette);
                 else
                     DrawTabSlot(slot, entry, palette);
@@ -165,6 +172,47 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             if (existing == null)
                 Find.WindowStack.Add(new Window_BarMenu(children, slot.x, slot.width));
+        }
+
+        /// <summary>
+        /// One widget: a sunken tray with the widget's own content in it.
+        ///
+        /// The tray is painted here rather than by each worker, so every widget -- ours and any a mod adds --
+        /// sits in the same frame. Sunken and without the accent rule the tab buttons carry, because a
+        /// readout is not something you press and should not look like one. The controls a widget draws
+        /// inside its tray are raised in the usual way, so within one slot the distinction still reads.
+        /// </summary>
+        private static void DrawWidgetSlot(Rect slot, UIButtonBarEntry entry, UIColorPaletteDef palette)
+        {
+            UIBarWidgetWorker worker = entry.WidgetDef?.Worker;
+            if (worker == null)
+                return;
+
+            Widgets.DrawBoxSolid(slot, palette.SurfaceSunken);
+
+            worker.DrawSafely(slot, palette);
+
+            // A readout has no button underneath it, and the bar is drawn over the map. Without this, clicking
+            // the date issues an order at whatever tile is behind the bar.
+            GenUI.AbsorbClicksInRect(slot);
+        }
+
+        /// <summary>
+        /// The width this slot needs, or a negative number when it should share out what the fixed-width
+        /// slots leave behind.
+        /// </summary>
+        private static float FixedWidthOf(UIButtonBarEntry entry)
+        {
+            if (entry.IsWidget)
+            {
+                UIBarWidgetWorker worker = entry.WidgetDef?.Worker;
+
+                // A widget that cannot be built is filtered out by Visible before this is asked, so the
+                // fallback is only reached if a def loses its worker between the two calls.
+                return worker?.Width ?? UIButtonBarRenderer.MinimizedWidth;
+            }
+
+            return IsIconOnly(entry) ? UIButtonBarRenderer.MinimizedWidth : -1f;
         }
 
         /// <summary>
@@ -242,6 +290,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             foreach (UIButtonBarEntry entry in entries)
             {
+                if (entry.IsWidget)
+                {
+                    // A widget hides itself when it has nothing to report -- the weather on a pocket map, the
+                    // date before a world exists -- and the slot goes with it rather than leaving a gap.
+                    UIBarWidgetWorker widgetWorker = entry.WidgetDef?.Worker;
+
+                    if (widgetWorker != null && widgetWorker.Visible)
+                        result.Add(entry);
+
+                    continue;
+                }
+
                 if (entry.IsMenu)
                 {
                     foreach (string childName in entry.children)

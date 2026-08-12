@@ -77,13 +77,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             foreach (UIButtonBarEntry entry in source.entries)
             {
+                // Every field, including the ones this dialog has no control for. Save writes the working copy
+                // over the live config wholesale, so a field missed here is a field the player silently loses
+                // by opening the editor and pressing Save.
                 UIButtonBarEntry clone = new UIButtonBarEntry
                 {
                     tab = entry.tab,
                     menu = entry.menu,
+                    widget = entry.widget,
                     icon = entry.icon,
                     label = entry.label,
-                    mode = entry.mode
+                    mode = entry.mode,
+                    last = entry.last
                 };
 
                 clone.children.AddRange(entry.children);
@@ -350,11 +355,14 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         {
             UIButtonBarEntry dragged = working.entries[dragIndex];
 
-            // A menu has nothing to go back to over there -- that list is tabs. Dropping one does nothing
-            // rather than quietly destroying it along with its children.
+            // A menu has nothing to go back to over there -- that list is tabs and widgets. Dropping one does
+            // nothing rather than quietly destroying it along with its children.
             if (dragged.IsMenu)
                 return;
 
+            // Only a tab needs recording. `hidden` exists because an unlisted MainButtonDef is appended to the
+            // bar, so taking one off has to be stated; a widget is drawn only where the layout names it, so
+            // removing the entry is already the whole of it.
             if (!dragged.tab.NullOrEmpty())
                 working.hidden.Add(dragged.tab);
 
@@ -411,9 +419,11 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         private void DrawEntryRow(Rect row, UIButtonBarEntry entry, int index, UIColorPaletteDef palette)
         {
-            // A menu carries the full accent, a plain tab the muted one, so the two kinds of row are
-            // distinguishable at a glance without reading their labels.
-            RowCard.AccentColor = entry.IsMenu ? palette.Accent : palette.AccentMuted;
+            // A menu carries the full accent, a widget the informational color, a plain tab the muted accent,
+            // so the three kinds of row are distinguishable at a glance without reading their labels.
+            RowCard.AccentColor = entry.IsMenu ? palette.Accent
+                : entry.IsWidget ? palette.Info
+                : palette.AccentMuted;
             RowCard.BackgroundColor = palette.SurfaceRaised;
             RowCard.DrawChrome(row, palette);
 
@@ -454,7 +464,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 ? IconAction(new Rect(x, settings.y + 4f, ButtonSize, ButtonSize), BaseContent.BadTex, "X",
                     palette, "Delete this menu")
                 : IconAction(new Rect(x, settings.y + 4f, ButtonSize, ButtonSize), "–", palette,
-                    "Hide this tab, returning it to the list on the right");
+                    entry.IsWidget
+                        ? "Take this widget off the bar, returning it to the list on the right"
+                        : "Hide this tab, returning it to the list on the right");
 
             if (removed)
             {
@@ -481,6 +493,26 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             {
                 working.entries[index] = working.entries[index - 1];
                 working.entries[index - 1] = entry;
+                return;
+            }
+
+            if (entry.IsWidget)
+            {
+                // No icon slot, display mode or rename. A widget draws its own content, so all three would be
+                // controls with nothing to act on. The space goes to its description instead, which is what is
+                // worth reading when deciding whether to keep it on the bar.
+                UIBarWidgetDef widgetDef = entry.WidgetDef;
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextSecondary;
+
+                Widgets.Label(
+                    new Rect(row.x + 6f + GripWidth + 6f, settings.y,
+                        Mathf.Max(0f, x - row.x - 16f - GripWidth), settings.height),
+                    widgetDef?.description ?? "This widget's mod is no longer installed.");
+
+                Text.Anchor = TextAnchor.UpperLeft;
+                GUI.color = palette.TextPrimary;
                 return;
             }
 
@@ -548,15 +580,31 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             x += 24f + 8f;
 
             MainButtonDef def = entry.Def;
+            UIBarWidgetDef widgetDef = entry.WidgetDef;
 
-            string name = entry.IsMenu
-                ? entry.menu.NullOrEmpty() ? "Menu" : entry.menu
-                : def != null ? def.LabelCap.ToString() : entry.tab + " (missing)";
+            string name;
+            string source;
 
-            // A menu has no mod behind it, so it says so rather than showing a blank or claiming ours.
-            string source = entry.IsMenu
-                ? "Menu you created"
-                : def?.modContentPack?.Name ?? "Unknown source";
+            if (entry.IsMenu)
+            {
+                name = entry.menu.NullOrEmpty() ? "Menu" : entry.menu;
+
+                // A menu has no mod behind it, so it says so rather than showing a blank or claiming ours.
+                source = "Menu you created";
+            }
+            else if (entry.IsWidget)
+            {
+                name = widgetDef != null ? widgetDef.LabelCap.ToString() : entry.widget + " (missing)";
+
+                // Named as a widget as well as by its mod, because the one thing a player needs to know about
+                // this row is that it is not a tab and will not open anything.
+                source = "Widget from " + (widgetDef?.modContentPack?.Name ?? "an uninstalled mod");
+            }
+            else
+            {
+                name = def != null ? def.LabelCap.ToString() : entry.tab + " (missing)";
+                source = def?.modContentPack?.Name ?? "Unknown source";
+            }
 
             float width = Mathf.Max(0f, band.xMax - x - 6f);
 
@@ -591,7 +639,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                 // Back onto the bar as a top-level slot rather than vanishing: taking a tab out of a menu
                 // is not the same as removing it.
-                working.entries.Add(new UIButtonBarEntry { tab = childName });
+                AppendSlot(new UIButtonBarEntry { tab = childName });
                 return;
             }
 
@@ -633,8 +681,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             Rect listRect = new Rect(inner.x, inner.y + 24f, inner.width, inner.height - 24f);
 
             List<MainButtonDef> candidates = Candidates();
-            Rect view = new Rect(0f, 0f, listRect.width - 18f,
-                candidates.Count * (RowHeight + Gap) + Gap);
+
+            // Widgets are not offered while a menu is being filled. A menu reveals tabs, and a widget put
+            // inside one would be a readout nothing could ever draw.
+            List<UIBarWidgetDef> widgets = assigningTo >= 0
+                ? new List<UIBarWidgetDef>()
+                : WidgetCandidates();
+
+            float viewHeight = candidates.Count * (RowHeight + Gap) + Gap;
+            if (widgets.Count > 0)
+                viewHeight += SectionLabelHeight + widgets.Count * (RowHeight + Gap);
+
+            Rect view = new Rect(0f, 0f, listRect.width - 18f, viewHeight);
 
             Widgets.BeginScrollView(listRect, ref availableScroll, view);
 
@@ -662,7 +720,109 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 y += RowHeight + Gap;
             }
 
+            if (widgets.Count > 0)
+            {
+                // Under their own heading rather than mixed in with the tabs. Both lists are things you can
+                // put on the bar, but only one of them opens anything, and a player looking for a tab should
+                // not have to read past four readouts to find it.
+                Text.Font = GameFont.Small;
+                GUI.color = palette.TextSecondary;
+                Widgets.Label(new Rect(0f, y + 6f, view.width, 22f), "Widgets");
+                GUI.color = palette.TextPrimary;
+
+                y += SectionLabelHeight;
+
+                foreach (UIBarWidgetDef def in widgets)
+                {
+                    if (DrawAvailableWidgetRow(new Rect(0f, y, view.width, RowHeight), def, palette))
+                    {
+                        Widgets.EndScrollView();
+                        return;
+                    }
+
+                    y += RowHeight + Gap;
+                }
+            }
+
             Widgets.EndScrollView();
+        }
+
+        /// <summary>Height taken by a heading inside the available list, including its breathing room.</summary>
+        private const float SectionLabelHeight = 30f;
+
+        /// <summary>
+        /// One widget in the available list. Returns true when it was added, which ends the frame's pass over
+        /// the list because the collection it was drawn from has changed.
+        /// </summary>
+        private bool DrawAvailableWidgetRow(Rect row, UIBarWidgetDef def, UIColorPaletteDef palette)
+        {
+            Widgets.DrawBoxSolid(row, palette.SurfaceRaised);
+
+            GameFont previousFont = Text.Font;
+
+            float textWidth = Mathf.Max(0f, row.width - ButtonSize - 18f);
+
+            Text.Font = GameFont.Small;
+            GUI.color = palette.TextPrimary;
+            Widgets.Label(new Rect(row.x + 6f, row.y + 4f, textWidth, 22f), def.LabelCap);
+
+            // The description sits in the row rather than in a tooltip: it is the only thing that says what
+            // the widget will show, and a player choosing between four of them should not have to hover each.
+            Text.Font = GameFont.Tiny;
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(row.x + 6f, row.y + 24f, textWidth, 34f), def.description ?? "");
+
+            Text.Font = previousFont;
+            GUI.color = palette.TextPrimary;
+
+            Rect addRect = new Rect(row.xMax - ButtonSize - 4f, row.y + 4f, ButtonSize, ButtonSize);
+            if (!IconAction(addRect, "+", palette, "Put on the bar"))
+                return false;
+
+            AppendSlot(new UIButtonBarEntry { widget = def.defName });
+            SoundDefOf.Click.PlayOneShotOnCamera();
+            return true;
+        }
+
+        /// <summary>
+        /// Widgets not already on the bar, ordered as their defs asked.
+        ///
+        /// Computed rather than stored, so a widget from a newly installed mod turns up here without the
+        /// config having to know about it. One instance of each: a second copy of the clock would draw the
+        /// same time twice.
+        /// </summary>
+        private List<UIBarWidgetDef> WidgetCandidates()
+        {
+            HashSet<string> placed = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            foreach (UIButtonBarEntry entry in working.entries)
+            {
+                if (!entry.widget.NullOrEmpty())
+                    placed.Add(entry.widget);
+            }
+
+            List<UIBarWidgetDef> result = new List<UIBarWidgetDef>();
+            foreach (UIBarWidgetDef def in DefDatabase<UIBarWidgetDef>.AllDefsListForReading)
+            {
+                if (!placed.Contains(def.defName))
+                    result.Add(def);
+            }
+
+            result.SortBy(def => def.order, def => def.LabelCap.ToString());
+            return result;
+        }
+
+        /// <summary>
+        /// Puts a slot on the bar, ahead of anything pinned to the end.
+        ///
+        /// Appending to the list outright would place it after the pause menu in this editor while the bar
+        /// still drew the menu last, because <c>last</c> is honored when the layout resolves. The row would
+        /// have looked like it was in a position it was never going to occupy.
+        /// </summary>
+        private void AppendSlot(UIButtonBarEntry entry)
+        {
+            int insert = working.entries.FindIndex(e => e.last);
+            working.entries.Insert(insert < 0 ? working.entries.Count : insert, entry);
         }
 
         private void Add(MainButtonDef def)
@@ -687,7 +847,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
             else
             {
-                working.entries.Add(new UIButtonBarEntry { tab = def.defName });
+                AppendSlot(new UIButtonBarEntry { tab = def.defName });
             }
 
             SoundDefOf.Click.PlayOneShotOnCamera();
@@ -731,7 +891,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             if (SmallButton(new Rect(x, r.y, buttonWidth, 32f), "New menu", palette))
             {
-                working.entries.Add(new UIButtonBarEntry { menu = "Menu" });
+                AppendSlot(new UIButtonBarEntry { menu = "Menu" });
                 SoundDefOf.Click.PlayOneShotOnCamera();
             }
 

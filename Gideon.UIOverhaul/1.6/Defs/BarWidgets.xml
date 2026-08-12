@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===========================================================================================
+       Widgets for the button bar.
+
+       A widget is a readout or a control that can sit on the bar beside the tabs. None of these is
+       on the bar by default: the game already shows all four in the bottom right, so putting them
+       on the bar is a choice the player makes in UI options, under "Arrange the bar".
+
+       Another mod can add one by shipping a def like these plus a class deriving from
+       Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetWorker. No patch and no Harmony are involved.
+
+       The element name is fully qualified. The short form <UIBarWidgetDef> also works, but the
+       qualified name cannot be made ambiguous by another mod defining a type with the same name.
+
+       Full documentation: Help/BarWidgets.md
+       =========================================================================================== -->
+
+  <!-- Pause and the three play speeds.
+
+       Clicks only. Vanilla's own time controls still draw and still own every time-related key
+       binding, so space and the number keys keep working and cannot disagree with these buttons
+       about what the speed is.
+
+       minWidth is the four buttons plus their inset, so this widget never has to measure. -->
+  <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+    <defName>Gideon_BarWidget_TimeSpeed</defName>
+    <label>speed controls</label>
+    <description>Pause and the three play speeds. The speed in effect is marked, and a rule appears across the buttons whenever something else is forcing the speed.</description>
+    <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_TimeSpeed</workerClass>
+    <minWidth>126</minWidth>
+    <order>10</order>
+  </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+
+  <!-- The colony date and the hour, on one line.
+
+       Vanilla stacks the hour, the date and the season in a tall column that the bar has no room
+       for, so the season moves into the tooltip along with the quadrum calendar. -->
+  <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+    <defName>Gideon_BarWidget_Date</defName>
+    <label>date and time</label>
+    <description>The colony date and hour, read at the current map's longitude. Hover for the season and the quadrum calendar.</description>
+    <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_Date</workerClass>
+    <minWidth>150</minWidth>
+    <order>20</order>
+  </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+
+  <!-- The outdoor temperature.
+
+       Always outdoors, unlike the vanilla readout, which follows the room under the cursor. A
+       number on the bar that changed every time the pointer crossed a wall would be telling you
+       about the mouse rather than about the weather. -->
+  <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+    <defName>Gideon_BarWidget_Temperature</defName>
+    <label>outdoor temperature</label>
+    <description>The current map's outdoor temperature, colored blue below what colonists find comfortable and red above it.</description>
+    <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_Temperature</workerClass>
+    <minWidth>64</minWidth>
+    <order>30</order>
+  </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+
+  <!-- The weather.
+
+       Hidden on pocket maps, as vanilla hides its weather line there: a pocket map has a weather
+       manager because every map does, but it has no sky. -->
+  <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+    <defName>Gideon_BarWidget_Weather</defName>
+    <label>weather</label>
+    <description>The weather as it currently appears, with its description on hover. Hidden on pocket maps, which have no sky.</description>
+    <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_Weather</workerClass>
+    <minWidth>88</minWidth>
+    <order>40</order>
+  </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
+
+</Defs>

@@ -25,7 +25,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
     }
 
     /// <summary>
-    /// One slot on the button bar: either a tab, or a menu that reveals tabs when clicked.
+    /// One slot on the button bar: a tab, a menu that reveals tabs when clicked, or a widget.
     /// </summary>
     public class UIButtonBarEntry
     {
@@ -43,6 +43,15 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         /// <summary>Label of the menu this slot is. Null on a tab.</summary>
         public string menu;
+
+        /// <summary>
+        /// defName of the <see cref="UIBarWidgetDef"/> this slot draws. Null on a tab or a menu.
+        ///
+        /// A widget is a readout or a control rather than a way into a tab: the clock, the date, the outdoor
+        /// temperature, the weather. It has no label, icon or display mode of its own, because it draws its
+        /// own content.
+        /// </summary>
+        public string widget;
 
         /// <summary>
         /// Texture path, without extension. On a tab it overrides the def's own icon, which is how a
@@ -70,9 +79,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         public bool IsMenu => !menu.NullOrEmpty();
 
-        /// <summary>The MainButtonDef this slot shows, or null if it is a menu or the mod is gone.</summary>
+        public bool IsWidget => !widget.NullOrEmpty();
+
+        /// <summary>The MainButtonDef this slot shows, or null if it is a menu, a widget, or the mod is gone.</summary>
         public MainButtonDef Def =>
             tab.NullOrEmpty() ? null : DefDatabase<MainButtonDef>.GetNamedSilentFail(tab);
+
+        /// <summary>
+        /// The widget this slot draws, or null if it is not a widget or the mod that supplied it is gone.
+        /// </summary>
+        public UIBarWidgetDef WidgetDef =>
+            widget.NullOrEmpty() ? null : DefDatabase<UIBarWidgetDef>.GetNamedSilentFail(widget);
     }
 
     /// <summary>
@@ -169,6 +186,21 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     }
 
                     if (anyChild)
+                        target.Add(entry);
+
+                    continue;
+                }
+
+                if (entry.IsWidget)
+                {
+                    // Dropped when the mod that supplied it is gone, and left in the file, so disabling that
+                    // mod and enabling it again does not cost the player the slot.
+                    //
+                    // Deliberately not added to `placed`: that set is about MainButtonDefs, and the append
+                    // pass below never appends widgets. A tab that nothing mentions has to appear or a newly
+                    // installed mod would look broken; a widget that nothing mentions has to stay off, or
+                    // installing a mod would put things on the bar nobody asked for.
+                    if (entry.WidgetDef != null)
                         target.Add(entry);
 
                     continue;
@@ -350,6 +382,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 {
                     case "tab": entry.tab = value; break;
                     case "menu": entry.menu = value; break;
+                    case "widget": entry.widget = value; break;
                     case "icon": entry.icon = value; break;
                     case "label": entry.label = value; break;
 
@@ -408,8 +441,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     writer.WriteStartDocument();
                     writer.WriteComment(
                         " Button bar layout for Gideon's UI Overhaul. Written by the in-game bar editor;"
-                        + " safe to hand-edit. Order here is the order on the bar. An <entry> is either a"
-                        + " <tab> naming a MainButtonDef, or a <menu> whose <children> it reveals. ");
+                        + " safe to hand-edit. Order here is the order on the bar. An <entry> is a <tab>"
+                        + " naming a MainButtonDef, a <menu> whose <children> it reveals, or a <widget>"
+                        + " naming a UIBarWidgetDef. ");
 
                     writer.WriteStartElement("ButtonBar");
 
@@ -419,6 +453,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                         if (entry.IsMenu)
                             writer.WriteElementString("menu", entry.menu);
+                        else if (entry.IsWidget)
+                            writer.WriteElementString("widget", entry.widget);
                         else if (!entry.tab.NullOrEmpty())
                             writer.WriteElementString("tab", entry.tab);
 

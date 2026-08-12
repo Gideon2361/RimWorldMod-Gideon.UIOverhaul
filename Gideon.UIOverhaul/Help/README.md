@@ -58,6 +58,19 @@ consumed during startup cannot be a Def, so the loading screen is read straight 
 Copy-and-go XML lives in [Examples/](Examples/). Nothing there is loaded by the game, so the files are
 safe to edit while you work out what you need.
 
+## Extension points outside the framework
+
+The framework is controls you draw with. This mod also replaces some of RimWorld's own screens, and
+one of those replacements is extensible in its own right.
+
+| Extension point | Kind | Documentation |
+|---|---|---|
+| `UIBarWidgetDef` | Def plus a `workerClass`, for a readout or control on the button bar | [BarWidgets.md](BarWidgets.md) |
+
+It lives in `Gideon.UIOverhaul.Features.ButtonBar` rather than in `Gideon.UIFramework`, because it is
+not a general-purpose control: it is a slot in this mod's button bar, and it means nothing without
+that bar. Everything else under `Gideon.UIOverhaul` remains this mod's own screens and is not API.
+
 ## Namespaces
 
 Namespaces follow folders.
@@ -71,7 +84,7 @@ Namespaces follow folders.
 | `Gideon.UIFramework.Components.Images` | Image supporting types: `UIImageFit`, `UIImage`, `UIImageLoader` |
 | `Gideon.UIFramework.Helpers` | Shared drawing and diagnostics: `UIElementPainter`, `UIShapes`, `UISkinRestyler`, `UIDebug` |
 | `Gideon.UIFramework.Patches.*` | Harmony patches the framework needs to collect its data. Not API — never call into these |
-| `Gideon.UIOverhaul` | This mod's own screens. Not API |
+| `Gideon.UIOverhaul` | This mod's own screens. Not API, with one exception: `UIBarWidgetDef` and `UIBarWidgetWorker` in `Gideon.UIOverhaul.Features.ButtonBar` are meant to be used from outside. See [BarWidgets.md](BarWidgets.md) |
 
 Def element names in XML are fully qualified and follow the same split, so a palette is
 `<Gideon.UIFramework.Defs.UIColorPaletteDef>`. Enum values such as `Cover` are written by name and are

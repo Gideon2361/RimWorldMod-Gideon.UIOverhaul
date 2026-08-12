@@ -740,6 +740,65 @@ Two things worth knowing, both checked against the game rather than assumed:
 - **It closes without the tab-close sound**, because the designator's own activate sound has already played and
   the two together read as two clicks for one action.
 
+## Widgets on the button bar
+
+The bar can carry readouts and controls as well as tabs: the play speed buttons, the date and hour,
+the outdoor temperature, the weather. Four ship with the mod, and any mod can add more with a def and
+a class.
+
+Full reference, including how to write one: [BarWidgets.md](BarWidgets.md).
+
+Nothing is on the bar by default. RimWorld already shows all four of these in the bottom right, so a
+widget appears only where the player put it, in **UI Options → Button bar → Arrange the bar**. That is
+the opposite of how a tab is treated: an unlisted `MainButtonDef` is appended to the bar, because a
+tab that failed to appear after installing a mod would look like the mod was broken, whereas a widget
+that appeared uninvited would just be clutter.
+
+### The vanilla readouts are still there
+
+Putting the date on the bar does not remove it from the bottom right. Nothing has been patched out.
+
+Suppressing the duplicate is a larger change than it looks. That corner is a stack built bottom-up in
+`GlobalControls.GlobalControlsOnGUI` — play settings, time controls, date, weather, temperature, game
+conditions, then the letter stack — and each entry moves the ones above it. Removing one line from the
+middle of it shifts the alerts and the letters, which are the two things in that corner nobody should
+have to hunt for.
+
+### Widget slots are fixed width
+
+Tab buttons showing text share out whatever is left of the bar. A readout cannot: sized to a share, it
+would have its text cut off on a crowded bar and swim in space on an empty one. Each widget measures
+what it needs, and that number is rounded up to a multiple of 8 and then never allowed to shrink.
+
+Both of those exist to stop the bar twitching. Text width changes as the text does — an hour ticks
+over, a temperature loses a digit, the weather turns from "Clear" to "Foggy" — and measured exactly,
+each of those would shift every button to the right of it by a pixel or two. A widget converges on a
+width within the first few seconds of play and then stops changing.
+
+A widget with nothing to report hides itself and gives its slot back rather than leaving a gap. The
+weather does this on pocket maps, which have a weather manager only by virtue of being maps and have no
+sky.
+
+### Speed controls handle clicks and nothing else
+
+`TimeControls.DoTimeControlsGUI` is two things in one method: the four buttons in the bottom right, and
+the keyboard handling for every time-related key binding. Only the buttons are reproduced. The vanilla
+control still runs, so space, the number keys, faster, slower and the dev-mode single tick all keep
+working, and there is no second implementation of them to disagree with the first.
+
+Kept from vanilla, so that using these buttons is indistinguishable from using its:
+
+- **The clock sounds.** `Clock_Stop`, `Clock_Normal`, `Clock_Fast`, `Clock_Superfast`, chosen by the
+  speed that resulted rather than the one clicked, which matters because pause is a toggle.
+- **Concept tracking.** `ConceptDefOf.Pause` and `ConceptDefOf.TimeControls` are marked demonstrated, so
+  the tutorial stops prompting about a control the player has clearly found.
+- **Clicks ignored while pause is forced.** A rule is drawn across the buttons that are being
+  overridden, which is what explains the click doing nothing.
+
+Ultrafast is not offered. The enum has five values and vanilla's own control draws four, leaving the
+fifth reachable only by its key binding in dev mode; a button the base game deliberately omits is not
+ours to add.
+
 ## Loading screen
 
 See [LoadingScreenConfig.md](LoadingScreenConfig.md). The patches involved are framework requirements
