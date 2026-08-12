@@ -17,10 +17,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
     /// private table inside the pawns tab would have left the vanilla views on the old colors, which is exactly
     /// the split-personality look an overhaul is supposed to remove.
     ///
-    /// It also means mod-added assignments are covered without knowing anything about the mod. Nothing here
-    /// enumerates a fixed five: the whole database is walked, the ones we have opinions about are matched by
-    /// defName, and anything else is given a color generated to fit the same family. A mod that adds "Study" or
-    /// "Socialize" gets a color that belongs beside ours rather than sitting in whatever hue it shipped with.
+    /// <b>Mod-added assignments are left alone.</b> The whole database is walked, but only the assignments this
+    /// mod has an opinion about are recolored; anything else keeps the color its author chose. An earlier version
+    /// generated a harmonized hue for those too, which was the wrong call: a mod author picking a color for their
+    /// own assignment has made a decision, and overriding it to suit our palette is a worse outcome than one
+    /// swatch that does not match. The five below are vanilla's, where the "author" is the base game and
+    /// restyling is the entire point of this mod.
     ///
     /// <b>StaticConstructorOnStartup, not a Harmony patch.</b> There is nothing to intercept -- this is a
     /// one-time rewrite of loaded data, and the attribute is the game's own hook for "run after defs exist".
@@ -50,14 +52,6 @@ namespace Gideon.UIOverhaul.Features.Pawns
             { "Meditate", "#3FA39B" }    // teal: calm, and distinct from both the blue and the green
         };
 
-        /// <summary>
-        /// Saturation and value every generated color shares with the hand-picked ones, so a mod's assignment
-        /// lands in the same family instead of beside it.
-        /// </summary>
-        private const float GeneratedSaturation = 0.55f;
-
-        private const float GeneratedValue = 0.72f;
-
         static TimeAssignmentColors()
         {
             Apply();
@@ -76,17 +70,27 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (defs == null)
                 return;
 
+            int restyled = 0;
+
             foreach (TimeAssignmentDef def in defs)
             {
                 if (def?.defName == null)
                     continue;
 
-                Color color = Colors.TryGetValue(def.defName, out string hex)
-                              && UIColorParser.TryParse(hex, out Color parsed, out _)
-                    ? parsed
-                    : Generated(def.defName);
+                // No entry means someone else's assignment, and their color stands.
+                if (!Colors.TryGetValue(def.defName, out string hex))
+                    continue;
 
-                def.color = color;
+                if (!UIColorParser.TryParse(hex, out Color parsed, out string error))
+                {
+                    // Our own table, so a bad value here is a mistake in this file rather than anything the
+                    // player did. Said out loud instead of silently leaving that one assignment vanilla.
+                    Log.Error($"[Gideon.UIOverhaul] Schedule color for '{def.defName}' is unusable: {error}");
+                    continue;
+                }
+
+                def.color = parsed;
+                restyled++;
 
                 // The cache behind ColorTexture has to be dropped, or every vanilla schedule widget keeps
                 // drawing the old color: the property builds its texture once, on first read, and never
@@ -95,26 +99,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 InvalidateColorTexture(def);
             }
 
-            UIDebug.Log($"Restyled {defs.Count} time assignment colors.");
-        }
-
-        /// <summary>
-        /// A color for an assignment we have no opinion about.
-        ///
-        /// The hue comes from the defName's stable hash, so a given mod's assignment is the same color every
-        /// session -- a color that shuffled between launches would make the schedule unreadable as a habit.
-        /// Saturation and value are fixed, which is what keeps it in the family however the hue lands.
-        ///
-        /// The hash is folded into 0-1 by absolute value and modulus rather than by a cast, because
-        /// StableStringHash is signed and a negative hue silently clamps to red -- next to the danger color,
-        /// which is the one hue this should never accidentally pick.
-        /// </summary>
-        private static Color Generated(string defName)
-        {
-            int hash = GenText.StableStringHash(defName);
-            float hue = Mathf.Abs(hash % 360) / 360f;
-
-            return Color.HSVToRGB(hue, GeneratedSaturation, GeneratedValue);
+            UIDebug.Log($"Restyled {restyled} of {defs.Count} time assignments; the rest keep their "
+                        + "authored colors.");
         }
 
         /// <summary>

@@ -4,7 +4,7 @@ using Verse;
 namespace Gideon.UIOverhaul.Shared
 {
     /// <summary>
-    /// Centers the view on a pawn, at the end of the frame rather than where the click happened.
+    /// Centers the view on a pawn and selects them, at the end of the frame rather than where the click happened.
     ///
     /// Deferred for the reason the architect tab defers its close: the click is handled inside a scroll view, and
     /// both halves of what follows reach outside it. Closing the tab takes the window off the stack while it is
@@ -30,8 +30,9 @@ namespace Gideon.UIOverhaul.Shared
         /// The close is ours to do: nothing in CameraJumper touches the main tabs, and these tabs cover the map,
         /// so a jump on its own would center the camera behind a full-screen window.
         ///
-        /// Jump rather than jump-and-select, which is the narrower of the two. Selecting as well is a one-word
-        /// change to TryJumpAndSelect if the inspect pane turns out to be wanted too.
+        /// Jump *and* select, which is what vanilla's colonist bar does when you click a portrait. Centering
+        /// alone left the pawn under the cursor but not acted upon, and the next thing anyone wants after
+        /// finding a colonist is to give them an order -- which needs them selected and their inspect pane up.
         ///
         /// Cross-map is already handled: CameraJumper hides the world view and reassigns the current map when the
         /// target is on another one, which these tabs need because they list colonists from every map -- and
@@ -51,7 +52,7 @@ namespace Gideon.UIOverhaul.Shared
             // top of that reads as two clicks for one action.
             Find.MainTabsRoot.EscapeCurrentTab(false);
 
-            CameraJumper.TryJump(pawn);
+            CameraJumper.TryJumpAndSelect(pawn);
         }
     }
 }

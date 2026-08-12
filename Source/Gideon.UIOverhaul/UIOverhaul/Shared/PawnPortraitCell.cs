@@ -7,7 +7,7 @@ using Verse;
 namespace Gideon.UIOverhaul.Shared
 {
     /// <summary>
-    /// A colonist's face in a round frame, clickable to center the view on them.
+    /// A colonist's face in a round frame, clickable to select them and center the view on them.
     ///
     /// Shared by the work tab and the pawns tab. Not a framework control: it knows what a Pawn is, what the
     /// camera is, and that clicking should close the tab -- none of which belongs in a reusable UI control, and

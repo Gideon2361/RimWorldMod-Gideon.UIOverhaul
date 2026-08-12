@@ -43,6 +43,7 @@ color palette, for instance, is pure XML.
 | `UILoadingScreen` | Static progress state, drivable by any mod | [LoadingScreenConfig.md](LoadingScreenConfig.md#driving-the-display-yourself) |
 | `UIImageLoader` / `UIImage` | Loads a texture off disk, PNG/JPG/DDS | [LoadingScreenConfig.md](LoadingScreenConfig.md#image-files) |
 | `UIRichButtonControl` | Class, construct and reuse | [UIRichButtonControl.md](UIRichButtonControl.md) |
+| `UICardControl` | Class, construct and reuse | [UICardControl.md](UICardControl.md) |
 | `UICheckboxControl` | Static drawing helper | [UICheckboxControl.md](UICheckboxControl.md) |
 | `UIRadioButtonControl` | Static drawing helper | [UIRadioButtonControl.md](UIRadioButtonControl.md) |
 | `UIDesignatorTabControl` | Class, construct and reuse | [UIDesignatorTabControl.md](UIDesignatorTabControl.md) |

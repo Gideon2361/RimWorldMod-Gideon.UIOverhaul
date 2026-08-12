@@ -363,7 +363,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 string tip = pawn.LabelCap;
 
                 if (PawnPortraitCell.IsOver(frame))
-                    tip += "\n\nClick to center the view on " + pawn.LabelShortCap + ".";
+                    tip += "\n\nClick to select " + pawn.LabelShortCap + " and center the view on them.";
                 else
                     tip += "\n\nClick to open this colonist's schedule.";
 

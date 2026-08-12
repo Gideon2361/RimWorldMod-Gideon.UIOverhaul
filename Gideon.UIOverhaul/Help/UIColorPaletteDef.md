@@ -78,11 +78,16 @@ Alpha matters on the three overlay roles: they are drawn *on top of* what is alr
 | `warning` | `Warning` | Needs attention but not broken | `#CCA633` |
 | `danger` | `Danger` | Failed, forbidden, out of range | `#E54D33` |
 | `info` | `Info` | Neutral information; the cold end of a hot/cold scale | `#4A90D9` |
+| `mood` | `Mood` | A pawn's inner state: mood bars and similar readings | `#9B72D9` |
 | `hoverOverlay` | `HoverOverlay` | Wash over a hovered control | `#FFFFFF0C` |
 | `pressedOverlay` | `PressedOverlay` | Wash over a pressed control | `#FFFFFF1F` |
 | `selectionOverlay` | `SelectionOverlay` | Wash marking a selected row or card | `#73BFFF24` |
 
 A light theme must override the overlays — white washes do nothing useful on a pale surface.
+
+`Mood` is the one role that is about *how someone feels* rather than about whether something succeeded, which is
+why it is not folded into `Info` or `Accent`: a mood bar next to a health bar must not read as another health bar,
+and must not read as the accent either, since the accent means "selected".
 
 ## Templates
 

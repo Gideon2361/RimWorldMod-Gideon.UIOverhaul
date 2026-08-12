@@ -517,6 +517,37 @@ clock without counting cells.
 Expansion is a **set** of pawns rather than a single selection, so opening one does not close another — comparing
 two colonists' days side by side is most of the reason to look at this.
 
+### Schedule assignment colors
+
+Restyled to suit the rest of the UI — **on the defs**, not in a private table:
+
+| Assignment | Color | |
+|---|---|---|
+| Anything | `#39434F` | dim slate; deliberately not a hue, so an unscheduled day reads as empty |
+| Work | `#4A90D9` | the palette's information blue |
+| Joy | `#D98C3F` | warm amber, clear of the danger red |
+| Sleep | `#5B4A99` | deep violet, a sibling of the mood color |
+| Meditate | `#3FA39B` | teal, distinct from both the blue and the green |
+
+`TimeAssignmentDef.color` is a plain field that every schedule widget in the game reads, so recoloring the defs
+restyles **vanilla's schedule tab, the inspect pane's timetable strip and the assignment selector** along with
+this tab's strip. A private table would have left the vanilla views on the old colors, which is the
+split-personality look an overhaul exists to remove.
+
+They are hand-picked rather than mapped onto palette roles, because an assignment is a category and not a state —
+putting recreation on `Warning` would assert something untrue. What they share with the palette is the *family*:
+mid saturation, similar lightness, and nothing near the danger red, so a schedule strip never looks like it is
+reporting a problem.
+
+**Mod-added assignments keep the color their author chose.** The whole database is walked but only the five above
+are touched. A mod author picking a color has made a decision, and overriding it to suit our palette is a worse
+outcome than one swatch that does not match; vanilla is the exception because restyling the base game is the
+point. The dropdown still lists every loaded assignment, so a mod's types remain selectable.
+
+One trap worth recording: `ColorTexture` builds its swatch once on first read and caches it, so the cache has to
+be invalidated after changing `color`. Setting the field alone recolors our strip — which reads the field — and
+nothing else, which is a subtler bug than no recolor at all.
+
 ### Clicking a face centers the view on that colonist
 
 The portrait is a button. Clicking it closes the tab and centers the camera on the pawn.
@@ -538,7 +569,9 @@ and `MapHeld` mean a pawn in a caravan or a container still resolves to a real l
 The hover hint is the ring of backing disc around the head, lerped toward `Accent`. That ring is the only part of
 the portrait that *can* carry feedback — the face is a `RenderTexture` and has to be drawn untinted.
 
-It jumps without selecting. Selecting as well is a one-word change if the inspect pane turns out to be wanted.
+It **selects the pawn as well as centering on them**, which is what vanilla's colonist bar does. Centering alone
+left the colonist under the cursor but not acted upon, and the next thing wanted after finding someone is to give
+them an order — which needs them selected and their inspect pane open.
 
 ### Pocket maps are named after their entrance
 

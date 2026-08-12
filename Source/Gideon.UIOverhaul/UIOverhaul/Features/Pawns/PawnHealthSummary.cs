@@ -38,6 +38,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
     /// <summary>
     /// Reads a pawn's condition into something a cell can draw: a state, a short label, and a color.
     ///
+    /// Labels are title case throughout, including the single-word ones, so the column does not mix two
+    /// conventions down its length.
+    ///
     /// Every reading here is a live property, so nothing needs invalidating. All of it is cheap except
     /// <c>TicksUntilDeathDueToBloodLoss</c>, which is only asked for once bleeding is already established.
     /// </summary>
@@ -84,13 +87,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 if (ticks < GenDate.TicksPerDay)
                 {
                     return new PawnHealthSummary(PawnHealthState.BleedingOut,
-                        "Emergency: bleeding out, " + ticks.ToStringTicksToPeriod(true, false, true, true),
+                        "Emergency: Bleeding Out, " + ticks.ToStringTicksToPeriod(true, false, true, true),
                         detail);
                 }
             }
 
             if (vacuum)
-                return new PawnHealthSummary(PawnHealthState.Vacuum, "In vacuum, unprotected", detail);
+                return new PawnHealthSummary(PawnHealthState.Vacuum, "In Vacuum, Unprotected", detail);
 
             if (downed)
                 return new PawnHealthSummary(PawnHealthState.Downed, "Downed", detail);
@@ -98,13 +101,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
             // Tier two: an infection. Above plain tending because this is the one that gets worse while you
             // decide -- an untended cut waits, an infection races the pawn's immunity.
             if (infected)
-                return new PawnHealthSummary(PawnHealthState.UrgentTending, "Urgent tending needed", detail);
+                return new PawnHealthSummary(PawnHealthState.UrgentTending, "Urgent Tending Needed", detail);
 
             // Tier one: something is tendable and nothing about it is on a clock. Bleeding that is not fatal
             // within a day lands here too -- it is a wound to tend, not an emergency, and saying so twice in
             // two different colors would be worse than saying it once.
             if (needsTending || bleedRate > 0.0001f)
-                return new PawnHealthSummary(PawnHealthState.NeedsTending, "Needs tending", detail);
+                return new PawnHealthSummary(PawnHealthState.NeedsTending, "Needs Tending", detail);
 
             if (temperature != TemperatureTrouble.None)
             {

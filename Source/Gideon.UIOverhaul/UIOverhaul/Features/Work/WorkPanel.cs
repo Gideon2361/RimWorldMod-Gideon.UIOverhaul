@@ -624,7 +624,7 @@ namespace Gideon.UIOverhaul.Features.Work
                 string tip = pawn.LabelCap;
 
                 if (overPortrait)
-                    tip += "\n\nClick to center the view on " + pawn.LabelShortCap + ".";
+                    tip += "\n\nClick to select " + pawn.LabelShortCap + " and center the view on them.";
 
                 TooltipHandler.TipRegion(cell, (TipSignal) tip);
             }
