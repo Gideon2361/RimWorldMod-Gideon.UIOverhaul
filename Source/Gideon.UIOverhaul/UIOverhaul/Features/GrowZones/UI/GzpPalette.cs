@@ -13,6 +13,7 @@
 //   substantial portions of the Software.
 //   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
 
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using RimWorld;
 using System.Collections.Generic;
@@ -400,42 +401,19 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         }
 
         /// <summary>
-        /// Checkbox row in the mod's own styling, in place of Widgets.CheckboxLabeled -- the vanilla
-        /// one draws its own textures and would be the only piece of stock chrome left on the
-        /// settings page. The whole row is the hit target, as it is in vanilla.
+        /// Checkbox row in the mod's own styling, in place of Widgets.CheckboxLabeled.
+        ///
+        /// Now a thin wrapper over <see cref="UICheckboxControl"/>, which draws the identical row -- label
+        /// first, box against the right edge, the whole row as the hit target. It had been a hand-rolled
+        /// copy, written before that control existed; keeping it as one meant two definitions of the same
+        /// look, and this feature's settings page and the work tab would have drifted apart.
+        ///
+        /// Kept as a method rather than deleted because it is the name every call site in this feature uses,
+        /// and its <c>ref bool</c> signature is already what the control takes.
         /// </summary>
         public static bool CheckboxRow(Rect r, string label, ref bool value, string tooltip = null)
         {
-            bool hover = Mouse.IsOver(r);
-            if (hover)
-                Widgets.DrawBoxSolid(r, Palette.HoverOverlay);
-
-            const float box = 20f;
-            Rect boxRect = new Rect(r.xMax - box - 4f, r.y + (r.height - box) * 0.5f, box, box);
-
-            Color previous = GUI.color;
-            GUI.color = hover ? Stat : TextDim;
-            Widgets.Label(new Rect(r.x + 4f, r.y + (r.height - 24f) * 0.5f,
-                r.width - box - 16f, 24f), label);
-
-            Widgets.DrawBoxSolid(boxRect, BGD);
-            GUI.color = value ? Accent : FieldBorder;
-            Widgets.DrawBox(boxRect, 1);
-            GUI.color = previous;
-
-            if (value)
-                Widgets.DrawBoxSolid(boxRect.ContractedBy(4f), Accent);
-
-            if (!tooltip.NullOrEmpty())
-                TooltipHandler.TipRegion(r, (TipSignal) tooltip);
-
-            if (!Widgets.ButtonInvisible(r))
-                return false;
-
-            value = !value;
-            (value ? SoundDefOf.Checkbox_TurnedOn : SoundDefOf.Checkbox_TurnedOff)
-                .PlayOneShotOnCamera();
-            return true;
+            return UICheckboxControl.Draw(r, ref value, Palette, label, tooltip, UICheckboxSide.Right);
         }
 
         /// <summary>

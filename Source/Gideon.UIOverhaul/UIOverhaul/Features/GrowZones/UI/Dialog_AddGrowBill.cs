@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using RimWorld;
 using System.Collections.Generic;
@@ -68,6 +69,16 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
         private bool detailDragging;
         private float detailDragOffset;
+
+        /// <summary>
+        /// The card chrome, shared by every plant row. Reconfigured per plant as the list is drawn: cards
+        /// here are transient, so one instance is enough and allocating one per plant per frame would be
+        /// waste.
+        /// </summary>
+        private readonly UICardControl plantCard = new UICardControl();
+
+        /// <summary>Card chrome for the detail pane's heading panel.</summary>
+        private readonly UICardControl heroCard = new UICardControl();
 
         public override Vector2 InitialSize => new Vector2(900f, 640f);
 
@@ -205,23 +216,29 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         private void DrawPlantCard(Rect card, ThingDef plant)
         {
             bool isSelected = plant == selected;
-            bool hover = Mouse.IsOver(card);
             PlantNoticeInfo? notice = PlantNotices.For(plant);
 
-            GzpPalette.Card(card, StripeFor(plant), hover);
+            // Chrome from the shared card control: fill, accent stripe, notice wash, selection and hover
+            // washes, and the click. One instance reconfigured per plant rather than one per plant --
+            // these are drawn and forgotten inside a loop, so there is no state to keep between them.
+            //
+            // The interior below is still laid out by hand. A plant card's stat grid has deliberately
+            // uneven columns -- the ideal-temperature range needs roughly twice the width of a single
+            // figure -- and expressing that as a flat list of elements with absolute bounds would hide the
+            // arithmetic that makes it line up. UICardControl supports exactly this: elements when the
+            // layout is regular, ContentRect when it is not.
+            plantCard.Padding = 0f;
+            plantCard.AccentColor = StripeFor(plant);
+            plantCard.BackgroundColor = GzpPalette.PanelBG;
+            plantCard.Selected = isSelected;
 
             // Flagged plants get the striped banner washed across the card: deep red for a hazard,
-            // green for a benefit.
-            if (notice.HasValue)
-            {
-                Color previousTint = GUI.color;
-                GUI.color = WashFor(notice.Value);
-                GUI.DrawTexture(card, GzpTex.NoticeBackground, ScaleMode.StretchToFill);
-                GUI.color = previousTint;
-            }
+            // green for a benefit. Passed as the card's background image so the control composites it in
+            // the right order -- over the fill, under the stripe and the state washes.
+            plantCard.BackgroundTexture = notice.HasValue ? GzpTex.NoticeBackground : null;
+            plantCard.BackgroundTint = notice.HasValue ? WashFor(notice.Value) : (Color?) null;
 
-            if (isSelected)
-                GzpPalette.SelectedFill(card);
+            bool clicked = plantCard.Draw(card);
 
             Rect iconRect = new Rect(card.x + 10f, card.y + 8f, 44f, 44f);
             Widgets.ThingIcon(iconRect, plant);
@@ -296,8 +313,11 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             bool overProduct = DrawProduct(card, plant);
 
-            // Clicking the product icon opens its info card; it must not also select the card.
-            if (overProduct || !Widgets.ButtonInvisible(card))
+            // Clicking the product icon opens its info card; it must not also select the card. The card's
+            // own click was captured before the product was drawn, which is why it is tested here rather
+            // than asked for again -- ButtonInvisible consumes the event, so a second call would report
+            // nothing.
+            if (overProduct || !clicked)
                 return;
 
             selected = plant;
@@ -429,7 +449,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             GUI.DrawTexture(iconRect, icon);
             GUI.color = previous;
 
-            // Centred on the icon's own centre line rather than on the row. LineHeight is a little
+            // Centerd on the icon's own center line rather than on the row. LineHeight is a little
             // taller than the icon -- deliberately, since a box the height of the icon clips
             // descenders -- so a top-aligned label sits a couple of pixels high next to the artwork.
             Rect valueRect = new Rect(x + StatIcon + 4f, iconRect.center.y - LineHeight * 0.5f,
@@ -566,18 +586,19 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
         private void DrawHero(Rect hero, ThingDef plant)
         {
-            GzpPalette.DrawCard(hero);
-
             // Same wash the plant's card carries, so the notice color follows the selection into
             // the detail pane instead of only appearing further down the page.
             PlantNoticeInfo? notice = PlantNotices.For(plant);
-            if (notice.HasValue)
-            {
-                Color washPrevious = GUI.color;
-                GUI.color = WashFor(notice.Value);
-                GUI.DrawTexture(hero, GzpTex.NoticeBackground, ScaleMode.StretchToFill);
-                GUI.color = washPrevious;
-            }
+
+            // No accent stripe and no hover: this is a heading, not a row in a list, so there is nothing
+            // to categorize and nothing to click. AccentColor left null is what suppresses the stripe.
+            heroCard.Padding = 0f;
+            heroCard.AccentColor = null;
+            heroCard.HoverHighlight = false;
+            heroCard.BackgroundColor = GzpPalette.PanelBG;
+            heroCard.BackgroundTexture = notice.HasValue ? GzpTex.NoticeBackground : null;
+            heroCard.BackgroundTint = notice.HasValue ? WashFor(notice.Value) : (Color?) null;
+            heroCard.Draw(hero);
 
             // Name only. The description used to live here and was routinely clipped; it now has its
             // own section below, where it can wrap to whatever height it needs.

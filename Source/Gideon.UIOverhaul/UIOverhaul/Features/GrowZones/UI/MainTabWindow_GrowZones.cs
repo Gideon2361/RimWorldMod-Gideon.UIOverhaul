@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Controls;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -21,6 +22,9 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         private const float IconSize = 24f;
 
         private Vector2 scroll;
+
+        /// <summary>Card chrome for the zone rows, reconfigured per row as the list is drawn.</summary>
+        private readonly UICardControl rowCard = new UICardControl();
         private bool draggingScrollbar;
         private float scrollDragOffset;
 
@@ -172,8 +176,15 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
         private void DrawRow(Rect r, Zone_Growing zone)
         {
-            bool hover = Mouse.IsOver(r);
-            GzpPalette.Card(r, zone.color, hover);
+            // Chrome from the shared card control. The stripe is the zone's own color, which is what ties
+            // a row to the zone as drawn on the map.
+            //
+            // The interior stays hand-laid: the cells are proportional columns of the row's width, and a
+            // column layout is clearer as arithmetic than as elements with fixed bounds.
+            rowCard.Padding = 0f;
+            rowCard.AccentColor = zone.color;
+            rowCard.BackgroundColor = GzpPalette.PanelBG;
+            rowCard.Draw(r);
 
             GrowZoneStatus status = GrowZoneStatusCache.For(zone);
             float width = r.width;

@@ -62,10 +62,116 @@ namespace Gideon.UIFramework.Defs
         /// </summary>
         public List<UIColorEntry> custom = new List<UIColorEntry>();
 
+        // ---------------------------------------------------------------------------------------
+        // Optional button texture
+        //
+        // Unset -- the default -- means buttons are drawn flat from the palette's colors, which is the
+        // whole point of the theme. A palette that wants textured buttons supplies a 9-slice atlas in
+        // RimWorld's own layout, and it is used everywhere a button is drawn: vanilla buttons, option
+        // rows, the main button bar and any control built on the framework. One texture, every button.
+        //
+        // Only buttonTexture is required. The hover and pressed variants fall back to it, and the
+        // palette's hover and pressed washes are drawn over the top either way, so a single-image
+        // palette still gets state feedback.
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>Texture path under any mod's Textures folder, without a file extension.</summary>
+        public string buttonTexture;
+
+        public string buttonTextureHover;
+        public string buttonTexturePressed;
+
+        /// <summary>
+        /// Whether the state washes are drawn over a supplied texture. A palette whose hover and
+        /// pressed images already carry their own feedback will want this off, or the wash doubles up.
+        /// </summary>
+        public bool buttonTextureUsesStateWash = true;
+
         private static readonly int RoleCount = Enum.GetNames(typeof(UIColorRole)).Length;
 
         private Color[] resolved;
         private Dictionary<string, Color> resolvedCustom;
+
+        /// <summary>
+        /// Throws away everything derived from the authored fields, so the next read re-parses them.
+        ///
+        /// For live editing: the framework can re-read a palette's XML and assign the string fields
+        /// straight onto this instance, but the parsed colors are cached on first use and would go on
+        /// being handed out. Nothing in normal play needs this.
+        /// </summary>
+        public void Invalidate()
+        {
+            resolved = null;
+            resolvedCustom = null;
+            buttonTexturesResolved = false;
+            buttonTextureNormal = null;
+            buttonTextureOver = null;
+            buttonTextureDown = null;
+        }
+
+        private bool buttonTexturesResolved;
+        private Texture2D buttonTextureNormal;
+        private Texture2D buttonTextureOver;
+        private Texture2D buttonTextureDown;
+
+        /// <summary>
+        /// True when this palette supplies a button texture, in which case a button is drawn as a
+        /// 9-slice atlas rather than a flat fill.
+        /// </summary>
+        public bool HasButtonTexture
+        {
+            get
+            {
+                EnsureButtonTextures();
+                return buttonTextureNormal != null;
+            }
+        }
+
+        /// <summary>
+        /// The atlas for the given button state, or null when this palette has no button texture.
+        /// Hover and pressed fall back to the resting image, so one texture is enough.
+        /// </summary>
+        public Texture2D ButtonTexture(bool over, bool held)
+        {
+            EnsureButtonTextures();
+
+            if (held && buttonTextureDown != null)
+                return buttonTextureDown;
+
+            if (over && buttonTextureOver != null)
+                return buttonTextureOver;
+
+            return buttonTextureNormal;
+        }
+
+        /// <summary>
+        /// Resolved once. ContentFinder rather than UIImageLoader: a palette is a Def, so nothing can
+        /// read it until def loading is finished, by which point mod textures are available through
+        /// RimWorld's own cache and loading a second copy would only waste memory.
+        /// </summary>
+        private void EnsureButtonTextures()
+        {
+            if (buttonTexturesResolved)
+                return;
+
+            buttonTexturesResolved = true;
+            buttonTextureNormal = Find(buttonTexture);
+            buttonTextureOver = Find(buttonTextureHover);
+            buttonTextureDown = Find(buttonTexturePressed);
+        }
+
+        private Texture2D Find(string path)
+        {
+            if (path.NullOrEmpty())
+                return null;
+
+            Texture2D found = ContentFinder<Texture2D>.Get(path, false);
+            if (found == null)
+                Log.ErrorOnce($"[Gideon.UIFramework] Palette '{defName}': no texture at '{path}'. "
+                              + "Buttons will be drawn flat.", 0x17C0_10B2 ^ path.GetHashCode());
+
+            return found;
+        }
 
         // ---------------------------------------------------------------------------------------
         // Reading

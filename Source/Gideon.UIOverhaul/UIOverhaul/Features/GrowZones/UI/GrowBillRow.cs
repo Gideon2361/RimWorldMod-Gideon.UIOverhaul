@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Controls;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -19,12 +20,22 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         private const float Pad = 10f;
         private const float TargetFieldWidth = 58f;
 
+        /// <summary>Card chrome shared by every bill row. See the note in <see cref="Draw"/>.</summary>
+        private static readonly UICardControl RowCard = new UICardControl();
+
         public static void Draw(Rect rect, Bill_Growing bill, Zone_GrowingPlus zone, int index, int total)
         {
             bool forever = bill.repeatMode == BillRepeatModeDefOf.Forever;
-            bool hover = Mouse.IsOver(rect);
 
-            GzpPalette.Card(rect, StateColor(bill), hover);
+            // Chrome from the shared card control, with the stripe carrying the bill's state -- running,
+            // paused, suspended -- which is the one thing a glance down the list needs to convey.
+            //
+            // Static because this drawer is static: bill rows are drawn and forgotten, so there is no
+            // per-row state to hold and one instance serves every row.
+            RowCard.Padding = 0f;
+            RowCard.AccentColor = StateColor(bill);
+            RowCard.BackgroundColor = GzpPalette.PanelBG;
+            RowCard.Draw(rect);
 
             Color previous = GUI.color;
             Text.Font = GameFont.Small;
@@ -54,13 +65,23 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             Text.Anchor = TextAnchor.UpperLeft;
         }
 
+        /// <summary>
+        /// The stripe color, which is what the bill list conveys at a glance.
+        ///
+        /// Suspended is a warning rather than a danger: the player turned it off deliberately, so it is a
+        /// state to notice, not a fault. Satisfied is read from <c>paused</c>, which Bill_Growing sets
+        /// once the target count is reached -- so a satisfied bill and one the player paused by hand look
+        /// the same, because in both cases the bill is idle and nothing is wrong.
+        /// </summary>
         private static Color StateColor(Bill_Growing bill)
         {
             if (bill.suspended)
-                return GzpPalette.Bad;
-            if (bill.paused)
                 return GzpPalette.Warn;
-            return GzpPalette.Good;
+
+            if (bill.paused)
+                return GzpPalette.Good;
+
+            return GzpPalette.Accent;
         }
 
         private static void DrawRowButtons(Rect rect, Bill_Growing bill, Zone_GrowingPlus zone, int index, int total)

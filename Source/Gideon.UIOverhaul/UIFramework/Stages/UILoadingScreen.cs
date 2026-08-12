@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using Verse;
 
@@ -54,6 +55,16 @@ namespace Gideon.UIFramework.Stages
         private static int defsTotal;
         private static float defsBase;
         private static float defsCeiling;
+
+        // Map generation, which is a different job from starting the game and cannot share the startup
+        // milestone table: none of its labels appear there, so every one of them fell through to "just
+        // show it as the step, do not move the bar".
+        //
+        // No table is needed for it either. The gen step count is known before the first step runs, so
+        // progress is a true count rather than weights -- the same reason def processing is accurate.
+        private static bool generatingMap;
+        private static int genStepsSeen;
+        private static int genStepsTotal;
 
         /// <summary>
         /// Depth beyond which pushes are ignored. DeepProfiler nests only a few levels in practice;
@@ -171,6 +182,42 @@ namespace Gideon.UIFramework.Stages
                 defsTotal = 0;
                 defsBase = 0f;
                 defsCeiling = 0f;
+
+                generatingMap = false;
+                genStepsSeen = 0;
+                genStepsTotal = 0;
+            }
+        }
+
+        /// <summary>
+        /// A map is about to be generated, in <paramref name="stepCount"/> generation steps.
+        ///
+        /// Switches the screen out of startup mode for the rest of this long event. Startup weights are
+        /// meaningless here: map generation runs an entirely different set of phases, so a bar driven by
+        /// the startup table would sit wherever the last recognized startup label left it.
+        /// </summary>
+        public static void BeginMapGeneration(int stepCount)
+        {
+            lock (Lock)
+            {
+                generatingMap = true;
+                genStepsSeen = 0;
+                genStepsTotal = Mathf.Max(0, stepCount);
+
+                stage = "Generating the map";
+                step = string.Empty;
+                hasProgress = true;
+                fraction = 0f;
+            }
+        }
+
+        /// <summary>Whether the screen is describing a map generation rather than a game load.</summary>
+        public static bool GeneratingMap
+        {
+            get
+            {
+                lock (Lock)
+                    return generatingMap;
             }
         }
 
@@ -189,6 +236,22 @@ namespace Gideon.UIFramework.Stages
                     stack.Add(label);
 
                 hasProgress = true;
+
+                // During map generation every label is a generation step, so they are counted instead of
+                // being looked up. This is what makes that screen as specific as the startup one: the
+                // step shows which generator is running and the bar is a real fraction of the work.
+                if (generatingMap)
+                {
+                    step = Humanize(label);
+
+                    if (genStepsTotal > 0)
+                    {
+                        genStepsSeen++;
+                        Advance(Mathf.Clamp01(genStepsSeen / (float) genStepsTotal));
+                    }
+
+                    return;
+                }
 
                 // A known phase sets both the wording and the bar. An unknown one is still worth
                 // showing as the step: that is where the mod names and node counts come through.
@@ -262,6 +325,42 @@ namespace Gideon.UIFramework.Stages
         ///
         /// Caller must hold the lock.
         /// </summary>
+        /// <summary>
+        /// Turns a profiler label into something a player can read.
+        ///
+        /// Gen step labels are defNames and class names -- "ScatterRuinsSimple", "GenStep_Terrain" -- so
+        /// the type prefix is dropped and the remaining camel case is split into words. Not a lookup
+        /// table: the steps a map runs depend on the mods installed, and a table would only ever describe
+        /// the ones that shipped with the game.
+        /// </summary>
+        private static string Humanize(string label)
+        {
+            if (label.NullOrEmpty())
+                return string.Empty;
+
+            string text = label;
+
+            int underscore = text.IndexOf('_');
+            if (underscore >= 0 && underscore < text.Length - 1)
+                text = text.Substring(underscore + 1);
+
+            StringBuilder builder = new StringBuilder(text.Length + 8);
+
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                // A capital that follows a lower-case letter starts a new word. Runs of capitals are left
+                // alone so an acronym is not split into single letters.
+                if (i > 0 && char.IsUpper(c) && !char.IsUpper(text[i - 1]) && text[i - 1] != ' ')
+                    builder.Append(' ');
+
+                builder.Append(i == 0 ? char.ToUpperInvariant(c) : c);
+            }
+
+            return builder.ToString();
+        }
+
         private static void Advance(float value)
         {
             float clamped = Mathf.Clamp01(value);

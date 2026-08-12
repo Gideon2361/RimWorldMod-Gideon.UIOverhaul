@@ -23,10 +23,26 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     [HarmonyPatch(typeof(LongEventHandler), nameof(LongEventHandler.LongEventsOnGUI))]
     public static class Patch_LongEventHandler_LongEventsOnGUI
     {
+        /// <summary>
+        /// True while a long event was running as of the previous frame, so the start of a new one can be
+        /// detected.
+        /// </summary>
+        private static bool wasRunning;
+
         /// <summary>Returns false to skip vanilla's drawing entirely.</summary>
         public static bool Prefix()
         {
-            if (Failed || !LongEventHandler.AnyEventNowOrWaiting)
+            bool running = LongEventHandler.AnyEventNowOrWaiting;
+
+            // Clear the previous event's figures the moment a new one starts. Resetting only in
+            // PlayDataLoader.LoadAllPlayData covered the initial load and nothing else, so map generation
+            // -- a separate long event -- opened with the bar still full from the end of startup.
+            if (running && !wasRunning)
+                UIFramework.Stages.UILoadingScreen.Reset();
+
+            wasRunning = running;
+
+            if (Failed || !running)
                 return true;
 
             try

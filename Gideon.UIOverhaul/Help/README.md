@@ -42,6 +42,10 @@ color palette, for instance, is pure XML.
 | `UIProgressBarControl` | Static drawing helper | [LoadingScreenConfig.md](LoadingScreenConfig.md) |
 | `UILoadingScreen` | Static progress state, drivable by any mod | [LoadingScreenConfig.md](LoadingScreenConfig.md#driving-the-display-yourself) |
 | `UIImageLoader` / `UIImage` | Loads a texture off disk, PNG/JPG/DDS | [LoadingScreenConfig.md](LoadingScreenConfig.md#image-files) |
+| `UIRichButtonControl` | Class, construct and reuse | [UIRichButtonControl.md](UIRichButtonControl.md) |
+| `UICheckboxControl` | Static drawing helper | [UICheckboxControl.md](UICheckboxControl.md) |
+| `UIRadioButtonControl` | Static drawing helper | [UIRadioButtonControl.md](UIRadioButtonControl.md) |
+| `UIDesignatorTabControl` | Class, construct and reuse | [UIDesignatorTabControl.md](UIDesignatorTabControl.md) |
 
 Two different config mechanisms, for one reason: **defs do not exist for most of a load.** Anything
 consumed during startup cannot be a Def, so the loading screen is read straight off disk from
@@ -58,7 +62,7 @@ Namespaces follow folders.
 | Namespace | Holds |
 |---|---|
 | `Gideon.UIFramework.Defs` | Def types: `UIColorPaletteDef` |
-| `Gideon.UIFramework.Controls` | Drawing controls: `UILoadingScreenControl`, `UIProgressBarControl` |
+| `Gideon.UIFramework.Controls` | Drawing controls: `UILoadingScreenControl`, `UIProgressBarControl`, `UIRichButtonControl`, `UICardControl`, `UICheckboxControl`, `UIRadioButtonControl`, `UIDesignatorTabControl` |
 | `Gideon.UIFramework.Stages` | Loading-time types: `UILoadingScreenConfig`, `UILoadingScreen`, `UILoadingSnapshot` |
 | `Gideon.UIFramework.Components.Colors` | Color supporting types: `UIColorRole`, `UIColorEntry`, `UIColorParser` |
 | `Gideon.UIFramework.Components.Images` | Image supporting types: `UIImageFit`, `UIImage`, `UIImageLoader` |
