@@ -38,6 +38,15 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public bool debugLogging;
 
+        /// <summary>
+        /// Whether to force fullscreen at the display's native resolution on every launch.
+        ///
+        /// Off by default, and it has to be: this overrides a display preference the player set, and someone who
+        /// plays windowed on purpose would find the game fighting them every launch with no obvious culprit.
+        /// See <c>Features.Display.StartupFullscreen</c>.
+        /// </summary>
+        public bool fullscreenOnStartup;
+
         // There is deliberately no option to hide the bar's UI options button. It used to exist, back when
         // these settings were also reachable from the vanilla Options window; that route turned out to be
         // impossible -- Dialog_Options ignores any OptionCategoryDef from a mod -- which leaves the bar
@@ -126,6 +135,10 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.debugLogging = value.EqualsIgnoreCase("true");
                             break;
 
+                        case "fullscreenOnStartup":
+                            settings.fullscreenOnStartup = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "showBarButton":
                             // Retired setting. Accepted silently so an older config file does not raise a
                             // warning about something the player never chose to write.
@@ -178,6 +191,8 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteStartElement("UIOverhaulSettings");
                     writer.WriteElementString("activePalette", activePalette ?? "");
                     writer.WriteElementString("debugLogging", debugLogging ? "true" : "false");
+                    writer.WriteElementString("fullscreenOnStartup",
+                        fullscreenOnStartup ? "true" : "false");
                     writer.WriteEndElement();
                     writer.WriteEndDocument();
                 }

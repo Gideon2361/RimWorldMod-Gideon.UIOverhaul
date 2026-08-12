@@ -73,7 +73,7 @@ namespace Gideon.UIOverhaul.Features.Options
 
             // Raised with the diagnostics section, which the old height had no room for -- the scroll view would
             // have clipped it rather than scrolled to it.
-            float viewHeight = 560f;
+            float viewHeight = 700f;
             Rect view = new Rect(0f, 0f, inner.width - 18f, viewHeight);
             Widgets.BeginScrollView(inner, ref scroll, view);
 
@@ -81,6 +81,8 @@ namespace Gideon.UIOverhaul.Features.Options
             DrawThemeSection(view, ref y, palette, settings);
             y += 14f;
             DrawBarSection(view, ref y, palette, settings);
+            y += 14f;
+            DrawDisplaySection(view, ref y, palette, settings);
             y += 14f;
             DrawDiagnosticsSection(view, ref y, palette, settings);
 
@@ -172,6 +174,39 @@ namespace Gideon.UIOverhaul.Features.Options
                 "Reorder tabs, rename them, take them off the bar, group them into menus, and choose "
                 + "icons.");
             y += 44f;
+            GUI.color = palette.TextPrimary;
+        }
+
+        /// <summary>
+        /// The display section.
+        ///
+        /// Applied the moment the box is ticked rather than on the next launch, so the player finds out whether
+        /// it did what they wanted while they are still looking at the setting.
+        /// </summary>
+        private void DrawDisplaySection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Display", palette);
+
+            bool fullscreen = settings.fullscreenOnStartup;
+
+            if (UICheckboxControl.Draw(new Rect(0f, y, view.width, RowHeight), ref fullscreen, palette,
+                    "Fullscreen at native resolution on startup"))
+            {
+                settings.fullscreenOnStartup = fullscreen;
+                settings.Save();
+
+                if (fullscreen)
+                    Features.Display.StartupFullscreen.Apply();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 56f),
+                "Alt+Enter leaves fullscreen and RimWorld remembers it, so the next launch comes up windowed. "
+                + "This puts it back. Leaving fullscreen during a session still works; it just no longer sticks.");
+            y += 60f;
             GUI.color = palette.TextPrimary;
         }
 
