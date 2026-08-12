@@ -61,6 +61,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Detail = detail;
         }
 
+        /// <summary>
+        /// Reads a pawn's condition. Not cheap -- it walks the hediff list for infections, has
+        /// <c>HasTendableHediff</c> walk it again, and reads the vacuum at the pawn's cell.
+        ///
+        /// Deliberately uncached here. The panel caches a whole row's worth of display values on one clock
+        /// rather than every reading owning a cache of its own; see <c>PawnsPanel.RowData</c>.
+        /// </summary>
         public static PawnHealthSummary For(Pawn pawn)
         {
             bool downed = pawn.Downed;

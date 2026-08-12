@@ -219,6 +219,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     Roster.Add(pawn);
                 }
             }
+
+            // Both caches are keyed by Pawn, which keeps a dead or departed colonist alive for as long as the
+            // entry lasts. Swept here because this is where the live set is known.
+            PruneRows();
         }
 
         /// <summary>
@@ -232,7 +236,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private static void DrawRowBackground(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
-            PawnHealthSummary summary = PawnHealthSummary.For(pawn);
+            PawnHealthSummary summary = Data(pawn).Condition;
 
             RowCard.AccentColor = summary.State == PawnHealthState.Healthy
                 ? palette.SurfaceRaised
@@ -430,7 +434,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private static void DrawConditionCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
-            PawnHealthSummary summary = PawnHealthSummary.For(pawn);
+            PawnHealthSummary summary = Data(pawn).Condition;
 
             Rect band = TopBand(cell);
 
@@ -463,16 +467,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void DrawHealthBarCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
-            Pawn pawn = (Pawn) data.Payload;
+            RowData row = Data((Pawn) data.Payload);
 
-            float fraction = Mathf.Clamp01(pawn.health?.summaryHealth?.SummaryHealthPercent ?? 1f);
-
-            Color fill = fraction > 0.9f ? palette.Success
-                : fraction > 0.35f ? palette.Info
+            Color fill = row.HealthFraction > 0.9f ? palette.Success
+                : row.HealthFraction > 0.35f ? palette.Info
                 : palette.Danger;
 
-            DrawLabeledBar(cell, palette, fraction, fill, fraction.ToStringPercent(),
-                "Overall health: " + fraction.ToStringPercent());
+            DrawLabeledBar(cell, palette, row.HealthFraction, fill, row.HealthReading, row.HealthTooltip);
         }
 
         /// <summary>
@@ -487,12 +488,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void DrawMoodCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
-            Pawn pawn = (Pawn) data.Payload;
-            Need_Mood mood = pawn.needs?.mood;
+            RowData row = Data((Pawn) data.Payload);
 
             Rect band = TopBand(cell);
 
-            if (mood == null)
+            if (!row.HasMood)
             {
                 GameFont previousFont = Text.Font;
                 TextAnchor previousAnchor = Text.Anchor;
@@ -509,11 +509,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 return;
             }
 
-            float fraction = Mathf.Clamp01(mood.CurLevelPercentage);
-
-            DrawLabeledBar(cell, palette, fraction, palette.Mood, mood.MoodString,
-                "Mood: " + fraction.ToStringPercent() + " (" + mood.MoodString + ")"
-                + "\n\nMental break at " + pawn.mindState?.mentalBreaker?.BreakThresholdMinor.ToStringPercent());
+            DrawLabeledBar(cell, palette, row.MoodFraction, palette.Mood, row.MoodReading, row.MoodTooltip);
         }
 
         /// <summary>
@@ -566,7 +562,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Rect band = TopBand(cell);
 
-            string report = Activity(pawn);
+            string report = Data(pawn).Activity;
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -589,7 +585,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 TooltipHandler.TipRegion(band, (TipSignal) report);
         }
 
-        private static string Activity(Pawn pawn)
+        private static string ReadActivity(Pawn pawn)
         {
             JobDriver driver = pawn.jobs?.curDriver;
 
@@ -608,12 +604,164 @@ namespace Gideon.UIOverhaul.Features.Pawns
             }
         }
 
+        // ---------------------------------------------------------------------------------------
+        // The row cache
+        //
+        // One cache of everything a row displays, refreshed once a second, rather than a cache per reading.
+        //
+        // Reading live was the first version and was expensive out of proportion to what it bought. Nothing on
+        // this tab moves at frame rate: a condition changes with a treatment or a fight, mood over hours, a job
+        // report every few seconds. Meanwhile a frame cost, per pawn, two full condition reads -- one for the
+        // row's accent color and one for the Condition cell, each walking the hediff list twice -- a virtual
+        // GetReport that composes a sentence, and four concatenated tooltip strings that were built whether or
+        // not anyone was hovering. At 60fps with twenty colonists that is thousands of hediff walks and tens of
+        // thousands of throwaway strings a second.
+        //
+        // A row-level cache rather than one per value, because the values are wanted together and the tab will
+        // grow more of them: one clock, one lookup per row per frame, one place to add a field, and no way for
+        // two columns to end up describing different moments.
+        //
+        // What is NOT cached: the schedule strip. It reads the timetable directly and writes to it on click, so
+        // it has to be live -- a cached hour would keep painting the old color for up to a second after the
+        // player set it.
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// How long a row's readings are reused before being taken again.
+        ///
+        /// Real seconds rather than ticks, so the rate holds whether the game is paused or running at three times
+        /// speed. Ticks would have meant three refreshes a second at high speed and none while paused --
+        /// defensible, since nothing changes while paused, but "once a second" should mean once a second.
+        /// </summary>
+        private const float RefreshSeconds = 1f;
+
+        /// <summary>
+        /// Everything one row shows, including the finished tooltip strings.
+        ///
+        /// A class rather than a struct: it is handed out by reference and read several times per frame, and
+        /// copying this much per read would give back what the cache saved.
+        /// </summary>
+        private sealed class RowData
+        {
+            public float Stamp;
+
+            public PawnHealthSummary Condition;
+
+            public float HealthFraction;
+            public string HealthReading;
+            public string HealthTooltip;
+
+            public bool HasMood;
+            public float MoodFraction;
+            public string MoodReading;
+            public string MoodTooltip;
+
+            public string Activity;
+
+            public TimeAssignmentDef Assignment;
+        }
+
+        private static readonly Dictionary<Pawn, RowData> Rows = new Dictionary<Pawn, RowData>();
+
+        /// <summary>
+        /// Forces a row's next read to take fresh readings.
+        ///
+        /// For a change the player just made. Waiting up to a second to show someone their own click is the one
+        /// case where the throttle is felt as lag rather than not noticed at all -- painting the current hour
+        /// would leave the Schedule column's swatch showing the old assignment.
+        /// </summary>
+        private static void Invalidate(Pawn pawn)
+        {
+            if (Rows.TryGetValue(pawn, out RowData data))
+                data.Stamp = float.NegativeInfinity;
+        }
+
+        /// <summary>A row's cached readings, refreshed if they have gone stale.</summary>
+        private static RowData Data(Pawn pawn)
+        {
+            float now = Time.realtimeSinceStartup;
+
+            if (!Rows.TryGetValue(pawn, out RowData data))
+            {
+                data = new RowData { Stamp = float.NegativeInfinity };
+                Rows[pawn] = data;
+            }
+
+            if (now - data.Stamp < RefreshSeconds)
+                return data;
+
+            data.Stamp = now;
+            Refresh(pawn, data);
+
+            return data;
+        }
+
+        /// <summary>
+        /// Takes every reading for one row.
+        ///
+        /// The entry is reused rather than replaced, so a refresh allocates only the strings that changed.
+        /// </summary>
+        private static void Refresh(Pawn pawn, RowData data)
+        {
+            data.Condition = PawnHealthSummary.For(pawn);
+
+            data.HealthFraction = Mathf.Clamp01(pawn.health?.summaryHealth?.SummaryHealthPercent ?? 1f);
+            data.HealthReading = data.HealthFraction.ToStringPercent();
+            data.HealthTooltip = "Overall health: " + data.HealthReading;
+
+            Need_Mood mood = pawn.needs?.mood;
+            data.HasMood = mood != null;
+
+            if (data.HasMood)
+            {
+                data.MoodFraction = Mathf.Clamp01(mood.CurLevelPercentage);
+                data.MoodReading = mood.MoodString;
+                data.MoodTooltip = "Mood: " + data.MoodFraction.ToStringPercent() + " (" + mood.MoodString + ")"
+                                   + "\n\nMental break at "
+                                   + pawn.mindState?.mentalBreaker?.BreakThresholdMinor.ToStringPercent();
+            }
+
+            data.Activity = ReadActivity(pawn);
+            data.Assignment = pawn.timetable?.CurrentAssignment;
+        }
+
+        /// <summary>
+        /// Drops rows for pawns no longer on show, so the cache cannot outgrow the roster.
+        ///
+        /// A Pawn key keeps the object alive, which matters for a colonist who has died or left: without this the
+        /// dictionary would hold them for the rest of the session. Only runs when the cache is bigger than the
+        /// roster, which is the only way it can be holding something stale, so it stops costing anything as soon
+        /// as it has caught up.
+        /// </summary>
+        private static void PruneRows()
+        {
+            if (Rows.Count <= Roster.Count)
+                return;
+
+            List<Pawn> stale = null;
+
+            foreach (Pawn pawn in Rows.Keys)
+            {
+                if (Roster.Contains(pawn))
+                    continue;
+
+                stale = stale ?? new List<Pawn>();
+                stale.Add(pawn);
+            }
+
+            if (stale == null)
+                return;
+
+            for (int i = 0; i < stale.Count; i++)
+                Rows.Remove(stale[i]);
+        }
+
         private static void DrawScheduleHintCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
             Rect band = TopBand(cell);
 
-            TimeAssignmentDef now = pawn.timetable?.CurrentAssignment;
+            TimeAssignmentDef now = Data(pawn).Assignment;
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -800,6 +948,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 {
                     pawn.timetable.SetAssignment(hour, Brush);
                     SoundDefOf.Designate_DragStandard_Changed.PlayOneShotOnCamera();
+
+                    // The strip reads the timetable live, but the Schedule column's swatch comes from the row
+                    // cache, so it has to be told.
+                    Invalidate(pawn);
                 }
 
                 if (over)

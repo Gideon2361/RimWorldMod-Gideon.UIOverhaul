@@ -470,6 +470,36 @@ disagreeing about it is exactly the failure mode worth designing out.
 | Activity | `jobs.curDriver.GetReport()` |
 | Schedule | The current hour's assignment |
 
+### Everything a row shows is cached for a second
+
+One cache of a row's display values, refreshed at most once per second, rather than reading live or giving each
+value its own cache.
+
+Reading live was the first version and cost far more than it bought. Per pawn per frame it was: **two** full
+condition reads — one for the row's accent color, one for the Condition cell, each walking the hediff list twice
+over — a virtual `GetReport()` composing a sentence, and four concatenated tooltip strings built whether or not
+anyone was hovering. At 60fps with twenty colonists that is thousands of hediff walks and tens of thousands of
+throwaway strings every second, for values that change on the scale of a treatment, a fight, or a mood shift over
+hours.
+
+A **row-level** cache rather than one per reading, because the values are wanted together and this tab will grow
+more of them: one clock, one dictionary lookup per row per frame, one place to add a field, and no way for two
+columns to end up describing different moments. Entries are reused rather than replaced on refresh, so only the
+strings that changed allocate.
+
+The clock is **real seconds**, so the rate holds whether the game is paused or running at three times speed.
+Ticks would have meant three refreshes a second at high speed and none while paused.
+
+Two things are deliberately outside it:
+
+- **The schedule strip reads the timetable live.** A cached hour would keep painting the old color for up to a
+  second after the player set it.
+- **Painting an hour invalidates that row.** The strip is live but the Schedule column's swatch comes from the
+  cache, and waiting a second to show someone their own click is the one place the throttle would be felt as lag.
+
+The cache is swept once per frame against the roster, and only when it is larger — a `Pawn` key would otherwise
+keep a dead or departed colonist alive for the rest of the session.
+
 ### Condition is severity-ordered, not combined
 
 A bleeding, downed, freezing pawn is three problems, but a column that says all three says nothing at a glance —
