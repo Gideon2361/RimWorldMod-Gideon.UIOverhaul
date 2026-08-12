@@ -244,6 +244,29 @@ namespace Gideon.UIFramework.Controls
         public bool HasHeaderRow = true;
 
         /// <summary>
+        /// How many leading columns stay put when the grid is scrolled sideways. Zero means none, which is the
+        /// behavior every grid had before this existed.
+        ///
+        /// For the column that says which row you are looking at. A wide grid scrolled right shows a screen of
+        /// numbers with nothing to attach them to, and counting rows back to the name defeats the point of
+        /// putting them side by side.
+        ///
+        /// A count rather than a per-column flag, because only *leading* columns can be pinned: a pinned column
+        /// with a scrolling one to its left would slide out from under its own heading. Expressing it as "the
+        /// first N" makes that structural instead of a rule to be enforced and explained.
+        ///
+        /// Pinning changes how the grid is drawn -- see <see cref="DrawGrid"/> -- so a grid that pins nothing
+        /// takes exactly the path it always did. Two things are worth knowing before switching it on:
+        ///
+        /// A row's <see cref="UIDesignatorTabRow.DrawOverlay"/> is drawn in the scrolling region and is clipped
+        /// by it, so an overlay that spans the whole grid loses whatever falls under the pinned strip.
+        ///
+        /// Section headings are drawn in both regions, which is deliberate: their label sits at the left, so it
+        /// stays readable in the pinned strip while the heading's background continues across the scroll.
+        /// </summary>
+        public int PinnedColumns;
+
+        /// <summary>
         /// Which way the column headings run. <see cref="UIHeaderAngle.Horizontal"/> by default.
         ///
         /// Anything other than horizontal stops a column having to be as wide as its own name: level,
@@ -570,6 +593,32 @@ namespace Gideon.UIFramework.Controls
             return count == 3 ? 1 : 0;
         }
 
+        /// <summary>
+        /// Columns that stay put, clamped to something that makes sense.
+        ///
+        /// Pinning every column is not pinning -- there would be nothing left to scroll -- so the last column is
+        /// always allowed to move. That also means a grid narrow enough to need no scrolling behaves the same
+        /// pinned or not.
+        /// </summary>
+        private int PinnedCount => Mathf.Clamp(PinnedColumns, 0, Mathf.Max(0, Columns.Count - 1));
+
+        private bool Pinning => PinnedCount > 0;
+
+        /// <summary>Total width of the pinned columns, which is how much of the body they take.</summary>
+        private float PinnedWidth
+        {
+            get
+            {
+                float total = 0f;
+                int count = PinnedCount;
+
+                for (int i = 0; i < count; i++)
+                    total += Columns[i].Width;
+
+                return total;
+            }
+        }
+
         private void DrawGrid(Rect inRect, UIColorPaletteDef palette)
         {
             float headerHeight = HasHeaderRow ? HeaderHeightResolved : 0f;
@@ -577,11 +626,17 @@ namespace Gideon.UIFramework.Controls
             Rect header = new Rect(inRect.x, inRect.y, inRect.width, headerHeight);
             Rect body = new Rect(inRect.x, inRect.y + headerHeight, inRect.width, inRect.height - headerHeight);
 
+            if (Pinning)
+            {
+                DrawPinnedGrid(header, body, headerHeight, palette);
+                return;
+            }
+
             // The heading is drawn before the scroll view and outside it, which is the whole of what pins it:
             // a vertical scroll moves the rows and cannot move something that is not in the view. It still
             // follows the horizontal scroll, because a heading has to stay over the column it names.
             if (HasHeaderRow)
-                DrawHeader(header, palette);
+                DrawHeader(header, palette, 0, Columns.Count, -Scroll.x, 0);
 
             float rowsHeight = RowsHeight;
 
@@ -613,33 +668,167 @@ namespace Gideon.UIFramework.Controls
                 if (hidden)
                     continue;
 
-                DrawRow(rect, row, palette);
+                DrawRow(rect, row, palette, 0, Columns.Count);
                 y += height + RowGap;
             }
 
             Widgets.EndScrollView();
         }
 
-        private void DrawRow(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        /// <summary>
+        /// The grid with its leading columns held still while the rest scrolls sideways.
+        ///
+        /// The pinned columns are drawn <b>outside the scroll view entirely</b>, in their own strip, rather than
+        /// inside it with the scroll offset cancelled out. Cancelling the offset was the shorter version and does
+        /// not work: the pinned cells would be drawn over content already painted beneath them, so the row card
+        /// underneath -- accent stripe included -- would have to be repainted per strip, and anything the row
+        /// drew for itself would show through. Reserving the width means nothing is ever drawn there twice.
+        ///
+        /// The cost is that the strip has to reproduce what the scroll view does for free: vertical scrolling is
+        /// applied by hand as <c>-Scroll.y</c>, and clipping by a group. Those are the only two things a scroll
+        /// view was giving it.
+        ///
+        /// Both regions walk the same row list in the same order with the same heights, so the two halves of a
+        /// row always line up. The single shared <see cref="Scroll"/> is what keeps them in step vertically: the
+        /// scroll view writes it, and the strip reads whatever it wrote.
+        /// </summary>
+        private void DrawPinnedGrid(Rect header, Rect body, float headerHeight, UIColorPaletteDef palette)
+        {
+            int pinned = PinnedCount;
+            float pinnedWidth = PinnedWidth;
+
+            Rect pinnedBody = new Rect(body.x, body.y, pinnedWidth, body.height);
+            Rect scrollBody = new Rect(body.x + pinnedWidth, body.y, body.width - pinnedWidth, body.height);
+
+            float rowsHeight = RowsHeight;
+            float available = scrollBody.width - (rowsHeight > scrollBody.height ? ScrollBarWidth : 0f);
+
+            // The view holds only the scrolling columns, so Scroll.x is measured from the first of them rather
+            // than from the grid's left edge. Every offset below follows from that.
+            float scrollingWidth = ColumnsWidth - pinnedWidth;
+            Rect view = new Rect(0f, 0f, Mathf.Max(scrollingWidth, available), rowsHeight);
+
+            if (HasHeaderRow)
+            {
+                Rect scrollHeader = new Rect(header.x + pinnedWidth, header.y, header.width - pinnedWidth,
+                    headerHeight);
+
+                // Scrolling headings first, then the pinned ones over them: a leaning heading overhangs to the
+                // left, and the pinned strip has to be what wins where they meet.
+                DrawHeader(scrollHeader, palette, pinned, Columns.Count, -Scroll.x, BandableBefore(pinned));
+
+                Rect pinnedHeader = new Rect(header.x, header.y, pinnedWidth, headerHeight);
+                DrawHeader(pinnedHeader, palette, 0, pinned, 0f, 0);
+            }
+
+            Widgets.BeginScrollView(scrollBody, ref Scroll, view);
+            WalkRows(view.width, -pinnedWidth, pinned, Columns.Count, true, palette);
+            Widgets.EndScrollView();
+
+            // Clipped rather than trusted to stay inside: a row is handed its full width so its card and accent
+            // stripe are positioned as they always are, and the group is what stops the rest of it painting over
+            // the scrolling region.
+            GUI.BeginGroup(pinnedBody);
+            WalkRows(pinnedWidth, 0f, 0, pinned, false, palette);
+            GUI.EndGroup();
+        }
+
+        /// <summary>
+        /// Draws every visible row for one region.
+        /// </summary>
+        /// <param name="regionWidth">Width available, for a section heading to span.</param>
+        /// <param name="rowX">
+        /// Where a row's full-width rect starts in this region's coordinates. Negative in the scrolling region,
+        /// because a row begins under the pinned strip -- which is what keeps its columns lined up with their
+        /// headings and its banding in phase.
+        /// </param>
+        /// <param name="scrolled">
+        /// False for the pinned strip, which is outside any scroll view and so has to apply the vertical offset
+        /// itself. Everything else about the two passes is identical.
+        /// </param>
+        private void WalkRows(float regionWidth, float rowX, int firstColumn, int lastColumn, bool scrolled,
+            UIColorPaletteDef palette)
+        {
+            float y = scrolled ? 0f : -Scroll.y;
+            bool hidden = false;
+
+            foreach (UIDesignatorTabRow row in Rows)
+            {
+                float height = HeightOf(row);
+
+                if (row.IsSection)
+                {
+                    hidden = IsCollapsed(row);
+
+                    // Spans the region rather than the row, so the heading's background reaches the edge in both
+                    // passes. Its label is at the left, which is why the pinned strip keeps it legible.
+                    DrawSectionHeader(new Rect(0f, y, regionWidth, height), row, palette);
+                    y += height;
+                    continue;
+                }
+
+                if (hidden)
+                    continue;
+
+                DrawRow(new Rect(rowX, y, ColumnsWidth, height), row, palette, firstColumn, lastColumn);
+                y += height + RowGap;
+            }
+        }
+
+        /// <summary>
+        /// How many of the first <paramref name="count"/> columns take part in the banding.
+        ///
+        /// The alternation counts bandable columns across the whole grid, so the scrolling pass has to start
+        /// counting where the pinned pass left off. Without this the stripes would restart at the split and the
+        /// two halves of the grid would disagree about which columns are shaded.
+        /// </summary>
+        private int BandableBefore(int count)
+        {
+            int bandable = 0;
+
+            for (int i = 0; i < count && i < Columns.Count; i++)
+            {
+                if (Columns[i].Bandable)
+                    bandable++;
+            }
+
+            return bandable;
+        }
+
+        /// <summary>
+        /// One row, or the part of one that belongs to a region.
+        ///
+        /// <paramref name="row"/> is always the row's <b>full</b> width, even when only some columns are being
+        /// drawn from it. That is what lets the background, the banding and the cells all be positioned from the
+        /// same origin in either region, so the two halves of a pinned row cannot drift apart; the caller's
+        /// clipping is what keeps each pass inside its own strip.
+        /// </summary>
+        private void DrawRow(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette, int firstColumn,
+            int lastColumn)
         {
             data.DrawBackground?.Invoke(row, data, palette);
 
             // Between the background and the cells on purpose: over whatever the row painted, so the banding
             // is visible, and under the cells, so nothing is painted over a value.
             if (AlternatingColumnBands)
-                DrawColumnBands(row, palette);
+                DrawColumnBands(row, palette, firstColumn, lastColumn);
 
             float x = row.x;
 
-            foreach (UIDesignatorTabColumn column in Columns)
+            for (int i = 0; i < Columns.Count && i < lastColumn; i++)
             {
+                UIDesignatorTabColumn column = Columns[i];
                 Rect cell = new Rect(x, row.y, column.Width, row.height);
                 x += column.Width;
 
-                column.DrawCell?.Invoke(cell, data, palette);
+                if (i >= firstColumn)
+                    column.DrawCell?.Invoke(cell, data, palette);
             }
 
-            data.DrawOverlay?.Invoke(row, data, palette);
+            // Only in the region that owns the right-hand side of the row. An overlay spans the whole grid, and
+            // drawing it in both regions would draw it twice; the scrolling one is where most of it lands.
+            if (lastColumn >= Columns.Count)
+                data.DrawOverlay?.Invoke(row, data, palette);
         }
 
         /// <summary>
@@ -649,7 +838,7 @@ namespace Gideon.UIFramework.Controls
         /// than dashed at every row boundary. A section heading is drawn after the row above it and paints over
         /// the overhang.
         /// </summary>
-        private void DrawColumnBands(Rect row, UIColorPaletteDef palette)
+        private void DrawColumnBands(Rect row, UIColorPaletteDef palette, int firstColumn, int lastColumn)
         {
             Color wash = new Color(palette.SurfaceSunken.r, palette.SurfaceSunken.g, palette.SurfaceSunken.b,
                 ColumnBandAlpha);
@@ -657,11 +846,15 @@ namespace Gideon.UIFramework.Controls
             float x = row.x;
             int bandable = 0;
 
-            foreach (UIDesignatorTabColumn column in Columns)
+            // Counted from column zero even when drawing starts later, so the alternation stays in phase across a
+            // pinned split rather than restarting at it.
+            for (int i = 0; i < Columns.Count && i < lastColumn; i++)
             {
+                UIDesignatorTabColumn column = Columns[i];
+
                 if (column.Bandable)
                 {
-                    if (bandable % 2 == 1)
+                    if (bandable % 2 == 1 && i >= firstColumn)
                         Widgets.DrawBoxSolid(new Rect(x, row.y, column.Width, row.height + RowGap), wash);
 
                     bandable++;
@@ -743,7 +936,19 @@ namespace Gideon.UIFramework.Controls
         // The heading row
         // ---------------------------------------------------------------------------------------
 
-        private void DrawHeader(Rect header, UIColorPaletteDef palette)
+        /// <summary>
+        /// The heading row, or the part of one that belongs to a region.
+        /// </summary>
+        /// <param name="startX">
+        /// Where the first drawn column's heading begins, in region coordinates. The scroll offset for a
+        /// scrolling region; zero for a pinned strip, which is the whole of what holds it still.
+        /// </param>
+        /// <param name="bandableOffset">
+        /// How many bandable columns precede <paramref name="firstColumn"/>, so the alternation continues across
+        /// a pinned split instead of restarting at it.
+        /// </param>
+        private void DrawHeader(Rect header, UIColorPaletteDef palette, int firstColumn, int lastColumn,
+            float startX, int bandableOffset)
         {
             Widgets.DrawBoxSolid(header, palette.PanelBackground);
 
@@ -757,13 +962,18 @@ namespace Gideon.UIFramework.Controls
             // Grouped so headings and their bands clip to the heading row. When they lean, both reach past an
             // edge: a band has to overhang the bottom to meet its column flush, and a long heading would
             // otherwise be drawn over whatever is above the grid. Coordinates inside a group are local to it.
+            //
+            // With columns pinned the group does a second job: it is what stops a scrolling heading being drawn
+            // across the pinned strip beside it.
             GUI.BeginGroup(header);
 
-            float x = -Scroll.x;
-            int bandable = 0;
+            float x = startX;
+            int bandable = bandableOffset;
 
-            foreach (UIDesignatorTabColumn column in Columns)
+            for (int i = firstColumn; i < Columns.Count && i < lastColumn; i++)
             {
+                UIDesignatorTabColumn column = Columns[i];
+
                 Rect cell = new Rect(x, 0f, column.Width, header.height);
                 x += column.Width;
 

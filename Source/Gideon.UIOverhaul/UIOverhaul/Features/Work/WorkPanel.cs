@@ -107,7 +107,17 @@ namespace Gideon.UIOverhaul.Features.Work
             HeaderLabelOrientation = UIHeaderAngle.Diagonal,
             RowHeight = 62f,
             RowGap = 2f,
-            SectionHeaderHeight = 30f
+            SectionHeaderHeight = 30f,
+
+            // The name column stays put when the grid is scrolled sideways. This is the tab where it matters
+            // most: with a column per work type the grid is wider than any window on a small screen or with mods
+            // installed, and a screen of priority boxes with the names scrolled off is a screen of numbers
+            // belonging to nobody.
+            //
+            // One rather than two. The edit tools act on the whole row and would be defensible pinned as well,
+            // but every pinned column is width the grid itself never gets back, and the name is what identifies
+            // a row -- the tools are reachable by scrolling back.
+            PinnedColumns = 1
         };
 
         /// <summary>

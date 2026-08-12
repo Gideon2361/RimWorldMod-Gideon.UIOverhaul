@@ -112,6 +112,7 @@ A panel that should hold something other than a grid just sets `DrawContent` and
 | `Columns` | empty | Grid columns, left to right. You own the list |
 | `Rows` | empty | Top to bottom, section headings in place. You own the list |
 | `HasHeaderRow` | `true` | False skips the heading row |
+| `PinnedColumns` | `0` | How many leading columns stay put under horizontal scroll |
 | `HeaderLabelOrientation` | `Horizontal` | Which way the column headings run |
 | `HeaderHeight` | `null` | Null derives it: 30 level, 76 turned |
 | `RowHeight` | `62` | Overridable per row |
@@ -126,6 +127,38 @@ A panel that should hold something other than a grid just sets `DrawContent` and
 | `Scroll` | `(0,0)` | Public, so you can restore or reset it |
 
 Read-only: `ColumnsWidth`, `RequestedWidth`, `HeaderOverhang`, `RowsHeight`, `HeaderHeightResolved`.
+
+### Pinned columns
+
+`PinnedColumns = 1` keeps the first column still while the rest scrolls sideways. The work tab uses it for the
+name column: with a column per work type the grid is wider than any window on a small screen, and a screen of
+priority boxes with the names scrolled off is a screen of numbers belonging to nobody.
+
+A **count** rather than a per-column flag, because only leading columns can be pinned — a pinned column with a
+scrolling one to its left would slide out from under its own heading. "The first N" makes that structural instead
+of a rule to enforce. The value is clamped so the last column always scrolls; pinning everything is not pinning.
+
+`PinnedColumns = 0` takes exactly the code path the control always had, so no existing grid changes behavior.
+
+**How it works, and why not the shorter way.** The pinned columns are drawn *outside* the scroll view, in their
+own reserved strip. The obvious alternative — leaving them inside and cancelling the scroll offset — does not
+work: they would land on top of content already painted beneath them, so the row card underneath, accent stripe
+included, would need repainting per strip and anything a row drew for itself would show through. Reserving the
+width means nothing is drawn twice.
+
+The cost is that the strip reproduces the two things a scroll view was giving it: vertical scroll applied by hand
+as `-Scroll.y`, and clipping via a group. Both regions walk the same row list in the same order at the same
+heights, and the single shared `Scroll` keeps them in step — the scroll view writes it, the strip reads it.
+
+Two behaviors to know before switching it on:
+
+- A row's `DrawOverlay` is drawn **only in the scrolling region** and is clipped by it, so an overlay spanning the
+  whole grid loses whatever falls under the pinned strip.
+- Section headings are drawn in **both** regions, deliberately: the label sits at the left, so it stays legible in
+  the pinned strip while the heading's background continues across the scroll.
+
+Column banding stays in phase across the split — the alternation is counted from column zero in both passes
+rather than restarting at the boundary.
 
 ### Sizing a window to the grid
 
