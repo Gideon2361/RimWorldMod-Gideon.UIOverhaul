@@ -10,10 +10,17 @@
   The root element and the entry shape match what the options page writes, so this file can be copied
   straight into the config folder and hand-edited from there if that is ever useful.
 
-  Order here is the order on the bar. Anything not listed is appended after everything that is.
+  Order here is the order on the bar. Anything not listed is appended AFTER everything that is, which is
+  why every tab that ships with the game or its expansions is named below even where its position is not
+  interesting: leaving one out would push it past the pause menu.
 
-  The UI options button is not listed and cannot be: it is drawn at the far right of the bar, outside the
-  entry list entirely, so it is always last no matter what this file says.
+  The UI options button is not listed and cannot be. It is drawn at the far right of the bar, outside the
+  entry list entirely, so it is always last no matter what this file says. The pause menu is therefore the
+  last entry here, which puts it immediately to the left of that button.
+
+  mode values are Default, Minimize, TextOnly and Maximize. Default honors a def's own request to be
+  minimized, which is why Factions, Ideoligions and History arrive as bare icons; Maximize overrides that
+  and gives them their labels like every other tab.
 -->
 <ButtonBar>
 
@@ -31,15 +38,39 @@
   <entry><tab>KB_PocketDimension_Tab</tab></entry>
 
   <entry><tab>Quests</tab></entry>
-  <entry><tab>Factions</tab></entry>
+
+  <!-- These three ask to be minimized in their own defs. Maximize gives them labels instead. -->
+  <entry>
+    <tab>Factions</tab>
+    <mode>Maximize</mode>
+  </entry>
 
   <!-- Ideology. Skipped without the expansion. -->
-  <entry><tab>Ideos</tab></entry>
+  <entry>
+    <tab>Ideos</tab>
+    <mode>Maximize</mode>
+  </entry>
 
-  <entry><tab>History</tab></entry>
+  <entry>
+    <tab>History</tab>
+    <mode>Maximize</mode>
+  </entry>
+
   <entry><tab>World</tab></entry>
 
-  <!-- The pause menu, last of the orderable entries as vanilla has it. -->
+  <!--
+    The rest of the game's tabs. Named only so they land before the pause menu rather than after it; their
+    order among themselves is vanilla's own. Move them wherever suits.
+
+    Inspect appears only while something is selected, and Mechs needs Biotech and a mechanitor, so neither
+    is usually on screen. Entries naming a def that is not loaded are skipped and left alone.
+  -->
+  <entry><tab>Inspect</tab></entry>
+  <entry><tab>Wildlife</tab></entry>
+  <entry><tab>Research</tab></entry>
+  <entry><tab>Mechs</tab></entry>
+
+  <!-- Last, so it sits immediately left of the UI options button. -->
   <entry><tab>Menu</tab></entry>
 
   <!--
@@ -48,9 +79,9 @@
     Work priorities, the daily schedule and the assignment policies are all reachable from a colonist's row
     there, which makes three separate tabs for the same three things redundant on a fresh install.
 
-    Hiding is not removing. Every one of these is still offered in the UI options page's bar editor as
-    something to add, and adding a tab takes it back off this list, so a player who wants the vanilla
-    tabs back has them in two clicks with no file editing.
+    Hiding is not removing. Every one of these is still offered in the UI options page's bar editor under
+    "Not on the bar", and adding a tab takes it back off this list, so a player who wants the vanilla tabs
+    back has them in two clicks with no file editing.
   -->
   <hidden>
     <li>Work</li>
