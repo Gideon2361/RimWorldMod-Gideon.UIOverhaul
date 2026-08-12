@@ -476,7 +476,18 @@ A bleeding, downed, freezing pawn is three problems, but a column that says all 
 and only one is what you would act on first. So the most urgent wins the line and the tooltip carries the rest.
 The order is by how soon it kills: **bleeding out → vacuum → downed → needs treatment → temperature → healthy.**
 
-Two readings are worth naming. Bleeding only reports as *bleeding out* when
+**Vacuum needs two halves, and one of them is easy to miss.** `Pawn.HarmedByVacuum` reads like "exposed and
+unprotected" but is a **capability**: `OdysseyActive && !IsMechanoid && breathesAir && VacuumResistance < 1`. That
+is true of every human colonist not in fully vacuum-proof gear, wherever they are standing — using it alone
+reported the whole colony as exposed while they stood indoors. The location half is
+`VacuumUtility.GetVacuum(PositionHeld, MapHeld) > 0.5f`, the same threshold vanilla's own `VacuumConcernTo` uses.
+`PositionHeld`/`MapHeld` rather than `Position`/`Map`, so a pawn in a container or caravan resolves somewhere real.
+
+The `VacuumExposure` hediff was the other candidate and is deliberately unused: it lingers while it heals, so a
+pawn who reached safety would still read as being in vacuum. Temperature reads its hediffs for the opposite
+reason — "freezing" while recovering from hypothermia is fair, "in vacuum" while standing in a corridor is not.
+
+Two more readings are worth naming. Bleeding only reports as *bleeding out* when
 `HealthUtility.TicksUntilDeathDueToBloodLoss` is under a day, because a scratch bleeds too and a column that
 cries wolf over a scratch is one players learn to ignore; below that threshold it falls back to a plain
 "Bleeding". Vacuum uses `Pawn.HarmedByVacuum`, which is exactly "exposed *and* unprotected" — not

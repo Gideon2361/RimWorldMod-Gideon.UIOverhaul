@@ -68,10 +68,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             float bleedRate = pawn.health?.hediffSet?.BleedRateTotal ?? 0f;
             bool infected = HasInfection(pawn);
 
-            // HarmedByVacuum is the exact question -- exposed *and* unprotected -- rather than something to
-            // assemble from cell vacuum plus apparel plus a resistance stat. ConcernedByVacuum is the weaker
-            // "would care about it", which is not the same thing and is not what this column is for.
-            bool vacuum = pawn.HarmedByVacuum;
+            bool vacuum = InVacuum(pawn);
 
             TemperatureTrouble temperature = ReadTemperature(pawn);
 
@@ -139,6 +136,41 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 default:
                     return palette.Success;
             }
+        }
+
+        /// <summary>
+        /// Whether the pawn is standing in vacuum that can hurt them.
+        ///
+        /// Two halves, and getting this wrong the first time is instructive: <c>Pawn.HarmedByVacuum</c> reads
+        /// like "exposed and unprotected" and is not. It is a <b>capability</b> --
+        /// <c>OdysseyActive &amp;&amp; !IsMechanoid &amp;&amp; breathesAir &amp;&amp; VacuumResistance &lt; 1</c>
+        /// -- which is true of every human colonist who is not in fully vacuum-proof gear, wherever they happen
+        /// to be. Using it alone reported the whole colony as exposed while they stood indoors.
+        ///
+        /// The location half is what was missing. <c>VacuumUtility.GetVacuum</c> at the pawn's own cell answers
+        /// where they actually are, and the 0.5 threshold is vanilla's: it is what
+        /// <c>VacuumUtility.VacuumConcernTo</c> uses to decide whether a pawn should care about a place.
+        ///
+        /// <c>PositionHeld</c> and <c>MapHeld</c> rather than Position and Map, so a pawn inside a container or
+        /// a caravan resolves to wherever the container is instead of throwing on an unspawned pawn.
+        ///
+        /// The <c>VacuumExposure</c> hediff was the other candidate, and is deliberately not used: it lingers
+        /// while it heals, so a pawn who reached safety would still be reported as being in vacuum. Temperature
+        /// reads its hediffs for the opposite reason -- "freezing" while recovering from hypothermia is fair,
+        /// where "in vacuum" while standing in a corridor is not.
+        /// </summary>
+        private static bool InVacuum(Pawn pawn)
+        {
+            // The capability half. Also covers Odyssey being absent, so nothing below needs to.
+            if (!pawn.HarmedByVacuum)
+                return false;
+
+            Map map = pawn.MapHeld;
+
+            if (map == null)
+                return false;
+
+            return VacuumUtility.GetVacuum(pawn.PositionHeld, map) > 0.5f;
         }
 
         /// <summary>

@@ -54,7 +54,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
             RowHeight = RowHeight,
             RowGap = 2f,
             SectionHeaderHeight = 30f,
-            AlternatingColumnBands = true
+
+            // No column banding here, unlike the work tab. Banding exists to keep the eye on one column across a
+            // wide grid of like values; this tab has six wide columns of unlike things -- a name, a sentence, two
+            // bars -- where every column already looks different from its neighbors. The stripes only competed
+            // with the bars' own colors.
+            AlternatingColumnBands = false
         };
 
         /// <summary>
