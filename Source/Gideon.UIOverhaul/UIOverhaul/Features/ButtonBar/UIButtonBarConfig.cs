@@ -174,14 +174,77 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         // Reading and writing
         // ---------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// Where this mod's shipped default layout lives, relative to its own folder.
+        ///
+        /// Beside the loading screen config rather than in Defs, because it is not a def and a stray XML file in
+        /// a Defs folder is parsed as one.
+        /// </summary>
+        private const string ShippedDefaultRelativePath = "Mods/gideon.uioverhaul/ButtonBar.xml";
+
+        /// <summary>
+        /// This mod's packageId, for finding its own folder among the running mods.
+        /// </summary>
+        private const string OwnPackageId = "gideon.uioverhaul";
+
+        /// <summary>
+        /// The shipped default layout, or null if it is missing or unreadable.
+        ///
+        /// Only this mod's copy is looked for, deliberately. The loading screen config scans every running mod
+        /// because several mods contributing a splash image each is sensible; several mods each declaring what
+        /// order the button bar should be in is not, and the winner would depend on load order.
+        ///
+        /// A missing file is not an error. It means the bar falls back to the game's own button order, which is
+        /// what happened before a default shipped at all.
+        /// </summary>
+        private static UIButtonBarConfig LoadShippedDefault()
+        {
+            List<ModContentPack> mods = LoadedModManager.RunningModsListForReading;
+
+            if (mods == null)
+                return null;
+
+            foreach (ModContentPack mod in mods)
+            {
+                if (!string.Equals(mod?.PackageId, OwnPackageId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    string path = Path.Combine(mod.RootDir, ShippedDefaultRelativePath);
+
+                    if (!File.Exists(path))
+                        return null;
+
+                    XmlDocument doc = new XmlDocument();
+                    doc.Load(path);
+                    return Read(doc.DocumentElement);
+                }
+                catch (Exception ex)
+                {
+                    // Ours to fix, not the player's, so this goes to the log rather than to the config problems
+                    // report they are shown.
+                    Log.Error($"[Gideon.UIOverhaul] Could not read the shipped button bar default.\n{ex}");
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
         private static UIButtonBarConfig Load()
         {
             string path = FilePath;
 
             try
             {
+                // No player layout yet: use the one this mod ships, which puts the tabs in a deliberate order
+                // rather than whatever order the defs happened to load in. It is not written to the config
+                // folder here -- the player's file is created the first time they arrange the bar themselves, so
+                // an absent file keeps meaning "never customized" and a later change to the shipped default
+                // still reaches players who never touched it.
                 if (!File.Exists(path))
-                    return new UIButtonBarConfig();
+                    return LoadShippedDefault() ?? new UIButtonBarConfig();
 
                 XmlDocument doc = new XmlDocument();
                 doc.Load(path);

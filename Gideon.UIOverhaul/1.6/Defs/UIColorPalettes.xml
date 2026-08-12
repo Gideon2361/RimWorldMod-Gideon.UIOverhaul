@@ -24,6 +24,12 @@
     <danger>#E54D33</danger>
     <info>#4A90D9</info>
     <accent>#73BFFF</accent>
+
+    <!-- A pawn's inner state: mood bars and anything else about how someone feels rather than about
+         whether something succeeded. A cool violet, chosen to sit beside the blue accent rather than
+         fight it, at roughly the saturation and lightness of the state colors above so the whole set
+         reads as one family. Here on the template because every theme should agree on it. -->
+    <mood>#9B72D9</mood>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 

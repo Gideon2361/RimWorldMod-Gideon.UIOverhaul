@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  The button bar layout this mod ships as its default.
+
+  Read only when the player has no layout of their own. The moment they arrange the bar in the UI options
+  page their arrangement is written to UIOverhaul_ButtonBar.xml in RimWorld's config folder, and this file
+  stops being consulted. Editing it changes what a new player sees, not what an existing one has.
+
+  The root element and the entry shape match what the options page writes, so this file can be copied
+  straight into the config folder and hand-edited from there if that is ever useful.
+
+  Order here is the order on the bar. Anything not listed is appended, so a newly installed mod's tab
+  lands at the end rather than disappearing. The list is still deliberately complete for the tabs that
+  ship with the game and its expansions: an appended tab arrives in def-database order, which is not the
+  same as the game's own button order, so naming them is what guarantees the arrangement below.
+
+  Entries naming a tab that is not loaded are skipped and left alone, which is why the expansion tabs can
+  be listed unconditionally.
+
+  The one deliberate placement: Pawns sits directly after Architect. Vanilla's own orders are Architect 1
+  and Work 10, and Pawns answers the question asked before opening Work or Schedule, which is who needs
+  attention and who is doing what.
+-->
+<ButtonBar>
+
+  <entry><tab>Inspect</tab></entry>
+  <entry><tab>Architect</tab></entry>
+
+  <!-- This mod's pawns tab. -->
+  <entry><tab>Gideon_Pawns</tab></entry>
+
+  <entry><tab>Work</tab></entry>
+  <entry><tab>Schedule</tab></entry>
+  <entry><tab>Assign</tab></entry>
+  <entry><tab>Animals</tab></entry>
+  <entry><tab>Wildlife</tab></entry>
+
+  <!-- Also this mod's. It lists growing zones, so it belongs beside the other census tabs. -->
+  <entry><tab>GZP_GrowZones</tab></entry>
+
+  <entry><tab>Research</tab></entry>
+  <entry><tab>Quests</tab></entry>
+  <entry><tab>World</tab></entry>
+  <entry><tab>History</tab></entry>
+  <entry><tab>Factions</tab></entry>
+
+  <!-- Expansion tabs. Skipped without the expansion, so listing them is free. -->
+  <entry><tab>Ideos</tab></entry>
+  <entry><tab>Mechs</tab></entry>
+
+  <!-- Last, as vanilla has it: order 500 against everything else's double digits. -->
+  <entry><tab>Menu</tab></entry>
+
+</ButtonBar>

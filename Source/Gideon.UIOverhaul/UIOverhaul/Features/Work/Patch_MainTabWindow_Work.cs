@@ -46,33 +46,6 @@ namespace Gideon.UIOverhaul.Features.Work
     }
 
     /// <summary>
-    /// Tells the game that the work tab has a search field.
-    ///
-    /// <c>WindowStack.AnySearchWidgetFocused</c> walks the window stack asking each window for its
-    /// <c>CommonSearchWidget</c>, and every key binding in the game -- <c>KeyBindingDef.IsDown</c>,
-    /// <c>IsDownEvent</c>, <c>KeyDownEvent</c>, <c>JustPressed</c> -- is suppressed while one of those has focus.
-    /// That is the whole mechanism keeping W and A from panning the map while you type in a search box.
-    ///
-    /// A window that does not report its widget is not covered by it, however well the widget itself works. Ours
-    /// is not a field on the window -- the window is vanilla's class -- so the property is patched instead.
-    ///
-    /// Patched on Window, which declares it, because neither MainTabWindow_PawnTable nor MainTabWindow_Work
-    /// overrides it: a patch on a base method only runs for instances whose type does not override it, which is
-    /// exactly this case. MainTabWindow_Architect does override it, and is left alone.
-    /// </summary>
-    [HarmonyPatch(typeof(Window), "get_CommonSearchWidget")]
-    public static class Patch_Window_CommonSearchWidget
-    {
-        public static void Postfix(Window __instance, ref QuickSearchWidget __result)
-        {
-            // Only when the window has none of its own, so this can never take a widget away from a window that
-            // already had one.
-            if (__result == null && __instance is MainTabWindow_Work)
-                __result = WorkPanel.Search;
-        }
-    }
-
-    /// <summary>
     /// Sizes the work tab's window to <see cref="WorkPanel"/>.
     ///
     /// Patched on the base rather than on MainTabWindow_Work, because the work tab does not override the

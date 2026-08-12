@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Options
@@ -25,6 +26,18 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public string activePalette = "";
 
+        /// <summary>
+        /// Whether this mod writes diagnostic detail to the log.
+        ///
+        /// Off by default, and deliberately not tied to RimWorld's own dev mode: dev mode is on for whole
+        /// sessions for unrelated reasons, and this is noisy enough that it should be something asked for
+        /// rather than something inherited.
+        ///
+        /// Pushed into <see cref="UIDebug"/>, which is what the framework's instrumentation actually reads --
+        /// the framework cannot see this file, so the value has to be handed to it.
+        /// </summary>
+        public bool debugLogging;
+
         // There is deliberately no option to hide the bar's UI options button. It used to exist, back when
         // these settings were also reachable from the vanilla Options window; that route turned out to be
         // impossible -- Dialog_Options ignores any OptionCategoryDef from a mod -- which leaves the bar
@@ -34,7 +47,29 @@ namespace Gideon.UIOverhaul.Features.Options
 
         private static UIOverhaulSettingsFile current;
 
-        public static UIOverhaulSettingsFile Current => current ?? (current = Load());
+        /// <summary>
+        /// The loaded settings, read from disk on first use and after any <see cref="Reload"/>.
+        ///
+        /// Handing the debug flag to <see cref="UIDebug"/> happens here rather than in <see cref="ApplyTheme"/>,
+        /// because unlike the theme it does not need defs and so should not wait for them -- instrumentation is
+        /// most wanted during startup, which is over before ApplyTheme can run.
+        ///
+        /// This also covers the config watcher: it calls Reload, which drops the instance, so the next read
+        /// re-pushes whatever the edited file now says.
+        /// </summary>
+        public static UIOverhaulSettingsFile Current
+        {
+            get
+            {
+                if (current == null)
+                {
+                    current = Load();
+                    UIDebug.Enabled = current.debugLogging;
+                }
+
+                return current;
+            }
+        }
 
         public static void Reload()
         {
@@ -85,6 +120,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     {
                         case "activePalette":
                             settings.activePalette = value ?? "";
+                            break;
+
+                        case "debugLogging":
+                            settings.debugLogging = value.EqualsIgnoreCase("true");
                             break;
 
                         case "showBarButton":
@@ -138,6 +177,7 @@ namespace Gideon.UIOverhaul.Features.Options
                                         + "page; safe to hand-edit. ");
                     writer.WriteStartElement("UIOverhaulSettings");
                     writer.WriteElementString("activePalette", activePalette ?? "");
+                    writer.WriteElementString("debugLogging", debugLogging ? "true" : "false");
                     writer.WriteEndElement();
                     writer.WriteEndDocument();
                 }

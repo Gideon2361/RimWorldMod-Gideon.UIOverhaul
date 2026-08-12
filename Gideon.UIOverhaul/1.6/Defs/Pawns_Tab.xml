@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The pawns tab: a status board for every colonist, grouped by the map they are on.
+
+    order 5 puts it directly after Architect, whose order is 1, and before Work at 10. That is where
+    the shipped button bar layout places it too; the order here is what decides the position for a
+    player whose bar falls back to the game's own ordering.
+
+    This tab answers the question asked before opening Work or Schedule: who needs attention, and who
+    is doing what.
+
+    validWithoutMap is false: every row is read off a map's pawn list, so there is nothing to show
+    from the world view.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Pawns</defName>
+    <label>pawns</label>
+    <description>Every colonist, grouped by the map they are on: their condition, health, mood and what they are doing right now. Click a face to center the view on them, or a row to set their daily schedule.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Pawns.MainTabWindow_Pawns</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <order>5</order>
+  </MainButtonDef>
+
+</Defs>
