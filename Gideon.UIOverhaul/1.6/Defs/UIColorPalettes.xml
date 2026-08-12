@@ -24,12 +24,12 @@
     <danger>#E54D33</danger>
     <info>#4A90D9</info>
     <accent>#73BFFF</accent>
+    <mood>#9B72D9</mood>  <!-- Mood Bar color -->
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
   <!-- Dark Theme. This defName is not arbitrary: UIColorPaletteDef.DefaultPaletteDefName hardcodes
-       it, so this def is what the framework uses until the player picks something else. Renaming it
-       here means renaming it there too. -->
+       it, so this def is what the framework uses until the player picks something else. -->
   <Gideon.UIFramework.Defs.UIColorPaletteDef ParentName="UIPaletteBase">
     <defName>UIPalette_Default</defName>
     <label>Modern Dark</label>

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -80,28 +81,16 @@ namespace Gideon.UIOverhaul.Features.Work
         /// </summary>
         private const float WorkColumnWidth = 44f;
 
-        private const float PortraitSize = 46f;
         private const float PriorityBoxSize = 26f;
 
         /// <summary>
         /// Space between a priority box and the skill readout under it.
         ///
-        /// Tiny renders taller than its line height, so 2px of gap put the text's ascenders against the bottom
-        /// of the box. There is room to spare in a 62px row, and a number touching the edge of a box reads as a
-        /// rendering fault rather than as two separate things.
+        /// 2px put the text's ascenders against the bottom of the box. There is room to spare in a 62px row,
+        /// and a number touching the edge of a box reads as a rendering fault rather than as two separate
+        /// things. <see cref="SkillLabelRect"/> is what keeps the two apart; this is only how far apart.
         /// </summary>
         private const float SkillLabelGap = 6f;
-
-        /// <summary>
-        /// How far up the body the portrait camera looks, and how far in.
-        ///
-        /// PortraitsCache takes both, which is what makes a face crop possible without any patching. The
-        /// offset lifts the camera to head height; the zoom then fills the frame with it. Values are in world
-        /// units, so they hold for any pawn size.
-        /// </summary>
-        private static readonly Vector3 FaceOffset = new Vector3(0f, 0f, 0.34f);
-
-        private const float FaceZoom = 2.1f;
 
         private static readonly UICardControl RowCard = new UICardControl { Padding = 0f, AccentWidth = 3f };
 
@@ -214,10 +203,32 @@ namespace Gideon.UIOverhaul.Features.Work
 
         public static void Draw(Rect inRect)
         {
+            // The upstream half of the search field's focus diagnostics, and it has to be the very first thing
+            // here: it measures how many control ids exist before this panel draws anything, which is what
+            // separates "something outside us shifted the ids" from "we shifted them ourselves".
+            //
+            // This is also effectively the start of the window's contents, since our prefix replaces
+            // MainTabWindow_Work.DoWindowContents outright rather than running alongside it.
+            //
+            // Gated on the launch-latched flag rather than on UIDebug.Enabled, because allocating a control id
+            // only while a setting is on would make toggling that setting a draw-order shift -- the very fault
+            // this measures. Off, it costs one bool test.
+            if (UIDebug.InstrumentControlIds)
+                UITextBoxControl.DiagnosticUpstreamSentinel = GUIUtility.GetControlID(FocusType.Passive);
+
             EnsureColumns();
             Collect();
 
+            // The numbers most likely to explain a shift that turns out to originate inside this panel:
+            // filtering changes the row count, and the row count changes whether the grid needs a scrollbar.
+            // A lambda, so nothing is formatted unless a report actually fires.
+            UITextBoxControl.DiagnosticContext = () => $"rows={Grid.Rows.Count}, columns={Grid.Columns.Count}, "
+                                                      + $"scrollY={Grid.Scroll.y:F0}, search=\"{Search.Text}\"";
+
             Grid.Draw(inRect.ContractedBy(6f), UIColorPaletteDef.Active);
+
+            // After the grid, so the scroll view it was clicked in has been closed out.
+            PawnCameraJump.Resolve();
         }
 
         // ---------------------------------------------------------------------------------------
@@ -238,7 +249,7 @@ namespace Gideon.UIOverhaul.Features.Work
 
             // A match inside a folded group would otherwise not be shown, which reads as the search failing. The
             // folds themselves are remembered and come back when the search is cleared.
-            Grid.SuppressCollapse = Search.filter.Active;
+            Grid.SuppressCollapse = !Search.IsEmpty;
 
             List<Map> maps = Find.Maps;
             if (maps == null)
@@ -270,7 +281,7 @@ namespace Gideon.UIOverhaul.Features.Work
                 // grid lay the whole thing out in one pass.
                 Grid.Rows.Add(new UIDesignatorTabRow
                 {
-                    SectionLabel = NameOf(map),
+                    SectionLabel = MapLabels.NameOf(map),
                     SectionSuffix = colonists.Count == 1 ? "1 colonist" : colonists.Count + " colonists"
                 });
 
@@ -285,22 +296,6 @@ namespace Gideon.UIOverhaul.Features.Work
                     Pawns.Add(pawn);
                 }
             }
-        }
-
-        /// <summary>
-        /// What to call a map.
-        ///
-        /// MapParent.LabelCap is what the world view shows when its tile is selected, which covers colonies
-        /// by their given name and everything else -- caravan sites, ships, pocket maps from mods -- by
-        /// whatever that parent calls itself. Going through the parent rather than special-casing Settlement
-        /// is what makes mod-added map kinds work without naming them here.
-        /// </summary>
-        private static string NameOf(Map map)
-        {
-            if (map.Parent != null && !map.Parent.LabelCap.NullOrEmpty())
-                return map.Parent.LabelCap;
-
-            return "Unknown location";
         }
 
         // ---------------------------------------------------------------------------------------
@@ -374,56 +369,76 @@ namespace Gideon.UIOverhaul.Features.Work
         // Filters which pawns get rows at all, rather than dimming the ones that do not match. A work tab is read
         // by comparing rows against each other, and a list with gaps in it is harder to compare than a short list.
         //
-        // Matched against the short name and the full one, so "Aleks" and a surname both find the same colonist.
+        // Matched on first name, nickname and last name -- and on nothing else. See Matches.
         // ---------------------------------------------------------------------------------------
 
         /// <summary>
-        /// Vanilla's own search widget, not a text field of ours.
+        /// Our own text box, not vanilla's <c>QuickSearchWidget</c>.
         ///
-        /// Two things come with it that a hand-rolled field cannot have:
+        /// The widget was used here first, for one good reason: only a <c>QuickSearchWidget</c> reachable through
+        /// a window's <c>CommonSearchWidget</c> is visible to <c>WindowStack.AnySearchWidgetFocused</c>, the gate
+        /// that stops every key binding in the game -- camera dolly included -- from firing while a search field
+        /// has focus. A field of our own let W and A pan the map as we typed.
         ///
-        /// It names its control through <c>GUI.SetNextControlName</c>, so its identity does not depend on how many
-        /// controls happened to be drawn before it. IMGUI derives a control's id from draw order, so a field whose
-        /// neighbors come and go -- a clear button that only exists once there is text to clear -- changes id and
-        /// silently loses focus mid-word.
-        ///
-        /// And the game can see it. <c>KeyBindingDef.IsDown</c>, <c>IsDownEvent</c>, <c>KeyDownEvent</c> and
-        /// <c>JustPressed</c> all consult <c>WindowStack.AnySearchWidgetFocused</c>, which walks the window stack
-        /// asking each window for its <c>CommonSearchWidget</c>. Every key binding in the game, camera dolly
-        /// included, is suppressed while one of those has focus -- and only while one of *those* has focus, which
-        /// is why our own field let W and A pan the map as we typed. See
-        /// <see cref="Patch_Window_CommonSearchWidget"/> for the half that registers this one.
+        /// What it did not fix was focus itself. <c>GUI.SetNextControlName</c> does not make a control's identity
+        /// independent of draw order, which is what I had assumed: Unity keys focus on an integer id derived from
+        /// draw order and only hangs the name on it, so an id shift still drops focus mid-word and vanilla's
+        /// widget has no defense against that. <see cref="UITextBoxControl"/> repairs focus by name instead, and
+        /// <c>Patch_WindowStack_AnySearchWidgetFocused</c> gives it the same key-binding protection the vanilla
+        /// widget got -- for every text box of ours, rather than for this one window.
         /// </summary>
-        internal static readonly QuickSearchWidget Search = new QuickSearchWidget();
+        private static readonly UITextBoxControl Search = new UITextBoxControl
+        {
+            Placeholder = "Search",
+            Icon = TexButton.Search,
+            MaxLength = 30
+        };
 
+        /// <summary>
+        /// Whether a pawn survives the search, matched on name alone.
+        ///
+        /// Read off <c>Name</c> rather than any of the label properties, because a pawn's label is not its
+        /// name. <c>Pawn.LabelNoCount</c> is the name followed by the backstory title -- "Maxwell, Sailor" --
+        /// and the title half is run through <c>Colorize</c>, so the string also carries <c>&lt;color=#...&gt;</c>
+        /// markup. Filtering on it matched a colonist's profession, which is how searching "sa" turned up a
+        /// sailor named Maxwell alongside Sam, and would equally have matched "col" against every titled pawn
+        /// in the colony.
+        ///
+        /// First, nick and last are each tested separately rather than against the assembled full name, so a
+        /// search cannot match across the join between two of them.
+        /// </summary>
         private static bool Matches(Pawn pawn)
         {
-            if (!Search.filter.Active)
+            if (Search.IsEmpty)
                 return true;
 
-            // Both names, so a nickname and a surname find the same colonist.
-            return Search.filter.Matches(pawn.LabelShortCap) || Search.filter.Matches(pawn.LabelCap);
+            if (pawn.Name is NameTriple triple)
+            {
+                return Search.Matches(triple.First)
+                       || Search.Matches(triple.Nick)
+                       || Search.Matches(triple.Last);
+            }
+
+            if (pawn.Name is NameSingle single)
+                return Search.Matches(single.Name);
+
+            // A Name subclass from a mod, or no name at all. ToStringShort is the nearest thing to a bare
+            // name that every Name is required to have; LabelShortCap covers a pawn with no Name, where it
+            // falls through to the kind label rather than dereferencing null.
+            return pawn.Name != null
+                ? Search.Matches(pawn.Name.ToStringShort)
+                : Search.Matches(pawn.LabelShortCap);
         }
 
         /// <summary>
-        /// The search field: our chrome, vanilla's widget inside it.
-        ///
-        /// The widget draws only its magnifier and its text, so a themed box behind it is all it takes to stop it
-        /// looking like stock chrome dropped into the panel.
+        /// The search field. All of the chrome, the focus handling and the clear button belong to the control.
         /// </summary>
         private static void DrawSearchField(Rect rect, UIColorPaletteDef palette)
         {
-            Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
-
-            Color previousColor = GUI.color;
-
-            GUI.color = Search.CurrentlyFocused() ? palette.BorderFocused : palette.Border;
-            Widgets.DrawBox(rect, 1);
-            GUI.color = previousColor;
-
             // Scroll reset on change: filtering can leave the view scrolled past everything that still matches,
             // which reads as the search finding nothing.
-            Search.OnGUI(rect.ContractedBy(1f), () => Grid.Scroll = Vector2.zero);
+            if (Search.Draw(rect, palette))
+                Grid.Scroll = Vector2.zero;
         }
 
         private static void DrawManualToggle(Rect rect, UIColorPaletteDef palette)
@@ -565,40 +580,20 @@ namespace Gideon.UIOverhaul.Features.Work
 
         private static void DrawPawnCell(Rect cell, Pawn pawn, UIColorPaletteDef palette)
         {
-            Rect portrait = new Rect(cell.x + 8f, cell.y + (cell.height - PortraitSize) * 0.5f,
-                PortraitSize, PortraitSize);
+            Rect portrait = new Rect(cell.x + 8f, cell.y + (cell.height - PawnPortraitCell.Size) * 0.5f,
+                PawnPortraitCell.Size, PawnPortraitCell.Size);
 
-            Color previousPortraitColor = GUI.color;
+            bool overPortrait = PawnPortraitCell.IsOver(portrait);
 
-            // A sunken disc behind the render. The render is transparent everywhere the pawn is not, so without
-            // this the head sits on the bare card; with it, on something.
-            GUI.color = palette.SurfaceSunken;
-            GUI.DrawTexture(portrait, UIShapes.Disc);
-            GUI.color = previousPortraitColor;
-
-            // Framed on the face: the camera is lifted to head height and zoomed in, which is what the
-            // cameraOffset and cameraZoom parameters exist for. A full-body render at 46px is a silhouette.
-            RenderTexture face = PortraitsCache.Get(pawn, new Vector2(PortraitSize, PortraitSize),
-                Rot4.South, FaceOffset, FaceZoom);
-
-            if (face != null)
-                GUI.DrawTexture(portrait, face);
-
-            // Cropped to a circle, the only way IMGUI can: the square render is drawn, then everything outside
-            // an inscribed circle is painted over in the color behind it. There is no masking in IMGUI and no
-            // shader to clip a RenderTexture with, so the crop is done by covering rather than by clipping.
-            //
-            // Which means the tint has to be whatever the row would have shown there. Plain card color for most
-            // rows; for a downed one the card is under a stripe wash, and painting flat card color over that
-            // would leave four clean triangles around the head. Half the wash alpha is that pattern's average,
-            // since the tile is half stripe and half gap -- and an average is indistinguishable from stripes
-            // across the 7px this covers, where re-drawing the wash itself would put stripes over the face.
-            GUI.color = pawn.Downed
+            // The circular crop is done by painting over the corners rather than by clipping, so the color
+            // behind has to be passed in. Plain card color for most rows; for a downed one the card is under a
+            // stripe wash, and painting flat card color over that would leave four clean triangles around the
+            // head. Half the wash alpha is that pattern's average, since the tile is half stripe and half gap --
+            // and an average is indistinguishable from stripes across the 7px this covers, where re-drawing the
+            // wash itself would put stripes over the face.
+            PawnPortraitCell.Draw(portrait, pawn, palette, pawn.Downed
                 ? Color.Lerp(palette.PanelBackground, palette.Danger, DangerWashAlpha * 0.5f)
-                : palette.PanelBackground;
-
-            GUI.DrawTexture(portrait, UIShapes.DiscCutout);
-            GUI.color = previousPortraitColor;
+                : palette.PanelBackground);
 
             float textX = portrait.xMax + 8f;
             float textWidth = cell.xMax - textX - 6f;
@@ -622,7 +617,17 @@ namespace Gideon.UIOverhaul.Features.Work
             Text.Font = previousFont;
 
             if (Mouse.IsOver(cell))
-                TooltipHandler.TipRegion(cell, (TipSignal) pawn.LabelCap);
+            {
+                // One tooltip for the cell rather than a second one registered on the portrait: TooltipHandler
+                // shows every tip registered under the cursor, so two regions would stack two boxes for what is
+                // one thing being pointed at.
+                string tip = pawn.LabelCap;
+
+                if (overPortrait)
+                    tip += "\n\nClick to center the view on " + pawn.LabelShortCap + ".";
+
+                TooltipHandler.TipRegion(cell, (TipSignal) tip);
+            }
         }
 
         /// <summary>
@@ -870,7 +875,7 @@ namespace Gideon.UIOverhaul.Features.Work
             // than only who has been told to do it.
             Text.Font = GameFont.Tiny;
             GUI.color = SkillColor(pawn, work, palette, out string skillLabel);
-            Widgets.Label(new Rect(cell.x, box.yMax + SkillLabelGap, cell.width, 14f), skillLabel);
+            Widgets.Label(SkillLabelRect(cell, box), skillLabel);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
@@ -927,11 +932,44 @@ namespace Gideon.UIOverhaul.Features.Work
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleCenter;
             GUI.color = SkillColor(pawn, work, palette, out string skillLabel);
-            Widgets.Label(new Rect(cell.x, box.yMax + SkillLabelGap, cell.width, 14f), skillLabel);
+            Widgets.Label(SkillLabelRect(cell, box), skillLabel);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
+        }
+
+        /// <summary>
+        /// Where the skill readout goes: the whole strip between the priority box and the bottom of the cell.
+        ///
+        /// Both cell styles call this, so the number cannot end up in two different places depending on
+        /// whether manual priorities are on.
+        ///
+        /// The height is not a constant, because the font is not one. <c>Widgets.Label</c> passes the rect
+        /// through to <c>GUI.Label</c> untouched apart from UI-scale snapping, so the rect is the clip
+        /// rectangle: a line box taller than the rect loses its ascenders and descenders, and a
+        /// <c>MiddleCenter</c> anchor spends that overflow at both ends, which shaves the tops of the digits.
+        ///
+        /// And the font is genuinely not known here. <c>Text.Font = GameFont.Tiny</c> is a request, not a
+        /// result -- the setter substitutes <c>Small</c> whenever <c>TinyFontSupported</c> is false, which
+        /// covers a language whose <c>canBeTiny</c> is false, the "disable tiny text" preference, the Steam
+        /// Deck, and any draw that happens during a long event. Small's line box is around half again Tiny's,
+        /// so a constant tuned for one clips the other.
+        ///
+        /// Taking the free space below the box solves both: it is measured from the cell, so it follows
+        /// <c>RowHeight</c>, and its top sits below the box by construction, so no font size can push the
+        /// number back into it. <c>Text.LineHeight</c> is the floor for the case where a row is ever short
+        /// enough that the free space alone would clip -- overflowing into the row gap is invisible, since the
+        /// next row's own background paints over it, while clipped glyphs are not.
+        ///
+        /// Read <c>Text.LineHeight</c> rather than <c>LineHeightOf(GameFont.Tiny)</c>, because the getter
+        /// indexes by the current font and therefore already reflects any substitution the setter made.
+        /// Callers set the font before calling this.
+        /// </summary>
+        private static Rect SkillLabelRect(Rect cell, Rect box)
+        {
+            float top = box.yMax + SkillLabelGap;
+            return new Rect(cell.x, top, cell.width, Mathf.Max(Text.LineHeight, cell.yMax - top));
         }
 
         /// <summary>

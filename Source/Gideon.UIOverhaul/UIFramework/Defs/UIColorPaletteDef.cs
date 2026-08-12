@@ -53,6 +53,7 @@ namespace Gideon.UIFramework.Defs
         public string warning;
         public string danger;
         public string info;
+        public string mood;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -230,6 +231,9 @@ namespace Gideon.UIFramework.Defs
         public Color Warning => Get(UIColorRole.Warning);
         public Color Danger => Get(UIColorRole.Danger);
         public Color Info => Get(UIColorRole.Info);
+
+        /// <summary>A pawn's inner state: mood bars and the like. See <see cref="UIColorRole.Mood"/>.</summary>
+        public Color Mood => Get(UIColorRole.Mood);
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -367,6 +371,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.Warning => warning,
                 UIColorRole.Danger => danger,
                 UIColorRole.Info => info,
+                UIColorRole.Mood => mood,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -410,6 +415,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.Warning => 0xCCA633FF,
                 UIColorRole.Danger => 0xE54D33FF,
                 UIColorRole.Info => 0x4A90D9FF,
+                UIColorRole.Mood => 0x9B72D9FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,
@@ -514,8 +520,9 @@ namespace Gideon.UIFramework.Defs
         {
             get
             {
-                // Before defs load -- and in any context without a game -- DefDatabase is empty rather
-                // than unavailable, so this is safe to call at any time.
+                // Safe to call at any time, but only because Named refuses to touch the def database
+                // while it is being written. It is not safe to read DefDatabase during a load; see
+                // DefsReadable.
                 UIColorPaletteDef shipped = Named(DefaultPaletteDefName);
                 if (shipped != null)
                     return shipped;
@@ -566,17 +573,57 @@ namespace Gideon.UIFramework.Defs
         }
 
         /// <summary>
+        /// Whether the def database can be read right now.
+        ///
+        /// It cannot be read during a load, and the reason is threading rather than emptiness -- which is
+        /// what an earlier version of this file assumed, at the cost of an intermittent crash on the
+        /// loading screen.
+        ///
+        /// <c>LongEventHandler.UpdateCurrentAsynchronousEvent</c> starts the event action on its own
+        /// thread and keeps calling <c>LongEventsOnGUI</c> on the main thread while it runs. Play data
+        /// loading is one of those events, so <c>DefDatabase&lt;T&gt;.defsByName</c> is being *written* by
+        /// the loader thread at the same time as the loading screen draws and reads it. The dictionary is
+        /// never null -- it is assigned in DefDatabase's static constructor -- but a read that lands
+        /// during a resize dereferences a half-swapped bucket array and throws NullReferenceException
+        /// from inside <c>Dictionary.FindEntry</c>. Being a race, it strikes only sometimes, which makes
+        /// it look like an unrelated regression when it does.
+        ///
+        /// No null check can fix that; the only fix is not to read at all until the writing has stopped.
+        /// <see cref="BuiltIn"/> is what covers the gap, and it carries the same colors as the shipped
+        /// default so the loading screen looks the same either way.
+        ///
+        /// One consequence worth knowing: a player using a custom theme gets the built-in colors on the
+        /// startup loading screen rather than their theme, because no def exists to read yet. Long events
+        /// later in a session -- generating a map, loading a save -- are after loading has finished, so
+        /// those do use the chosen theme.
+        /// </summary>
+        private static bool DefsReadable => PlayDataLoader.Loaded;
+
+        /// <summary>
         /// The palette with this defName, or null. Use it to read a specific theme's colors without
         /// disturbing <see cref="Active"/>.
+        ///
+        /// Returns null rather than throwing while defs are loading. This is the single choke point for
+        /// every def lookup here -- <see cref="Active"/>, <see cref="Default"/> and
+        /// <see cref="ActiveIsMissing"/> all come through it -- so guarding it guards all of them.
         /// </summary>
         public static UIColorPaletteDef Named(string defName)
         {
-            return defName.NullOrEmpty()
+            return defName.NullOrEmpty() || !DefsReadable
                 ? null
                 : DefDatabase<UIColorPaletteDef>.GetNamedSilentFail(defName);
         }
 
-        /// <summary>Every loaded palette. Abstract templates are not included; RimWorld never loads them as defs.</summary>
-        public static List<UIColorPaletteDef> All => DefDatabase<UIColorPaletteDef>.AllDefsListForReading;
+        /// <summary>
+        /// Every loaded palette. Abstract templates are not included; RimWorld never loads them as defs.
+        ///
+        /// Empty while defs are loading, for the same reason as <see cref="Named"/>: the backing list is
+        /// being appended to on another thread. A static empty list rather than a new one per call, since
+        /// this is reachable from drawing code.
+        /// </summary>
+        public static List<UIColorPaletteDef> All =>
+            DefsReadable ? DefDatabase<UIColorPaletteDef>.AllDefsListForReading : none;
+
+        private static readonly List<UIColorPaletteDef> none = new List<UIColorPaletteDef>();
     }
 }

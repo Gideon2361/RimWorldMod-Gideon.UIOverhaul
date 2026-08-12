@@ -46,6 +46,8 @@ color palette, for instance, is pure XML.
 | `UICheckboxControl` | Static drawing helper | [UICheckboxControl.md](UICheckboxControl.md) |
 | `UIRadioButtonControl` | Static drawing helper | [UIRadioButtonControl.md](UIRadioButtonControl.md) |
 | `UIDesignatorTabControl` | Class, construct and reuse | [UIDesignatorTabControl.md](UIDesignatorTabControl.md) |
+| `UITextBoxControl` | Class, construct and reuse | [UITextBoxControl.md](UITextBoxControl.md) |
+| `UIDebug` | Static switch for diagnostic logging | [UIDebug.md](UIDebug.md) |
 
 Two different config mechanisms, for one reason: **defs do not exist for most of a load.** Anything
 consumed during startup cannot be a Def, so the loading screen is read straight off disk from
@@ -62,10 +64,11 @@ Namespaces follow folders.
 | Namespace | Holds |
 |---|---|
 | `Gideon.UIFramework.Defs` | Def types: `UIColorPaletteDef` |
-| `Gideon.UIFramework.Controls` | Drawing controls: `UILoadingScreenControl`, `UIProgressBarControl`, `UIRichButtonControl`, `UICardControl`, `UICheckboxControl`, `UIRadioButtonControl`, `UIDesignatorTabControl` |
+| `Gideon.UIFramework.Controls` | Drawing controls: `UILoadingScreenControl`, `UIProgressBarControl`, `UIRichButtonControl`, `UICardControl`, `UICheckboxControl`, `UIRadioButtonControl`, `UIDesignatorTabControl`, `UITextBoxControl` |
 | `Gideon.UIFramework.Stages` | Loading-time types: `UILoadingScreenConfig`, `UILoadingScreen`, `UILoadingSnapshot` |
 | `Gideon.UIFramework.Components.Colors` | Color supporting types: `UIColorRole`, `UIColorEntry`, `UIColorParser` |
 | `Gideon.UIFramework.Components.Images` | Image supporting types: `UIImageFit`, `UIImage`, `UIImageLoader` |
+| `Gideon.UIFramework.Helpers` | Shared drawing and diagnostics: `UIElementPainter`, `UIShapes`, `UISkinRestyler`, `UIDebug` |
 | `Gideon.UIFramework.Patches.*` | Harmony patches the framework needs to collect its data. Not API — never call into these |
 | `Gideon.UIOverhaul` | This mod's own screens. Not API |
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
@@ -70,7 +71,9 @@ namespace Gideon.UIOverhaul.Features.Options
 
             Text.Font = GameFont.Small;
 
-            float viewHeight = 420f;
+            // Raised with the diagnostics section, which the old height had no room for -- the scroll view would
+            // have clipped it rather than scrolled to it.
+            float viewHeight = 560f;
             Rect view = new Rect(0f, 0f, inner.width - 18f, viewHeight);
             Widgets.BeginScrollView(inner, ref scroll, view);
 
@@ -78,6 +81,8 @@ namespace Gideon.UIOverhaul.Features.Options
             DrawThemeSection(view, ref y, palette, settings);
             y += 14f;
             DrawBarSection(view, ref y, palette, settings);
+            y += 14f;
+            DrawDiagnosticsSection(view, ref y, palette, settings);
 
             Widgets.EndScrollView();
 
@@ -167,6 +172,42 @@ namespace Gideon.UIOverhaul.Features.Options
                 "Reorder tabs, rename them, take them off the bar, group them into menus, and choose "
                 + "icons.");
             y += 44f;
+            GUI.color = palette.TextPrimary;
+        }
+
+        /// <summary>
+        /// The diagnostics section.
+        ///
+        /// Last, and described plainly as something to turn on when asked to, because that is the only time it is
+        /// useful. It is not tied to RimWorld's dev mode: dev mode stays on for whole sessions for unrelated
+        /// reasons, and this is noisy enough to be worth choosing deliberately.
+        /// </summary>
+        private void DrawDiagnosticsSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Diagnostics", palette);
+
+            bool debug = settings.debugLogging;
+
+            if (UICheckboxControl.Draw(new Rect(0f, y, view.width, RowHeight), ref debug, palette,
+                    "Write debug detail to the log"))
+            {
+                settings.debugLogging = debug;
+
+                // Pushed straight through rather than waiting for a reload, so turning it on starts logging
+                // now. Probes that allocate control ids are latched at launch and wait for a restart; see
+                // UIDebug.InstrumentControlIds.
+                UIDebug.Enabled = debug;
+                settings.Save();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 56f),
+                "Off unless you have been asked to turn it on. Adds detail to the log for diagnosing a "
+                + "problem; some of it only starts collecting after a restart.");
+            y += 60f;
             GUI.color = palette.TextPrimary;
         }
 

@@ -73,6 +73,16 @@ namespace Gideon.UIFramework.Components.Colors
         Info,
 
         /// <summary>
+        /// A pawn's inner state: mood, and the other readings that are about how someone feels rather than
+        /// about whether something succeeded.
+        ///
+        /// A role of its own rather than a reuse of <see cref="Info"/> or <see cref="Accent"/>, because it has
+        /// to be told apart from both at a glance -- a mood bar sitting beside a health bar must not read as
+        /// another health bar, and it must not read as the accent either, since the accent means "selected".
+        /// </summary>
+        Mood,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

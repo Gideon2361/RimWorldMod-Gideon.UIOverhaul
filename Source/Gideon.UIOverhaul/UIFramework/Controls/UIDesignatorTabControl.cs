@@ -166,6 +166,19 @@ namespace Gideon.UIFramework.Controls
         /// </summary>
         public Action<Rect, UIDesignatorTabRow, UIColorPaletteDef> DrawBackground;
 
+        /// <summary>
+        /// Draws over the row, after every cell, spanning all of them.
+        ///
+        /// The counterpart to <see cref="DrawBackground"/>, and it exists for the case a column cannot serve: a
+        /// row that expands to reveal something the width of the whole grid rather than the width of one column.
+        /// A row using <see cref="Height"/> to grow gets the extra space here, and its cells should keep to the
+        /// top band so the two do not overlap.
+        ///
+        /// After the cells rather than before, because what it draws is usually interactive, and something drawn
+        /// under a cell would take its clicks second.
+        /// </summary>
+        public Action<Rect, UIDesignatorTabRow, UIColorPaletteDef> DrawOverlay;
+
         public bool IsSection => !SectionLabel.NullOrEmpty();
     }
 
@@ -625,6 +638,8 @@ namespace Gideon.UIFramework.Controls
 
                 column.DrawCell?.Invoke(cell, data, palette);
             }
+
+            data.DrawOverlay?.Invoke(row, data, palette);
         }
 
         /// <summary>

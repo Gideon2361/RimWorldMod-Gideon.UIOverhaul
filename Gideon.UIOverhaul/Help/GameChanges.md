@@ -280,6 +280,16 @@ word in every column across its whole height. On the diagonal a title can be as 
 What sets the width now is the skill readout under each box: "skill 12" at `Tiny`. Narrowing further would
 clip the number, which is the one thing in a cell that has to be read rather than recognized.
 
+Its **height** is taken from the cell rather than fixed, because the font is not fixed either.
+`Text.Font = GameFont.Tiny` is a request: the setter substitutes `Small` whenever `TinyFontSupported` is
+false, which covers a language whose `canBeTiny` is false, the "disable tiny text" preference, the Steam
+Deck, and any draw during a long event. `Small`'s line box is around half again `Tiny`'s. Since
+`Widgets.Label` hands its rect to `GUI.Label` as the clip rectangle — untouched apart from UI-scale
+snapping — a height tuned for one font clips the other, and a `MiddleCenter` anchor spends the overflow at
+both ends, shaving the tops of the digits. The readout therefore takes the whole strip between the box and
+the bottom of the cell, floored at `Text.LineHeight`: its top is below the box by construction, so no font
+size can push the number back into it.
+
 Every other column carries a band behind its title, in `SurfaceSunken` against the header's
 `PanelBackground`, so each title has a lane to follow down to the column it names. Alternating rather than
 banding every column: consecutive stripes need a separator between them, and a stripe beside a stripe reads
@@ -315,7 +325,7 @@ Three details that matter if this is ever adjusted:
 | `Pawn_WorkSettings.SetPriority` | Transpiler | Raises the accepted priority ceiling from 4 to 9 |
 | `MainTabWindow_Work.DoWindowContents` | Prefix | Draws our panel instead of the vanilla table |
 | `MainTabWindow_PawnTable.get_RequestedTabSize` | Postfix | Sizes the window, work tab instances only |
-| `Window.get_CommonSearchWidget` | Postfix | Reports the tab's search field, so key bindings yield to it |
+| `WindowStack.get_AnySearchWidgetFocused` | Postfix | Makes key bindings yield to any `UITextBoxControl` (framework-wide) |
 | `Game.InitNewGame` | Postfix | Starts a new game with manual priorities on |
 
 ### Priorities run 0 to 9
@@ -376,29 +386,185 @@ column — and it is the only heading cell wide enough for a control. A search f
 manual-priorities toggle beneath it.
 
 Search **filters which pawns get rows**, rather than dimming the ones that do not match: this tab is read by
-comparing rows against each other, and a list with gaps in it is harder to compare than a short one. It matches
-the short name and the full one, so a nickname and a surname find the same colonist. A group whose every pawn
-is filtered out drops its heading too, and the heading's count reflects what is shown.
+comparing rows against each other, and a list with gaps in it is harder to compare than a short one. A group
+whose every pawn is filtered out drops its heading too, and the heading's count reflects what is shown.
 
-The field is vanilla's `QuickSearchWidget`, not a text field of ours, and it is reported to the game through a
-postfix on `Window.get_CommonSearchWidget`. Both halves are needed, and each fixes a different bug:
+It matches **first name, nickname and last name, and nothing else** — read off `Pawn.Name` rather than any label
+property. A pawn's label is not its name: `Pawn.LabelNoCount` is the name followed by the backstory title, as
+`LabelPrefix + Name.ToStringShort + (", " + story.TitleShortCap).Colorize(...)`. Filtering on that matched a
+colonist's *profession* — searching "sa" returned a sailor named Maxwell along with Sam — and because the title
+half is colorized, the string also carries `<color=#...>` markup, so "col" would have matched every titled pawn
+in the colony. The three name parts are tested separately rather than against an assembled full name, so a
+search cannot match across the join between two of them.
 
-- **Focus survives typing.** The widget names its control with `GUI.SetNextControlName`, so its identity does not
-  depend on draw order. IMGUI derives a control's id from the order it is drawn in, so a hand-rolled field whose
-  neighbors come and go — a clear button that only exists once there is text to clear — changes id mid-word and
-  drops focus.
+The field is a [`UITextBoxControl`](UITextBoxControl.md). It was vanilla's `QuickSearchWidget` first, reported to
+the game through a postfix on `Window.get_CommonSearchWidget`, and that fixed exactly one of the two bugs here:
+
 - **The keys stop reaching the game.** `KeyBindingDef.IsDown`, `IsDownEvent`, `KeyDownEvent` and `JustPressed`
   all consult `WindowStack.AnySearchWidgetFocused`, which walks the window stack asking each window for its
   `CommonSearchWidget`. Every binding, camera dolly included, is suppressed while one of those has focus — and
   only one of *those*, which is why a field the game could not see let W and A pan the map as you typed.
+- **Focus survives typing.** This is the half the widget did *not* fix. `GUI.SetNextControlName` does not make a
+  control's identity independent of draw order, which I had assumed it did: Unity keys focus on an integer
+  `keyboardControl` id derived from draw order and only hangs the name on it. An id shift therefore still drops
+  focus mid-word, and vanilla's widget has no defense — it asks whether it is focused and believes the answer.
 
-`Window` declares that property and neither `MainTabWindow_PawnTable` nor `MainTabWindow_Work` overrides it, so
-patching the base reaches our window. `MainTabWindow_Architect` does override it and is untouched. The postfix
-only fills in a `null` result, so it can never take a widget away from a window that had one.
+`UITextBoxControl` re-asserts focus by name when it believes it is focused and nothing else is, which repairs the
+fault without needing to know which control shifted. `Patch_WindowStack_AnySearchWidgetFocused` then ORs its
+`AnyFocused` into the gate, so the key-binding protection covers every text box of ours anywhere in the game
+rather than this one window — and the `CommonSearchWidget` postfix is gone.
 
 Group headings fold, and searching **suppresses** folding for as long as there is a search — a match inside a
 folded group would otherwise be invisible, which reads as the search being broken. The folds come back when the
 search is cleared.
+
+## Steam Workshop uploads
+
+Moved here from Gideon's Misc Patches, unchanged in behavior — what it fixes is a dialog flow, so it belongs
+with the rest of the UI work.
+
+Publishing a mod normally means clearing two dialogs. The terms-of-service prompt
+(`Dialog_ConfirmModUpload`) is always kept; it also carries the "tag as translation" checkbox. The second is a
+`Dialog_MessageBox` asking "Did you create this content yourself?", built with `interactionDelay = 6f`, which
+greys out the Yes button for six seconds.
+
+| Case | Result |
+|---|---|
+| Re-uploading a mod already published from this machine | Prompt skipped, straight to upload |
+| First upload, or the target mod cannot be identified | Prompt shown, **countdown removed** |
+
+That split is deliberate rather than incidental. The prompt is an authorship attestation, so answering it for
+the player is only defensible where they have already answered it for that exact mod — which is what
+`About/PublishedFileId.txt` records. A first upload still asks.
+
+| Patched | Kind | Effect |
+|---|---|---|
+| `WindowStack.Add` | Prefix | Skips or de-delays the upload prompts |
+
+`WindowStack.Add` is the interception point because the delay is assigned *after* the constructor returns, so a
+constructor postfix would be overwritten; and because the code building the dialog lives in a lambda whose
+compiler-generated name shifts between game builds. `Add` is the first stable public member that runs afterwards.
+
+The patch was **removed from Misc Patches** rather than left in both, so there is deliberately no guard against
+that mod being installed. An earlier version had one — a Harmony `Prepare` that stood down when Misc Patches was
+present — and it would have become a bug immediately: that mod lives on as the home for future patches, so the
+guard would see it installed, stand down, and leave nothing handling the dialog at all.
+
+## The pawns tab
+
+A tab of ours rather than a replacement for a vanilla one: `MainButtonDef` `Gideon_Pawns`, order 51, just below
+Work. A status board for every colonist — condition, health, mood, activity — with the day's schedule one click
+away.
+
+Grouped by map through the same `MapLabels.NameOf` the work tab uses, so a pocket dimension is named after the
+entrance that opens it. That code, the portrait, and the deferred camera jump were **extracted** into
+`UIOverhaul/Shared/` when this tab was built rather than copied: three panels reading the same game state and
+disagreeing about it is exactly the failure mode worth designing out.
+
+| Column | Reads |
+|---|---|
+| Colonist | Portrait, name, backstory title |
+| Condition | Worst-first status, see below |
+| Health | `summaryHealth.SummaryHealthPercent` |
+| Mood | `needs.mood.CurLevelPercentage` |
+| Activity | `jobs.curDriver.GetReport()` |
+| Schedule | The current hour's assignment |
+
+### Condition is severity-ordered, not combined
+
+A bleeding, downed, freezing pawn is three problems, but a column that says all three says nothing at a glance —
+and only one is what you would act on first. So the most urgent wins the line and the tooltip carries the rest.
+The order is by how soon it kills: **bleeding out → vacuum → downed → needs treatment → temperature → healthy.**
+
+Two readings are worth naming. Bleeding only reports as *bleeding out* when
+`HealthUtility.TicksUntilDeathDueToBloodLoss` is under a day, because a scratch bleeds too and a column that
+cries wolf over a scratch is one players learn to ignore; below that threshold it falls back to a plain
+"Bleeding". Vacuum uses `Pawn.HarmedByVacuum`, which is exactly "exposed *and* unprotected" — not
+`ConcernedByVacuum`, which is the weaker "would care about it". Temperature reads the **Hypothermia** and
+**Heatstroke** hediffs rather than comparing ambient temperature to the comfortable range: the comparison answers
+"is this uncomfortable", which is true of a pawn walking briskly across a cold map in no danger at all.
+
+### Bars
+
+Health is green above 90%, blue through the middle, red when low, so a scan down the column finds the casualties
+without reading a number. The thresholds are on the fill only; the track stays neutral so the bar's length stays
+readable.
+
+Mood uses a **palette custom color**, `Gideon.Mood` (`#9B72D9`), not a new `UIColorRole`. Mood is this tab's idea
+rather than one of the framework's meanings, and `Custom` is the seam for exactly that — a theme can restate it
+and nothing in the framework had to grow a slot. It sits on the `UIPaletteBase` template so both shipped themes
+inherit it. A pawn with no mood need shows no bar rather than an empty one, which would read as despair.
+
+### The schedule strip
+
+Clicking a row expands it. The 24 hours are drawn as a `DrawOverlay` on the row rather than as a column, because
+they span the whole grid and splitting them across columns would tie the schedule's layout to the column widths.
+`DrawOverlay` is a new hook on `UIDesignatorTabRow`, the counterpart to `DrawBackground`, drawn after the cells so
+what it draws takes clicks first. Cells keep to the top band so a portrait does not drift downward when a row
+opens.
+
+The dropdown at the start of the strip picks a **brush**; clicking an hour is what writes. That separation is
+what makes painting a block of hours one choice and several clicks rather than a choice per click — and the brush
+is shared across rows, because it is a tool the player picks up, not a property of one pawn. Every dropdown entry
+carries its own swatch in the def's own color, via `FloatMenuOption.extraPartOnGUI`, so the menu and the strip
+cannot disagree about what a color means.
+
+Hours **paint on drag**, not just on click, so eight hours of sleep is one gesture. That is why the strip reads
+`Input.GetMouseButton` directly rather than using `ButtonInvisible`: a button reports a completed click, and a
+drag never completes one per cell. The current hour is outlined in `Accent` so the strip can be read against the
+clock without counting cells.
+
+Expansion is a **set** of pawns rather than a single selection, so opening one does not close another — comparing
+two colonists' days side by side is most of the reason to look at this.
+
+### Clicking a face centers the view on that colonist
+
+The portrait is a button. Clicking it closes the tab and centers the camera on the pawn.
+
+The close is ours to do — nothing in `CameraJumper` touches the main tabs, and this tab covers the map, so a jump
+on its own would center the camera behind a full-screen window. It is `EscapeCurrentTab(playSound: false)`,
+because `CameraJumper` plays its own sound on arrival and vanilla's tab-close click on top of that reads as two
+clicks for one action.
+
+Both halves are **deferred to the end of the frame**, for the reason the architect tab defers its close: the
+click is handled inside the grid's scroll view, and closing the window from in there leaves this panel drawing
+into a window no longer on the stack with a `BeginScrollView` still to be matched. The jump reaches outside too —
+it calls `TryHideWorld` and can reassign `Game.CurrentMap`.
+
+Cross-map works without any extra handling: `CameraJumper` hides the world view and switches the current map when
+the target is on a different one, which this tab needs because it lists colonists from every map. `PositionHeld`
+and `MapHeld` mean a pawn in a caravan or a container still resolves to a real location.
+
+The hover hint is the ring of backing disc around the head, lerped toward `Accent`. That ring is the only part of
+the portrait that *can* carry feedback — the face is a `RenderTexture` and has to be drawn untinted.
+
+It jumps without selecting. Selecting as well is a one-word change if the inspect pane turns out to be wanted.
+
+### Pocket maps are named after their entrance
+
+Colonists are grouped by map, and a group is headed with `MapParent.LabelCap` — the colony's given name, or
+whatever a caravan site or ship calls itself. Pocket maps break that: a `PocketMapParent` takes its label from
+its **def**, so every pocket map in the game is headed "Pocket map" regardless of which entrance opened it. With
+one it is merely uninformative; with several — the normal case for the mods that add them — the headings are
+indistinguishable.
+
+They are now named after the entrance that opens them. Nothing about this is mod-specific: a pocket map can only
+be generated through `MapPortal.GeneratePocketMap`, so **every** entrance is a `MapPortal`, and one lookup covers
+vanilla pit gates and ancient hatches along with anything a mod adds. Referencing a particular mod's types would
+have meant a hard dependency, a version to track, and no benefit to the next mod that adds pocket maps.
+
+The lookup asks the pocket map's own `PocketMapExit` first, since `PocketMapExit.entrance` is a direct reference;
+failing that — the API permits a pocket map with no exit — it asks the source map which of its portals leads
+back. Both go through the `MapPortal` `ThingRequestGroup`, which is a cached list, rather than walking every
+thing on the map.
+
+The name is read from `IRenameable.RenamableLabel` when the entrance implements it, falling back to `LabelCap`.
+That matters because `Thing.LabelCap` only reflects a rename if the subclass happens to route `LabelNoCount`
+through it, which is not guaranteed.
+
+**Renames need no detection.** The label is recomputed every frame rather than cached, so renaming an entrance
+appears in the heading on the next frame by construction. A cache would have needed an invalidation hook, and
+vanilla raises no notification on rename to hang one on.
 
 ### Row status
 
