@@ -18,7 +18,24 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     /// The null-event path is preserved and handed back to vanilla, because that branch resets the
     /// gameplay tip timer and has nothing to do with drawing.
     ///
-    /// DrawLongEventWindow is suppressed as well, for the cases where the window route is taken.
+    /// <b>Only the full-screen kind of long event is taken over.</b> LongEventsOnGUI has two branches: a
+    /// standalone one that paints the whole screen, and one that puts a small status window on the window
+    /// stack over a game that keeps running. This replaces the first and must leave the second alone, and
+    /// the reason is not cosmetic:
+    ///
+    /// <c>DrawLongEventWindowContents</c> is the only thing that ever sets <c>alreadyDisplayed</c> on the
+    /// current event. <c>ShouldWaitUntilDisplayed</c> stays true until it does, and
+    /// <c>UpdateCurrentSynchronousEvent</c> returns without running the event's action while that is true.
+    /// Suppressing the window therefore did not merely hide it -- it stopped the event ever executing, so it
+    /// never completed and never cleared. The game was left in a long event forever: our screen painted over
+    /// the terrain every frame, and since <c>ShouldWaitForEvent</c> is false for a standard-window event,
+    /// <c>Root_Play.Update</c> went on calling <c>Game.UpdatePlay</c> underneath it -- which is also where the
+    /// "Called DrawWorldLayers() but already regenerating" errors came from.
+    ///
+    /// <c>ShouldWaitForEvent</c> is the gate because it is exactly vanilla's own condition for the standalone
+    /// branch: an event is up, and either it does not use the standard window or there is no UIRoot to put one
+    /// on. Asynchronous events, map generation included, satisfy it, so the loading screen still covers
+    /// everything it was written for.
     /// </summary>
     [HarmonyPatch(typeof(LongEventHandler), nameof(LongEventHandler.LongEventsOnGUI))]
     public static class Patch_LongEventHandler_LongEventsOnGUI
@@ -42,7 +59,9 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
 
             wasRunning = running;
 
-            if (Failed || !running)
+            // ShouldWaitForEvent, not AnyEventNowOrWaiting. The difference is the standard-window events,
+            // which must be left to vanilla or they never execute at all -- see the note on this class.
+            if (Failed || !LongEventHandler.ShouldWaitForEvent)
                 return true;
 
             try
@@ -78,18 +97,13 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         }
     }
 
-    [HarmonyPatch(typeof(LongEventHandler), "DrawLongEventWindow")]
-    public static class Patch_LongEventHandler_DrawLongEventWindow
-    {
-        /// <summary>
-        /// Skips vanilla's window. Returning true here restores the stock screen, which is what
-        /// happens if our own drawing has thrown.
-        /// </summary>
-        public static bool Prefix()
-        {
-            return Patch_LongEventHandler_LongEventsOnGUI.Failed;
-        }
-    }
+    // There is deliberately no patch on DrawLongEventWindow, and one must not be added back.
+    //
+    // It used to be suppressed, on the reasoning that our screen replaces vanilla's and the window route
+    // would otherwise draw on top of it. That was wrong twice over. DrawLongEventWindow is only ever reached
+    // from the standard-window branch of LongEventsOnGUI, which we no longer take over, so there is nothing
+    // left to collide with -- and suppressing it was what hung the game, because the contents it draws are
+    // the only thing that marks the event as displayed and so lets it run at all.
 
     /// <summary>
     /// Clears the progress state at the start of a load. Matters on the second and later loads --

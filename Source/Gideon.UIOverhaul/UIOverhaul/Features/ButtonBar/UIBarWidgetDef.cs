@@ -88,6 +88,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
         }
 
+        /// <summary>
+        /// The worker if one has already been built, without building one.
+        ///
+        /// For housekeeping that wants to touch the widgets currently in use -- resetting measured widths
+        /// after a setting changed what they show. Going through <see cref="Worker"/> for that would
+        /// instantiate every widget the player has never put on the bar, and would report the broken ones as
+        /// failures on the way.
+        /// </summary>
+        public UIBarWidgetWorker WorkerIfCreated => workerInt;
+
         public override IEnumerable<string> ConfigErrors()
         {
             foreach (string error in base.ConfigErrors())

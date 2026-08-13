@@ -592,13 +592,16 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             // No accent stripe and no hover: this is a heading, not a row in a list, so there is nothing
             // to categorize and nothing to click. AccentColor left null is what suppresses the stripe.
+            //
+            // Nothing to click is also why this is DrawChrome. Draw ends with a ButtonInvisible covering the
+            // whole card, which would consume the event before the info card button below ever saw it.
             heroCard.Padding = 0f;
             heroCard.AccentColor = null;
             heroCard.HoverHighlight = false;
             heroCard.BackgroundColor = GzpPalette.PanelBG;
             heroCard.BackgroundTexture = notice.HasValue ? GzpTex.NoticeBackground : null;
             heroCard.BackgroundTint = notice.HasValue ? WashFor(notice.Value) : (Color?) null;
-            heroCard.Draw(hero);
+            heroCard.DrawChrome(hero);
 
             // Name only. The description used to live here and was routinely clipped; it now has its
             // own section below, where it can wrap to whatever height it needs.

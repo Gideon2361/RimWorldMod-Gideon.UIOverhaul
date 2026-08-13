@@ -32,10 +32,16 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             //
             // Static because this drawer is static: bill rows are drawn and forgotten, so there is no
             // per-row state to hold and one instance serves every row.
+            //
+            // DrawChrome, never Draw. Draw ends with a ButtonInvisible over the whole card, and GUI.Button
+            // consumes the click on mouse-down, so the first one drawn that covers the pointer takes the
+            // event and every control drawn afterwards sees EventType.Used. This row is nothing but
+            // controls -- the repeat mode button, the four icon buttons, the target field and its arrows --
+            // and claiming the click here silently kills all of them.
             RowCard.Padding = 0f;
             RowCard.AccentColor = StateColor(bill);
             RowCard.BackgroundColor = GzpPalette.PanelBG;
-            RowCard.Draw(rect);
+            RowCard.DrawChrome(rect);
 
             Color previous = GUI.color;
             Text.Font = GameFont.Small;

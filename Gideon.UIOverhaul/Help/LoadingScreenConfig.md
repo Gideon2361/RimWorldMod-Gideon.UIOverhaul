@@ -265,3 +265,13 @@ loading screen. Ship your screen, and let the player select it.
 - **If the screen throws, vanilla comes back.** A drawing exception is logged once and the stock
   loading screen resumes for the rest of the load. A broken loading screen must not become a game that
   will not start.
+- **Only full-screen long events are replaced.** RimWorld draws a long event one of two ways: taking over
+  the screen, or putting a small status window over a game that carries on running. This screen replaces
+  the first and leaves the second alone, which is the difference between "loading" and "the game is busy
+  for a moment". Startup, save loading and map generation all take the first route, so everything this
+  screen was written for still gets it; an autosave does not.
+
+  That boundary is load-bearing, not stylistic. The contents of that status window are the only thing
+  that marks an event as displayed, and a synchronous event does not execute until it has been — so
+  suppressing the window does not hide an event, it stops the event happening. See the note on
+  `Patch_LongEventHandler_LongEventsOnGUI`.

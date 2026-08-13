@@ -5,6 +5,7 @@ using System.Text;
 using System.Xml;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Options
@@ -46,6 +47,16 @@ namespace Gideon.UIOverhaul.Features.Options
         /// See <c>Features.Display.StartupFullscreen</c>.
         /// </summary>
         public bool fullscreenOnStartup;
+
+        /// <summary>
+        /// How the date widget writes the time of day.
+        ///
+        /// 24-hour with minutes by default. RimWorld's own readout shows the bare hour, which is a clock
+        /// that cannot tell you how long is left of it; a colonist's shift, a caravan's arrival and a
+        /// growing season are all read off this, and "14h" rounds away most of what makes that useful.
+        /// The vanilla form is still on offer for anyone who prefers it.
+        /// </summary>
+        public UITimeFormat timeFormat = UITimeFormat.TwentyFourHour;
 
         // There is deliberately no option to hide the bar's UI options button. It used to exist, back when
         // these settings were also reachable from the vanilla Options window; that route turned out to be
@@ -139,6 +150,13 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.fullscreenOnStartup = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Anything unrecognized parses back to the default rather than raising a problem.
+                        // This is a hand-editable file and a misspelled clock format is not worth a warning
+                        // popup on the way into the game.
+                        case "timeFormat":
+                            settings.timeFormat = UIClock.Parse(value);
+                            break;
+
                         case "showBarButton":
                             // Retired setting. Accepted silently so an older config file does not raise a
                             // warning about something the player never chose to write.
@@ -193,6 +211,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("debugLogging", debugLogging ? "true" : "false");
                     writer.WriteElementString("fullscreenOnStartup",
                         fullscreenOnStartup ? "true" : "false");
+                    writer.WriteElementString("timeFormat", timeFormat.ToString());
                     writer.WriteEndElement();
                     writer.WriteEndDocument();
                 }
