@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -43,7 +44,31 @@ namespace Gideon.UIOverhaul.Features.Workshop
     [HarmonyPatch(typeof(WindowStack), nameof(WindowStack.Add))]
     internal static class Patch_WindowStack_Add
     {
+        /// <summary>
+        /// <b>Guarded, with the dialog left in place if anything goes wrong.</b> WindowStack.Add is called for every
+        /// window the game opens, so an escape from here would not be confined to mod uploads -- it would fire on
+        /// whatever window happened to be opening.
+        ///
+        /// True is the fallback, which means vanilla's confirmation appears as though this patch were not installed.
+        /// Note what that implies when the throw came from <c>buttonAAction</c> itself: the upload has already been
+        /// started and failed, and the player then sees the prompt again. That is the right way round -- a visible
+        /// prompt they can answer beats an upload that was skipped silently.
+        /// </summary>
         private static bool Prefix(Window window)
+        {
+            try
+            {
+                return Decide(window);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("Workshop.SkipAuthorPrompt", ex,
+                    "The Workshop authorship prompt and its countdown are shown as vanilla does.");
+                return true;
+            }
+        }
+
+        private static bool Decide(Window window)
         {
             if (!(window is Dialog_MessageBox box))
                 return true;
@@ -77,6 +102,8 @@ namespace Gideon.UIOverhaul.Features.Workshop
         /// </summary>
         private static bool IsContentAuthorPrompt(Dialog_MessageBox box)
         {
+            // text is a TaggedString struct, but a message box built with no text at all leaves its RawText null,
+            // so this is read defensively rather than assumed.
             string text = box.text.RawText;
 
             if (string.IsNullOrEmpty(text))

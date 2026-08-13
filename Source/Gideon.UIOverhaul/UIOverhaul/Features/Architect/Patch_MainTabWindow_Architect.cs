@@ -1,4 +1,5 @@
 using System;
+using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -39,27 +40,38 @@ namespace Gideon.UIOverhaul.Features.Architect
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce("[Gideon.UIOverhaul] The architect tab failed to draw; falling back to the "
-                              + "vanilla architect.\n" + ex, 0x17C0_10C1);
+                UIGuard.Report("Architect.Draw", ex,
+                    "The architect falls back to vanilla's for the rest of the session.");
                 Failed = true;
                 return true;
             }
         }
 
+        /// <summary>
+        /// Guarded, like the size below it: both are measured from the designator categories rather than being
+        /// constants, and vanilla's own value is the right thing to keep if the measurement fails.
+        /// </summary>
         [HarmonyPatch("get_WinHeight")]
         [HarmonyPostfix]
         public static void WinHeight(ref float __result)
         {
-            if (!Failed)
-                __result = ArchitectPanel.WindowHeight;
+            if (Failed)
+                return;
+
+            __result = UIGuard.Try("Architect.WinHeight", () => ArchitectPanel.WindowHeight, __result,
+                "The architect window uses vanilla's height.");
         }
 
         [HarmonyPatch("get_RequestedTabSize")]
         [HarmonyPostfix]
         public static void RequestedTabSize(ref Vector2 __result)
         {
-            if (!Failed)
-                __result = new Vector2(ArchitectPanel.WindowWidth, ArchitectPanel.WindowHeight);
+            if (Failed)
+                return;
+
+            __result = UIGuard.Try("Architect.TabSize",
+                () => new Vector2(ArchitectPanel.WindowWidth, ArchitectPanel.WindowHeight), __result,
+                "The architect window opens at vanilla's size.");
         }
     }
 
@@ -79,18 +91,29 @@ namespace Gideon.UIOverhaul.Features.Architect
     {
         private const float ExtraControlsInset = 10f;
 
+        /// <summary>
+        /// Guarded with a fall through to vanilla. The extra controls belong to whichever designator is selected,
+        /// ours and every other mod's alike, so this hands off work we do not own -- and a designator that throws
+        /// from its own panel must not take the architect down with it.
+        ///
+        /// Falling back means vanilla draws the full bottom-of-screen grid again, doubling the designators that are
+        /// already in the window. Visibly wrong, and still better than a selected designator whose controls have
+        /// vanished.
+        /// </summary>
         public static bool Prefix()
         {
             if (Patch_MainTabWindow_Architect.Failed)
                 return true;
 
-            Designator selected = Find.DesignatorManager?.SelectedDesignator;
-            MainTabWindow_Architect window = MainButtonDefOf.Architect.TabWindow as MainTabWindow_Architect;
+            return UIGuard.Replaced("Architect.ExtraGuiControls", () =>
+            {
+                Designator selected = Find.DesignatorManager?.SelectedDesignator;
+                MainTabWindow_Architect window =
+                    MainButtonDefOf.Architect.TabWindow as MainTabWindow_Architect;
 
-            if (selected != null && window != null)
-                selected.DoExtraGuiControls(ExtraControlsInset, window.PaneTopY);
-
-            return false;
+                if (selected != null && window != null)
+                    selected.DoExtraGuiControls(ExtraControlsInset, window.PaneTopY);
+            }, "Vanilla's designator grid is drawn across the bottom of the screen as well as in the window.");
         }
     }
 }

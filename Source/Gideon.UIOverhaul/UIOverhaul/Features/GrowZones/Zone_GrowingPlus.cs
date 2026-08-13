@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using System.Collections.Generic;
 using System.Linq;
@@ -53,6 +54,18 @@ public class Zone_GrowingPlus : Zone_Growing, IBillGiver
         yield return _tabGrowthZoneBills;
     }
 
+    /// <summary>
+    /// <b>The Scribe calls here are deliberately not wrapped in a try/catch, and that is not an oversight.</b>
+    ///
+    /// Scribe is a stateful writer: each Look enters and leaves a node, and the depth is tracked across the whole
+    /// save. Catching an exception partway through and carrying on would leave that stack unbalanced and go on
+    /// writing at the wrong depth -- turning a failure that vanilla knows how to abort cleanly into a save file that
+    /// looks complete and is not. Letting it out is the safe behavior, and vanilla's own handler is where it
+    /// belongs.
+    ///
+    /// What is guarded is our own work in the PostLoadInit pass below, which is logic rather than serialization and
+    /// has no such constraint.
+    /// </summary>
     public override void ExposeData()
     {
         base.ExposeData();
@@ -72,8 +85,15 @@ public class Zone_GrowingPlus : Zone_Growing, IBillGiver
         if (billStack == null)
             billStack = new BillStack(this);
 
-        MigrateLegacyBills();
-        UpdatePlantDefToGrow();
+        // Guarded separately so one of them failing does not cost the other. Vanilla's PostLoadIniter does catch
+        // per item, so an escape here would not break the load -- but it would abandon this zone half set up, and
+        // report it without saying which zone or what the mod was doing.
+        UIGuard.Try("GrowZones.MigrateLegacyBills", MigrateLegacyBills,
+            "Bills saved by an older version of this mod were not carried over on this zone. They are still in "
+            + "the save file, so a fixed version can pick them up later.");
+
+        UIGuard.Try("GrowZones.UpdatePlantToGrow", UpdatePlantDefToGrow,
+            "This zone may show the wrong plant as the one it is growing until a bill is changed.");
     }
 
     /// <summary>
@@ -139,6 +159,11 @@ public class Zone_GrowingPlus : Zone_Growing, IBillGiver
     /// </summary>
     public static bool SuppressCutWarnings;
 
+    /// <summary>
+    /// The base call is left unguarded on purpose: it is what actually adds the cell to the zone, and a zone that
+    /// silently failed to grow while reporting success would be a worse outcome than the exception. Only the warning
+    /// pass after it is guarded, which is ours and is advisory.
+    /// </summary>
     public override void AddCell(IntVec3 c)
     {
         base.AddCell(c);
@@ -146,44 +171,70 @@ public class Zone_GrowingPlus : Zone_Growing, IBillGiver
         if (SuppressCutWarnings)
             return;
 
-        foreach (Thing t in Map.thingGrid.ThingsListAt(c))
-            Designator_PlantsHarvestWood.PossiblyWarnPlayerImportantPlantDesignateCut(t);
+        UIGuard.Try("GrowZones.WarnOnCut", () =>
+        {
+            foreach (Thing t in Map.thingGrid.ThingsListAt(c))
+                Designator_PlantsHarvestWood.PossiblyWarnPlayerImportantPlantDesignateCut(t);
+        }, "No warning is shown when a growing zone is drawn over an important plant.");
     }
 
+    /// <summary>
+    /// <b>Built into a list rather than yielded.</b> An iterator's body runs while vanilla walks the result, inside
+    /// the inspect pane -- a stack with no frame of ours on it to catch anything, and C# will not allow a try/catch
+    /// around a <c>yield return</c> to put one there. Taking the list up front is what makes this guardable at all.
+    ///
+    /// The toggles' own delegates are wrapped separately, because they are called later still: <c>isActive</c> on
+    /// every frame the gizmo is drawn, and <c>toggleAction</c> whenever it is clicked, both long after this method
+    /// has returned.
+    /// </summary>
     public override IEnumerable<Gizmo> GetGizmos()
     {
-        foreach (Gizmo gizmo in base.GetGizmos())
-        {
-            // Drop vanilla's "set plant to grow". It opens a FloatMenu that sets one plant for the
-            // whole zone, which is the thing the bill system replaces: leaving both in offers two
-            // routes to the same setting, one of which silently ignores every bill on the zone.
-            //
-            // Filtered here rather than patched. Zone_Growing.GetGizmos yields the command for every
-            // growing zone, and a patch on it could not tell ours apart from a plain one -- a mod
-            // adding its own Zone_Growing would lose the command too.
-            if (gizmo is Command_SetPlantToGrow)
-                continue;
+        List<Gizmo> gizmos = new List<Gizmo>();
 
-            yield return gizmo;
-        }
-
-        yield return new Command_Toggle
+        // base.GetGizmos is vanilla's and any other mod's postfixes, so it is guarded in its own right: a failure
+        // there must cost us our two toggles, not the whole inspect pane.
+        UIGuard.Try("GrowZones.BaseGizmos", () =>
         {
-            defaultLabel = "Sow Over Sown",
-            defaultDesc = "When this zone's desired plant changes, sow over already sown plots.",
-            icon = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/SowingIcon"),
-            isActive = () => SowOverSown,
-            toggleAction = () => SowOverSown = !SowOverSown
-        };
+            foreach (Gizmo gizmo in base.GetGizmos())
+            {
+                // Drop vanilla's "set plant to grow". It opens a FloatMenu that sets one plant for the
+                // whole zone, which is the thing the bill system replaces: leaving both in offers two
+                // routes to the same setting, one of which silently ignores every bill on the zone.
+                //
+                // Filtered here rather than patched. Zone_Growing.GetGizmos yields the command for every
+                // growing zone, and a patch on it could not tell ours apart from a plain one -- a mod
+                // adding its own Zone_Growing would lose the command too.
+                if (gizmo is Command_SetPlantToGrow)
+                    continue;
 
-        yield return new Command_Toggle
+                gizmos.Add(gizmo);
+            }
+        }, "A selected growing zone shows only this mod's two toggles, without vanilla's zone commands.");
+
+        UIGuard.Try("GrowZones.ZoneToggles", () =>
         {
-            defaultLabel = "Require Active Bill",
-            defaultDesc = "Only sow in this plot if there is an active bill.",
-            icon = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/SetPlantToGrow"),
-            isActive = () => RequireActiveBillToSow,
-            toggleAction = () => RequireActiveBillToSow = !RequireActiveBillToSow
-        };
+            gizmos.Add(new Command_Toggle
+            {
+                defaultLabel = "Sow Over Sown",
+                defaultDesc = "When this zone's desired plant changes, sow over already sown plots.",
+                icon = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/SowingIcon"),
+                isActive = UIGuard.Wrap("GrowZones.ReadSowOverSown", () => SowOverSown, false),
+                toggleAction = UIGuard.Wrap("GrowZones.ToggleSowOverSown", () => SowOverSown = !SowOverSown)
+            });
+
+            gizmos.Add(new Command_Toggle
+            {
+                defaultLabel = "Require Active Bill",
+                defaultDesc = "Only sow in this plot if there is an active bill.",
+                icon = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/SetPlantToGrow"),
+                isActive = UIGuard.Wrap("GrowZones.ReadRequireActiveBill", () => RequireActiveBillToSow, false),
+                toggleAction = UIGuard.Wrap("GrowZones.ToggleRequireActiveBill",
+                    () => RequireActiveBillToSow = !RequireActiveBillToSow)
+            });
+        }, "The sow-over-sown and require-active-bill toggles are missing from the zone's commands. Both settings "
+           + "keep whatever value they already had.");
+
+        return gizmos;
     }
 
     /// <summary>

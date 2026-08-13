@@ -1,5 +1,6 @@
 using System;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
 using HarmonyLib;
 using UnityEngine;
@@ -49,15 +50,21 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         /// <summary>Returns false to skip vanilla's drawing entirely.</summary>
         public static bool Prefix()
         {
-            bool running = LongEventHandler.AnyEventNowOrWaiting;
+            // Guarded separately from the drawing below, and before the Failed check, because this is bookkeeping
+            // rather than drawing: it has to keep happening so that a later event still starts from zero, even
+            // after the screen itself has been handed back to vanilla.
+            UIGuard.Try("LoadingScreen.TrackEventStart", () =>
+            {
+                bool running = LongEventHandler.AnyEventNowOrWaiting;
 
-            // Clear the previous event's figures the moment a new one starts. Resetting only in
-            // PlayDataLoader.LoadAllPlayData covered the initial load and nothing else, so map generation
-            // -- a separate long event -- opened with the bar still full from the end of startup.
-            if (running && !wasRunning)
-                UIFramework.Stages.UILoadingScreen.Reset();
+                // Clear the previous event's figures the moment a new one starts. Resetting only in
+                // PlayDataLoader.LoadAllPlayData covered the initial load and nothing else, so map generation
+                // -- a separate long event -- opened with the bar still full from the end of startup.
+                if (running && !wasRunning)
+                    UIFramework.Stages.UILoadingScreen.Reset();
 
-            wasRunning = running;
+                wasRunning = running;
+            }, "A loading screen may open showing the previous load's progress.");
 
             // ShouldWaitForEvent, not AnyEventNowOrWaiting. The difference is the standard-window events,
             // which must be left to vanilla or they never execute at all -- see the note on this class.
@@ -73,8 +80,9 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
             {
                 // A throwing loading screen must not become a game that will not start. Report once
                 // and let vanilla's own drawing continue for the rest of the load.
-                Log.ErrorOnce("[Gideon.UIOverhaul] Loading screen failed to draw; "
-                              + "falling back to the vanilla screen.\n" + ex, 0x17C0_10AD);
+                UIGuard.Report("LoadingScreen.Draw", ex,
+                    "Vanilla's loading screen is used for the rest of the session. Loading itself is "
+                    + "unaffected.");
                 Failed = true;
                 return true;
             }
@@ -113,9 +121,15 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     [HarmonyPatch(typeof(PlayDataLoader), nameof(PlayDataLoader.LoadAllPlayData))]
     public static class Patch_PlayDataLoader_LoadAllPlayData
     {
+        /// <summary>
+        /// Guarded because of what it prefixes. An escape from here would stop LoadAllPlayData before it began, and a
+        /// game that cannot load its play data does not reach the main menu -- for the sake of resetting a progress
+        /// bar.
+        /// </summary>
         public static void Prefix()
         {
-            UIFramework.Stages.UILoadingScreen.Reset();
+            UIGuard.Try("LoadingScreen.ResetForLoad", UIFramework.Stages.UILoadingScreen.Reset,
+                "The loading screen's bar may start part-full.");
         }
     }
 }

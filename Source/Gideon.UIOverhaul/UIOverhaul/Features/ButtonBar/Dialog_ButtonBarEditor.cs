@@ -175,6 +175,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIGuardedPanel.Draw("ButtonBar.Editor", inRect, () => DrawContents(inRect),
+                "The bar editor shows a failure notice. The saved layout is untouched, so the bar itself "
+                + "keeps working.");
+        }
+
+        private void DrawContents(Rect inRect)
+        {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             Widgets.DrawBoxSolid(inRect, palette.WindowBackground);
 
@@ -1679,8 +1686,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         static Dialog_ButtonBarEditor()
         {
-            arrowUp = ContentFinder<Texture2D>.Get("UI/Interface/UI.ArrowUp", false);
-            arrowDown = ContentFinder<Texture2D>.Get("UI/Interface/UI.ArrowDown", false);
+            try
+            {
+                arrowUp = ContentFinder<Texture2D>.Get("UI/Interface/UI.ArrowUp", false);
+                arrowDown = ContentFinder<Texture2D>.Get("UI/Interface/UI.ArrowDown", false);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("ButtonBar.LoadEditorArrows", ex,
+                    "The bar editor's move-up and move-down buttons draw without their arrows.");
+            }
         }
 
         /// <summary>

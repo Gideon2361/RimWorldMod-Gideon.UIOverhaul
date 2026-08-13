@@ -48,8 +48,10 @@ namespace Gideon.UIFramework.Helpers
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce("[Gideon.UIFramework] Could not restyle the shared GUI skin; text fields and "
-                              + "scrollbars will keep their vanilla look.\n" + ex, 0x17C0_10B5);
+                // Not retried for this palette: appliedFor was already set above, so the next frame sees the
+                // theme as applied. Changing the theme asks again, which is the right moment to retry.
+                UIGuard.Report("Framework.RebuildSkin", ex,
+                    "Text fields and scrollbars keep their vanilla look until the theme is changed.");
             }
         }
 
@@ -201,9 +203,15 @@ namespace Gideon.UIFramework.Helpers
     [HarmonyPatch(typeof(Text), nameof(Text.StartOfOnGUI))]
     public static class Patch_Text_StartOfOnGUI
     {
+        /// <summary>
+        /// Guarded even though EnsureApplied catches its own rebuild failures, because reading the active palette
+        /// to decide whether a rebuild is needed happens before that catch. This is the earliest thing in a GUI
+        /// pass and it runs several times a frame, so an escape from here would arrive before anything had been
+        /// drawn -- with nothing on screen to suggest where it came from.
+        /// </summary>
         public static void Postfix()
         {
-            UISkinRestyler.EnsureApplied();
+            UIGuard.Try("Framework.RestyleSkin", UISkinRestyler.EnsureApplied);
         }
     }
 }

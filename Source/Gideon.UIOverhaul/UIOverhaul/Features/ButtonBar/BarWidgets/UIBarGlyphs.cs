@@ -46,27 +46,45 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
         internal static readonly Texture2D Orbit;
         internal static readonly Texture2D Calendar;
 
+        /// <summary>
+        /// Guarded because everything here is generated rather than loaded: fourteen textures rasterized in code,
+        /// which is a good deal more that can go wrong than a <c>ContentFinder</c> miss. A throw would otherwise
+        /// leave the type failed, and every weather readout would then throw on every frame while reaching for a
+        /// glyph. The fields stay null instead, and the widgets fall back to text alone.
+        ///
+        /// The whole body sits in the try because these fields are readonly and C# will only let the static
+        /// constructor itself assign them -- moving the work into a guarded helper would not compile. A glyph
+        /// built before the failure is kept; the rest stay null.
+        /// </summary>
         static UIBarGlyphs()
         {
-            Sun = BuildSun();
-            Cloud = BuildCloud();
-            Rain = BuildRain(3, false);
-            HeavyRain = BuildRain(4, true);
-            Thunder = BuildThunder(false);
-            ThunderRain = BuildThunder(true);
-            Snow = BuildSnow();
-            Blizzard = BuildBlizzard();
-            Fog = BuildFog();
-            Wind = BuildWind();
-            Sand = BuildSand();
-            Cave = BuildCave();
-            Orbit = BuildOrbit();
-            Calendar = BuildCalendar();
+            try
+            {
+                Sun = BuildSun();
+                Cloud = BuildCloud();
+                Rain = BuildRain(3, false);
+                HeavyRain = BuildRain(4, true);
+                Thunder = BuildThunder(false);
+                ThunderRain = BuildThunder(true);
+                Snow = BuildSnow();
+                Blizzard = BuildBlizzard();
+                Fog = BuildFog();
+                Wind = BuildWind();
+                Sand = BuildSand();
+                Cave = BuildCave();
+                Orbit = BuildOrbit();
+                Calendar = BuildCalendar();
 
-            // Populated here, not in a field initializer. Static field initializers all run before the
-            // static constructor body, so a map written as an initializer would capture the glyph fields
-            // while every one of them was still null.
-            ByDefName = BuildDefNameMap();
+                // Populated here, not in a field initializer. Static field initializers all run before the
+                // static constructor body, so a map written as an initializer would capture the glyph fields
+                // while every one of them was still null.
+                ByDefName = BuildDefNameMap();
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("ButtonBar.BuildGlyphs", ex,
+                    "The weather and date widgets show their text without an icon.");
+            }
         }
 
         /// <summary>
@@ -129,8 +147,11 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
             if (Cache.TryGetValue(weather.defName, out Texture2D cached))
                 return cached;
 
+            // ByDefName is null if the static constructor above did not finish. Reading it unguarded would turn a
+            // contained startup failure into a NullReferenceException on the frame the weather first changes.
             Texture2D resolved = ContentFinder<Texture2D>.Get(WeatherIconFolder + weather.defName, false)
-                                 ?? (ByDefName.TryGetValue(weather.defName, out Texture2D known)
+                                 ?? (ByDefName != null
+                                     && ByDefName.TryGetValue(weather.defName, out Texture2D known)
                                      ? known
                                      : Classify(weather));
 

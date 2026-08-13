@@ -1,15 +1,17 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <ModMetaData>
   <name>Gideon's UI Overhaul</name>
   <author>Gideon</author>
   <packageId>gideon.uioverhaul</packageId>
-  <modVersion>1.6.4871.14086</modVersion>
+  <modVersion>1.6.4871.14087</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
   <url></url>
   <description>
     A modern overhaul for RimWorld's UI.  Supports themes and has a framework API for other mods to implement custom UI elements with.
+
+    Includes the architect tab consolidation that used to ship separately as Gideon's Clean Architect Tabs.  Unsubscribe from that mod if you have it: the two define the same categories and cannot both be loaded.
   </description>
   <modDependencies>
     <li>
@@ -20,6 +22,37 @@
     </li>
   </modDependencies>
   <incompatibleWith>
+    <!-- Clean Architect Tabs has been merged into this mod. Both define the Research, Space and
+         UnifiedStorage categories plus the ArchitectTabHider research, so loading both means four
+         duplicate defName errors and an architect panel built from whichever won.
+
+         Declared rather than left to chance so RimWorld says so in the mod list, at the moment the
+         player can still act on it, rather than leaving them to work it out from the log. -->
+    <li>Gideon.CleanArchitect</li>
   </incompatibleWith>
-  <loadAfter />
+  <loadAfter>
+    <!-- Storage mods whose categories the architect patches fold into UnifiedStorage.
+
+         Every def from every mod is loaded before any patch runs, so this is not about being able to
+         see their categories: it is about running after their own patches, which may themselves be
+         moving things between categories. Losing that race means repointing a def they then repoint
+         back. -->
+    <li>adaptive.storage.framework</li>
+    <li>adaptive.primitivestorage</li>
+    <li>adaptive.simplestorage</li>
+    <li>danifox.adaptiveoldsimplestorage</li>
+    <li>asf.deepstorage</li>
+    <li>reel.expanded.storage</li>
+    <li>lwm.deepstorage</li>
+    <li>ketaros.cratestorages</li>
+    <li>eeg.moxasf</li>
+    <li>dankpyon.medieval.overhaul</li>
+    <li>silkcircuit.multimaplinkedstorage</li>
+    <li>gideon.simplestorage</li>
+
+    <!-- Gravship and Odyssey content mods, for the same reason, feeding the Space category. -->
+    <li>als.gravtech</li>
+    <li>als.anomalygravship</li>
+    <li>mrhydralisk.complementaryodyssey</li>
+  </loadAfter>
 </ModMetaData>

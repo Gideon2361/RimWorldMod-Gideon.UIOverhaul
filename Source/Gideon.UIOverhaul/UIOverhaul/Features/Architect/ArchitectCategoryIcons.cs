@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -89,7 +90,15 @@ namespace Gideon.UIOverhaul.Features.Architect
 
         static ArchitectCategoryIcons()
         {
-            Fallback = ContentFinder<Texture2D>.Get(IconFolder + "CategoryFallback", false);
+            try
+            {
+                Fallback = ContentFinder<Texture2D>.Get(IconFolder + "CategoryFallback", false);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("Architect.LoadFallbackIcon", ex,
+                    "Architect categories with no icon of their own draw without one.");
+            }
         }
 
         /// <summary>

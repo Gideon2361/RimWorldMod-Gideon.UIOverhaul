@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Options;
 using HarmonyLib;
 using RimWorld;
@@ -42,8 +43,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce("[Gideon.UIOverhaul] The button bar failed to draw; falling back to the "
-                              + "vanilla bar.\n" + ex, 0x17C0_10B4);
+                UIGuard.Report("ButtonBar.Draw", ex,
+                    "The vanilla button bar is back for the rest of the session, so a customized layout, "
+                    + "hidden tabs and widgets are all ignored until the game is restarted.");
                 Failed = true;
                 return true;
             }
@@ -177,12 +179,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         }
 
         /// <summary>
-        /// One widget: a sunken tray with the widget's own content in it.
+        /// One widget: a sunken tray with the widget's own content in it, under a rule along the top edge.
         ///
         /// The tray is painted here rather than by each worker, so every widget -- ours and any a mod adds --
-        /// sits in the same frame. Sunken and without the accent rule the tab buttons carry, because a
-        /// readout is not something you press and should not look like one. The controls a widget draws
-        /// inside its tray are raised in the usual way, so within one slot the distinction still reads.
+        /// sits in the same frame. Sunken, because a readout is not something you press; the controls a
+        /// widget draws inside its tray are raised in the usual way, so within one slot the distinction still
+        /// reads.
+        ///
+        /// <b>The rule is gray unless the widget opens something.</b> Every slot on the bar gets a rule so the
+        /// strip has one continuous top edge rather than rules that stop and start, but the color still
+        /// carries the same meaning it does on a tab: accent means "this leads somewhere". A readout leads
+        /// nowhere and takes the disabled gray, and so do the speed controls, which handle clicks but only
+        /// ever act on themselves. <see cref="UIBarWidgetWorker.OpensMenu"/> is what earns the accent.
         /// </summary>
         private static void DrawWidgetSlot(Rect slot, UIButtonBarEntry entry, UIColorPaletteDef palette)
         {
@@ -191,6 +199,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 return;
 
             Widgets.DrawBoxSolid(slot, palette.SurfaceSunken);
+
+            Widgets.DrawBoxSolid(
+                new Rect(slot.x, slot.y, slot.width, UIButtonBarRenderer.AccentRuleHeight),
+                worker.OpensMenu ? palette.Accent : palette.TextDisabled);
 
             worker.DrawSafely(slot, palette);
 

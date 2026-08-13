@@ -1,5 +1,6 @@
-using Gideon.UIFramework.Controls;
+﻿using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -113,6 +114,12 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("GrowZones.AddBillDialog", inRect, () => DrawContents(inRect),
+                "The add-bill dialog shows a failure notice; bills already on the zone are unaffected.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             // Chrome fill for the whole window; the header, the outer border and the gutter between
             // the panels are all just this showing through.
@@ -292,7 +299,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 $"Coldest temperature it will grow in.\nBelow this it stops growing and may die.");
             x += wMin;
 
-            StatPair(x, wideRowY, wIdeal, GzpTex.IdealTemp, $"{idealLow}–{idealHigh}",
+            StatPair(x, wideRowY, wIdeal, GzpTex.IdealTemp, $"{idealLow}â€“{idealHigh}",
                 $"Grows fastest between {idealLow} and {idealHigh}.\n"
                 + $"Full range: {coldest} to {hottest}.");
             x += wIdeal;

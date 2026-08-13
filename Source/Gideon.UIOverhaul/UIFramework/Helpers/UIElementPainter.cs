@@ -46,8 +46,9 @@ namespace Gideon.UIFramework.Helpers
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce($"[Gideon.UIFramework] {what} failed to draw; falling back to vanilla "
-                              + "for every restyled UI element.\n" + ex, 0x17C0_10B1);
+                UIGuard.Report("Framework.Paint." + what, ex,
+                    "Every restyled UI element -- buttons, checkboxes, radio buttons, option rows and window "
+                    + "backgrounds -- goes back to its vanilla look for the rest of the session.");
                 Failed = true;
                 return true;
             }

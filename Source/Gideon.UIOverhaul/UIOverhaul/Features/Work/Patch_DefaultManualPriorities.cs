@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -18,10 +19,18 @@ namespace Gideon.UIOverhaul.Features.Work
     [HarmonyPatch(typeof(Game), nameof(Game.InitNewGame))]
     public static class Patch_Game_InitNewGame
     {
+        /// <summary>
+        /// Guarded on principle rather than because a way for it to throw is known: the null check covers the one
+        /// hazard here, and InitNewGame is a place where an escape means a new colony that cannot be started.
+        /// </summary>
         public static void Postfix()
         {
-            if (Current.Game?.playSettings != null)
-                Current.Game.playSettings.useWorkPriorities = true;
+            UIGuard.Try("Work.DefaultManualPriorities", () =>
+            {
+                if (Current.Game?.playSettings != null)
+                    Current.Game.playSettings.useWorkPriorities = true;
+            }, "A new colony starts with manual work priorities switched off. It can be turned on from the "
+               + "bottom-right toggle.");
         }
     }
 }

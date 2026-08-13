@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -44,6 +44,12 @@ namespace Gideon.UIOverhaul.Features.Options
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("Options.Window", inRect, () => DrawContents(inRect),
+                "The settings window shows a failure notice; settings already saved are unaffected.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;

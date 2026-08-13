@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using RimWorld;
@@ -64,6 +65,12 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("ButtonBar.IconPicker", inRect, () => DrawContents(inRect),
+                "The icon picker shows a failure notice; the tab keeps whichever icon it already had.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             Widgets.DrawBoxSolid(inRect, palette.WindowBackground);

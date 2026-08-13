@@ -54,7 +54,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
         static TimeAssignmentColors()
         {
-            Apply();
+            UIGuard.Try("Pawns.RecolorSchedule", Apply,
+                "Schedule assignments keep their vanilla colors.");
         }
 
         /// <summary>

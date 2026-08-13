@@ -1,3 +1,5 @@
+using System;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -27,8 +29,14 @@ namespace Gideon.UIOverhaul.Features.GrowZones
 
         public Zone_GrowingPlus Zone => billStack?.billGiver as Zone_GrowingPlus;
 
-        public override string Label =>
-            plantDef == null ? "Grow (missing plant)" : $"Grow {plantDef.label}";
+        /// <summary>
+        /// Guarded because vanilla's bill UI reads this while drawing, and a null plant def is not the only way a
+        /// def reference can go wrong -- a mod removed mid-save leaves one that resolves to an object whose label
+        /// throws.
+        /// </summary>
+        public override string Label => UIGuard.Try("GrowZones.BillLabel",
+            () => plantDef == null ? "Grow (missing plant)" : $"Grow {plantDef.label}",
+            "Grow (unreadable plant)");
 
         /// <summary>Copy/paste shares one global clipboard with workbench bills, so a grow bill
         /// could be pasted onto a worktable. Disabled until the tab owns its own copy path.</summary>
@@ -36,16 +44,18 @@ namespace Gideon.UIOverhaul.Features.GrowZones
 
         public override bool CompletableEver => repeatMode != BillRepeatModeDefOf.Forever;
 
-        protected override string StatusString
+        /// <summary>
+        /// Guarded because it counts colony stock, which is a good deal more than a field read, and because vanilla
+        /// asks for it while drawing the bill.
+        /// </summary>
+        protected override string StatusString => UIGuard.Try("GrowZones.BillStatus", () =>
         {
-            get
-            {
-                if (repeatMode == BillRepeatModeDefOf.Forever || plantDef == null)
-                    return null;
-                Zone_GrowingPlus zone = Zone;
-                return zone == null ? null : $"{CurrentCountCached(zone)} / {targetCount}";
-            }
-        }
+            if (repeatMode == BillRepeatModeDefOf.Forever || plantDef == null)
+                return null;
+
+            Zone_GrowingPlus zone = Zone;
+            return zone == null ? null : $"{CurrentCountCached(zone)} / {targetCount}";
+        }, null, "A bill shows no progress figure. The bill itself still runs normally.");
 
         protected override float StatusLineMinHeight => StatusString.NullOrEmpty() ? 0f : 24f;
 
@@ -142,7 +152,33 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             return harvested == null ? 0 : zone.CountPlayerStockOf(harvested, zone.Map);
         }
 
+        /// <summary>
+        /// <b>Guarded, and it answers false when it fails.</b> This is on the sowing path, so a fault here would
+        /// otherwise escape into pawn job assignment.
+        ///
+        /// False rather than true is the deliberate choice: it parks this one bill, leaving the colony working and
+        /// every other bill unaffected. Answering true would let a bill whose target count could not be read sow
+        /// without limit, which is a silent gameplay change rather than a visible missing one.
+        ///
+        /// Written out rather than through <c>UIGuard.Try</c> because this is asked once per bill per work scan, and
+        /// passing a method group as a <c>Func</c> allocates a delegate on every call. A try block that does not
+        /// throw costs nothing.
+        /// </summary>
         public override bool ShouldDoNow()
+        {
+            try
+            {
+                return ShouldDoNowInner();
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("GrowZones.ShouldDoNow", ex,
+                    "This bill is treated as satisfied and nothing is sown for it. Other bills are unaffected.");
+                return false;
+            }
+        }
+
+        private bool ShouldDoNowInner()
         {
             if (suspended || plantDef == null)
                 return false;
@@ -190,25 +226,33 @@ namespace Gideon.UIOverhaul.Features.GrowZones
 
         public List<FloatMenuOption> RepeatModeOptions()
         {
+            // Wrapped because a FloatMenuOption's action runs when the player picks it, from inside the menu's own
+            // drawing -- not from here. There is no frame of ours on that stack, so this is the only place the
+            // guard can be attached.
             List<FloatMenuOption> options = new List<FloatMenuOption>
             {
-                new FloatMenuOption("Grow Forever", () => SetRepeatMode(BillRepeatModeDefOf.Forever))
+                new FloatMenuOption("Grow Forever", UIGuard.Wrap("GrowZones.SetRepeatMode",
+                    () => SetRepeatMode(BillRepeatModeDefOf.Forever),
+                    "The bill keeps the repeat mode it already had."))
             };
 
             bool harvestable = plantDef?.plant != null && plantDef.plant.harvestYield > 0f;
             if (!harvestable)
                 return options;
 
-            options.Add(new FloatMenuOption("Grow Until X",
-                () => SetRepeatMode(BillRepeatModeDefOf.TargetCount)));
+            options.Add(new FloatMenuOption("Grow Until X", UIGuard.Wrap("GrowZones.SetRepeatMode",
+                () => SetRepeatMode(BillRepeatModeDefOf.TargetCount),
+                "The bill keeps the repeat mode it already had.")));
 
             if (plantDef.plant.harvestedThingDef != null &&
                 plantDef.plant.harvestedThingDef.IsNutritionGivingIngestible)
             {
-                options.Add(new FloatMenuOption("Grow If Nutrition < X",
-                    () => SetRepeatMode(GZPDefOf.GZP_NutritionBelow)));
-                options.Add(new FloatMenuOption("Grow If Nutrition From Plants < X",
-                    () => SetRepeatMode(GZPDefOf.GZP_PlantNutritionBelow)));
+                options.Add(new FloatMenuOption("Grow If Nutrition < X", UIGuard.Wrap(
+                    "GrowZones.SetRepeatMode", () => SetRepeatMode(GZPDefOf.GZP_NutritionBelow),
+                    "The bill keeps the repeat mode it already had.")));
+                options.Add(new FloatMenuOption("Grow If Nutrition From Plants < X", UIGuard.Wrap(
+                    "GrowZones.SetRepeatMode", () => SetRepeatMode(GZPDefOf.GZP_PlantNutritionBelow),
+                    "The bill keeps the repeat mode it already had.")));
             }
 
             return options;

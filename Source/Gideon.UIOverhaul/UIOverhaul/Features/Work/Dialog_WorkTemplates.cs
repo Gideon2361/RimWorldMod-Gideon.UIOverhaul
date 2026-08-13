@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -63,17 +63,33 @@ namespace Gideon.UIOverhaul.Features.Work
         /// letter typed. Everything that is not typing -- creating, deleting, applying -- saves as it happens,
         /// so the only thing riding on this is the names.
         /// </summary>
+        /// <summary>
+        /// Guarded because this is where the templates are written to disk, and because RimWorld does not wrap
+        /// window lifecycle methods the way it wraps DoWindowContents. An escape from here would leave
+        /// WindowStack.TryRemove partway through closing the window -- and would lose the renames it was called to
+        /// save without saying so.
+        /// </summary>
         public override void PostClose()
         {
             base.PostClose();
 
-            foreach (WorkPriorityTemplate template in WorkTemplateStore.Templates)
-                template.name = WorkTemplateStore.UniqueName(template.name, template);
+            UIGuard.Try("Work.SaveTemplates", () =>
+            {
+                foreach (WorkPriorityTemplate template in WorkTemplateStore.Templates)
+                    template.name = WorkTemplateStore.UniqueName(template.name, template);
 
-            WorkTemplateStore.Save();
+                WorkTemplateStore.Save();
+            }, "Template names renamed in this session were not saved. Everything else about the templates was "
+               + "saved as it happened.");
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("Work.TemplatesWindow", inRect, () => DrawContents(inRect),
+                "The templates window shows a failure notice; saved templates are unaffected.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 

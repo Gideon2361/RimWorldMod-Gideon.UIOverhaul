@@ -1,4 +1,5 @@
 using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using Verse;
 
@@ -25,9 +26,20 @@ namespace Gideon.UIFramework.Patches.UIElements
     [HarmonyPatch(typeof(WindowStack), nameof(WindowStack.AnySearchWidgetFocused), MethodType.Getter)]
     public static class Patch_WindowStack_AnySearchWidgetFocused
     {
+        /// <summary>
+        /// Guarded because this getter is consulted before every key binding in the game fires. An escape from here
+        /// would surface as a key press failing, not as a UI fault -- and it would do it several times a frame.
+        ///
+        /// False on failure, which is what the result already was: key bindings keep working, and our text boxes lose
+        /// their protection from them rather than the game losing its keyboard.
+        /// </summary>
         public static void Postfix(ref bool __result)
         {
-            if (!__result && UITextBoxControl.AnyFocused)
+            if (__result)
+                return;
+
+            if (UIGuard.Try("Framework.AnyTextBoxFocused", () => UITextBoxControl.AnyFocused, false,
+                    "Key bindings may fire while typing in one of this mod's text boxes."))
                 __result = true;
         }
     }

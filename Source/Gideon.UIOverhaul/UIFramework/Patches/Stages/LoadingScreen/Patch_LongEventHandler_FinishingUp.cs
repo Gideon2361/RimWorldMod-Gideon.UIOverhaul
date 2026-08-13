@@ -1,3 +1,5 @@
+using System;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
 using HarmonyLib;
 using Verse;
@@ -42,10 +44,22 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         ///
         /// The step line is cleared, because whatever it last said belonged to the previous phase.
         /// </summary>
+        /// <summary>
+        /// Guarded because of what this method is: the queue that finishes loading every mod's content. An escape
+        /// from here stops the remaining callbacks running, and a load that stops there leaves textures unbuilt.
+        /// A label is not worth that.
+        /// </summary>
         public static void Prefix()
         {
-            if (LongEventHandler.AnyEventNowOrWaiting)
-                UILoadingScreen.Report("Finishing up", string.Empty, 0.998f);
+            try
+            {
+                if (LongEventHandler.AnyEventNowOrWaiting)
+                    UILoadingScreen.Report("Finishing up", string.Empty, 0.998f);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("LoadingScreen.FinishingUp", ex);
+            }
         }
     }
 }

@@ -22,11 +22,26 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
     /// </summary>
     public class UIBarWidget_TimeSpeed : UIBarWidgetWorker
     {
-        /// <summary>Width of one speed button.</summary>
-        private const float ButtonWidth = 30f;
+        /// <summary>
+        /// Width of one speed button.
+        ///
+        /// 26 rather than 30. At 30 the four buttons filled the tray almost edge to edge and read as a block
+        /// rather than as four controls sitting in a frame; the tray is meant to be visible around them.
+        /// </summary>
+        private const float ButtonWidth = 26f;
 
-        /// <summary>Inset from the tray on all sides.</summary>
+        /// <summary>Inset from the tray at the sides and the bottom.</summary>
         private const float Pad = 3f;
+
+        /// <summary>
+        /// Inset from the top of the tray, which is more than <see cref="Pad"/> because the bar paints its
+        /// accent rule across the first few pixels of every slot.
+        ///
+        /// Taken off the renderer's own constant rather than written as a number, so the buttons keep clear of
+        /// the rule if its thickness ever changes. At a plain <see cref="Pad"/> they began exactly where the
+        /// rule ended and appeared welded to it.
+        /// </summary>
+        private static float TopInset => UIButtonBarRenderer.AccentRuleHeight + Pad;
 
         /// <summary>Thickness of the rule under the speed that is in effect.</summary>
         private const float RuleHeight = 2f;
@@ -58,8 +73,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
             // would light up "normal" while the colony sat still.
             TimeSpeed active = ticks.ForcePaused ? TimeSpeed.Paused : ticks.CurTimeSpeed;
 
-            float height = rect.height - Pad * 2f;
-            float y = rect.y + Pad;
+            float height = Mathf.Max(1f, rect.height - TopInset - Pad);
+            float y = rect.y + TopInset;
 
             // Centered rather than left-aligned, so a tray wider than the buttons (a widget cannot shrink
             // below its high-water width) keeps them in the middle of it instead of leaving all the slack
