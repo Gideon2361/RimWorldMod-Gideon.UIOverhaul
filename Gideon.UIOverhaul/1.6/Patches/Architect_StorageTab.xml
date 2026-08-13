@@ -1,0 +1,81 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Folds storage mods' own architect categories into UnifiedStorage.
+
+       Every storage mod adds a category holding its shelves, so running three of them means three
+       nearly identical tabs. This collects them.
+
+       <b>Each mod gets its own conditional block, and every block is optional.</b> A player with none
+       of these installed gets a UnifiedStorage category with nothing in it, which RimWorld does not
+       draw. A player with one gets one tab instead of two. Adding support for another storage mod
+       means another block on the same pattern plus its packageId in About.xml's loadAfter.
+
+       <b>Emptied categories are hidden, never removed.</b> Both of these used to be removed once their
+       contents had been repointed, on the reasoning that nothing was left naming them. That reasoning
+       only covers the mods present when the patch was written. A submod or a third-party patch loaded
+       afterwards that names one of these categories finds it gone, which is an unresolved reference and a
+       def error in someone else's mod caused by this one. Hiding keeps the reference resolvable.
+
+       <b>Hiding uses this mod's own hidden field</b>, added to DesignationCategoryDef by
+       ArchitectCategoryVisibility. Clean Architect did it by naming an unreachable research project as
+       the category's researchPrerequisites, and that never worked: an invisible category is not left off
+       the architect panel, it is drawn greyed out with a click that answers "Nothing available in
+       category". The field takes the category out of the panel's list, which is what actually hides it.
+
+       That older mechanism is still shipped, as ArchitectTabHider, for anything that referenced it.
+       Nothing here uses it any more.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <success>Normal</success>
+    <operations>
+
+      <!-- Adaptive Storage Framework -->
+      <li Class="PatchOperationConditional">
+        <xpath>Defs[DesignationCategoryDef/defName="ASFstorage"]</xpath>
+
+        <match Class="PatchOperationSequence">
+          <success>Normal</success>
+          <operations>
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef/designationCategory[text()="ASFstorage"]/text()</xpath>
+              <value>UnifiedStorage</value>
+            </li>
+
+            <li Class="PatchOperationAdd">
+              <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]</xpath>
+              <value>
+                <hidden>true</hidden>
+              </value>
+            </li>
+          </operations>
+        </match>
+      </li>
+
+      <!-- LWM's Deep Storage -->
+      <li Class="PatchOperationConditional">
+        <xpath>Defs[DesignationCategoryDef/defName="LWM_DS_Storage"]</xpath>
+
+        <match Class="PatchOperationSequence">
+          <operations>
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef/designationCategory[text()="LWM_DS_Storage"]/text()</xpath>
+              <value>UnifiedStorage</value>
+            </li>
+
+            <li Class="PatchOperationAdd">
+              <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]</xpath>
+              <value>
+                <hidden>true</hidden>
+              </value>
+            </li>
+          </operations>
+        </match>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

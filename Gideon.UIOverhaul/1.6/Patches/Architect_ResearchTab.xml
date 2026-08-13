@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Moves the research benches into the Research category.
+
+       Vanilla files all three under Misc, which is also where it puts tool cabinets, hoppers and
+       flatscreen televisions. Three benches is enough to be worth its own tab, and Misc is the
+       category people scroll looking for something else.
+
+       Not conditional: these are Core ThingDefs and are always present. A PatchOperationReplace that
+       finds nothing logs an error, which is the right outcome here because it would mean the game
+       renamed a bench and this patch needs revisiting.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <success>Normal</success>
+    <operations>
+
+      <li Class="PatchOperationReplace">
+        <xpath>Defs/ThingDef[defName="MultiAnalyzer"]/designationCategory/text()</xpath>
+        <value>Research</value>
+      </li>
+
+      <li Class="PatchOperationReplace">
+        <xpath>Defs/ThingDef[defName="HiTechResearchBench"]/designationCategory/text()</xpath>
+        <value>Research</value>
+      </li>
+
+      <li Class="PatchOperationReplace">
+        <xpath>Defs/ThingDef[defName="SimpleResearchBench"]/designationCategory/text()</xpath>
+        <value>Research</value>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

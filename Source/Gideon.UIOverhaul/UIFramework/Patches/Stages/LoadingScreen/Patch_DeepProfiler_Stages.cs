@@ -1,3 +1,5 @@
+using System;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
 using HarmonyLib;
 using Verse;
@@ -23,8 +25,20 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         /// </summary>
         public static void Prefix(string label)
         {
-            if (LongEventHandler.AnyEventNowOrWaiting)
-                Gideon.UIFramework.Stages.UILoadingScreen.PushStage(label);
+            // Written out rather than routed through UIGuard.Try for the same reason as the def counter: this is
+            // called thousands of times per load and a closure per call would be waste. DeepProfiler brackets
+            // essentially everything, so an escape from here would surface as a failure in whatever unrelated
+            // system happened to be profiling at the time -- which is exactly the kind of report that gets filed
+            // against the wrong mod.
+            try
+            {
+                if (LongEventHandler.AnyEventNowOrWaiting)
+                    Gideon.UIFramework.Stages.UILoadingScreen.PushStage(label);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("LoadingScreen.PushStage", ex);
+            }
         }
     }
 
@@ -33,8 +47,15 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     {
         public static void Prefix()
         {
-            if (LongEventHandler.AnyEventNowOrWaiting)
-                Gideon.UIFramework.Stages.UILoadingScreen.PopStage();
+            try
+            {
+                if (LongEventHandler.AnyEventNowOrWaiting)
+                    Gideon.UIFramework.Stages.UILoadingScreen.PopStage();
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("LoadingScreen.PopStage", ex);
+            }
         }
     }
 }

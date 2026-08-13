@@ -1,4 +1,5 @@
 using System;
+using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -37,8 +38,8 @@ namespace Gideon.UIOverhaul.Features.Work
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce("[Gideon.UIOverhaul] The work tab failed to draw; falling back to the vanilla "
-                              + "table.\n" + ex, 0x17C0_10C2);
+                UIGuard.Report("Work.Draw", ex,
+                    "The work tab falls back to vanilla's table for the rest of the session.");
                 Failed = true;
                 return true;
             }
@@ -55,10 +56,19 @@ namespace Gideon.UIOverhaul.Features.Work
     [HarmonyPatch(typeof(MainTabWindow_PawnTable), "get_RequestedTabSize")]
     public static class Patch_MainTabWindow_PawnTable_RequestedTabSize
     {
+        /// <summary>
+        /// Guarded because the size is measured rather than constant, and measuring means reading fonts and def
+        /// lists. __result keeps vanilla's value if that fails, so the tab opens at the wrong size instead of not
+        /// opening.
+        /// </summary>
         public static void Postfix(MainTabWindow_PawnTable __instance, ref Vector2 __result)
         {
-            if (!Patch_MainTabWindow_Work.Failed && __instance is MainTabWindow_Work)
-                __result = new Vector2(WorkPanel.WindowWidth, WorkPanel.WindowHeight);
+            if (Patch_MainTabWindow_Work.Failed || !(__instance is MainTabWindow_Work))
+                return;
+
+            __result = UIGuard.Try("Work.TabSize",
+                () => new Vector2(WorkPanel.WindowWidth, WorkPanel.WindowHeight), __result,
+                "The work tab opens at vanilla's size.");
         }
     }
 }

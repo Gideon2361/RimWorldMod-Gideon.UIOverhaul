@@ -740,6 +740,137 @@ Two things worth knowing, both checked against the game rather than assumed:
 - **It closes without the tab-close sound**, because the designator's own activate sound has already played and
   the two together read as two clicks for one action.
 
+### Categories are consolidated
+
+**This is a change from vanilla**, and it is pure XML: `1.6/Defs/ArchitectCategories.xml` plus three patches in
+`1.6/Patches`. It works with the architect redesign above switched off, and it was a separate mod until now —
+*Gideon's Clean Architect Tabs*, merged in and declared `incompatibleWith` so the two can never load together.
+
+Three categories are added and the buildings that belong in them are moved across:
+
+| Category | `defName` | Collects | Condition |
+|---|---|---|---|
+| Research | `Research` | The three research benches, which vanilla files under Misc | Always |
+| Space | `Space` | Odyssey's category, vanilla's Ship category, the orbital trade beacon and the comms console | Only with Odyssey |
+| Storage | `UnifiedStorage` | Any category whose `defName` contains "storage", plus the vanilla shelves and bookcases | Per mod, if installed |
+
+The complaint being answered is that a fresh install with a few content mods produces a column of tabs holding
+two or three things each, where finding a shelf means first remembering which mod supplied it.
+
+**A category emptied this way is hidden, never deleted.** RimWorld skips drawing a category with no designators
+at all, but some keep one regardless — a mod may add a designator directly, and both Odyssey and Ship list
+special designator classes of their own — so emptying is not enough on its own.
+
+Deleting the `DesignationCategoryDef` would be enough, and it is the wrong tool. Every def in the game as
+shipped has been repointed by then, so nothing in the base game breaks; but a mod loaded *after* this one that
+adds a building to the Ship category is naming something that no longer exists, which is an unresolved reference
+and a def error in someone else's mod caused by this one. Hiding keeps the reference resolvable, so all four
+categories — Odyssey, Ship, ASF's and LWM's — are marked `<hidden>true</hidden>` instead.
+
+Nothing in the base game depends on their removal either way: `DesignationCategoryDefOf` names only `Production`,
+`Floors` and `Zone`, so no DefOf resolution breaks, and no vanilla code looks either category up by name.
+
+**What hiding costs**, stated plainly: a mod that adds buildings to one of those categories after this patch runs
+puts them somewhere the player cannot open, where removal would at least have produced a loud error. The gap is
+recoverable by disabling this mod; a def error in someone else's content is not recoverable by anyone but its
+author.
+
+### Storage is swept up generically
+
+`Architect_StorageTab.xml` names Adaptive Storage Framework and LWM's Deep Storage. `Architect_StorageSweep.xml`
+is the general net: it repoints anything filed in a category whose `defName` contains "storage",
+case-insensitively, and hides those categories afterwards. `UnifiedStorage` is excluded from both halves, or the
+sweep would hide the category it is feeding.
+
+**It matches on `defName`, not on label, and that is a deliberate limitation.** Label would be the better test of
+intent — a category labelled "Storage" is what a player reads as a storage tab, and nothing stops a mod pairing
+that label with a `defName` like `Containers`. But moving the contents means rewriting every `designationCategory`
+whose *value* is the old `defName`, and no single XPath can select categories by label and then use whatever
+matched to filter a different set of nodes. Matching the label would let the sweep hide a category whose contents
+it had no way to move, which is worse than not touching it at all: those buildings would still exist, still be
+filed there, and now be unreachable. So both halves test the same thing, and a storage category named something
+else is left alone — a visible gap rather than a broken one.
+
+### The vanilla shelves and bookcases
+
+`Shelf`, `ShelfSmall`, `Bookcase` and `BookcaseSmall` move too, via `Architect_StorageShelves.xml`. They are not
+in a storage category to begin with — they are Furniture — so the sweep above would never have caught them.
+
+**Why the obvious patch for this fails**, since it is a trap worth recording: none of those four defs has a
+`designationCategory` element at all. It is declared exactly once in the chain, on `FurnitureBase`:
+
+```
+FurnitureBase   designationCategory: Furniture
+  ShelfBase
+    StorageShelfBase       Shelf, ShelfSmall
+    BookcaseBase           Bookcase, BookcaseSmall
+```
+
+A `PatchOperationReplace` on `Defs/ThingDef[defName="Bookcase"]/designationCategory` therefore selects **nothing**.
+RimWorld reports the operation as failed and the bookcase does not move. The value the game ends up using is
+inherited, and inheritance is resolved after patching, so at patch time the element genuinely is not there.
+
+`PatchOperationAdd` is what works: an element on the child overrides what it would have inherited.
+
+**`ShelfBase` is deliberately not patched**, even though it would catch modded shelves for free. Everything else
+deriving from it declares its own category and would be unaffected, but two things inherit — an abstract weapon
+rack base and a food spot from another mod. A food spot is not storage. Modded shelves are the sweep's job, where
+the test is what a category calls itself rather than what a def happens to inherit from.
+
+### `<hidden>` on a category def
+
+**This adds a field to a vanilla def.** Any `DesignationCategoryDef` can be marked hidden from XML, and the
+category is then left off the architect panel entirely:
+
+```xml
+<li Class="PatchOperationAdd">
+  <xpath>Defs/DesignationCategoryDef[defName="Ship"]</xpath>
+  <value>
+    <hidden>true</hidden>
+  </value>
+</li>
+```
+
+`<hidden>false</hidden>` is meaningful too: it un-hides a category a mod loaded earlier had hidden, which is the
+only way to override that decision from XML.
+
+**It is not a real field, because it cannot be.** `DesignationCategoryDef` is compiled into Assembly-CSharp, and
+.NET cannot add an instance field to a loaded type — Harmony rewrites method bodies, not object layouts. So
+`ArchitectCategoryVisibility` reads the value out of the unified XML document in a prefix on
+`LoadedModManager.ParseAndProcessXML`, keeps it in a set of its own, and removes the node so vanilla's loader
+never reports it as an unrecognized field. To an XML author the difference does not show.
+
+Reading it there, rather than earlier, is what makes it work on other mods' defs: `LoadAllActiveMods` runs
+`ApplyPatches` before `ParseAndProcessXML`, so by then every patch from every mod has been applied.
+
+Two limits follow from that timing:
+
+- **Set it on the concrete def.** XML inheritance is resolved after this runs, so `<hidden>` on an abstract
+  parent never reaches its children.
+- **It is a load-time value.** Nothing can flip it while a game is running.
+
+**Why this replaced the research trick.** The previous way to hide a category, inherited from Clean Architect,
+was to name an unreachable research project as its `researchPrerequisites` — `ArchitectTabHider`, still shipped in
+`1.6/Defs/ArchitectTabHider.xml` for anything that referenced it, and no longer used here. That never actually
+hid anything. An invisible category is **not** left off vanilla's architect: `MainTabWindow_Architect` iterates
+every entry in its cached list and passes `Visible` as the button's *enabled* flag, so the tab still draws, greyed,
+and a click answers "Nothing available in category".
+
+So `<hidden>` works at the list instead, in a postfix on `CacheDesPanels`. That list is the right seam because
+everything reads it — vanilla's button loop, its `WinHeight`, its search state, and this mod's own panel, which
+reads the same private field rather than building a second list. Removing an entry hides the category in both
+panels and shrinks the window to suit. A postfix on `Visible` goes alongside it, so the combined "everything at
+once" view and anything else written against that property agree; without it a hidden category would keep feeding
+designators into searches while having no button of its own.
+
+Unlike vanilla's uses of `Visible`, **god mode does not reveal a hidden category**. God mode reveals what
+progression has locked, and this is an authoring decision about what the panel contains, not progression.
+
+**Icons are matched on `defName`, not on label.** Worth stating because they differ here deliberately: the
+storage category is `UnifiedStorage` labelled "Storage", so its art is `UnifiedStorage.png`. Naming that file for
+the label is a mistake with no error to explain it — the category simply falls through to a borrowed designator
+icon or the placeholder.
+
 ### The pause menu is called "Pause Menu"
 
 Vanilla's `Menu` tab is labelled just "menu". That was unambiguous on a bar where nothing else could be

@@ -1,4 +1,5 @@
-using Gideon.UIFramework.Controls;
+﻿using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -34,16 +35,32 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
         protected override float Margin => 0f;
 
+        /// <summary>
+        /// Guarded because window lifecycle methods are not: RimWorld wraps DoWindowContents and nothing else, so
+        /// an exception here would escape into WindowStack.Add partway through opening the window -- leaving a
+        /// window on the stack that never finished being set up.
+        /// </summary>
         public override void PostOpen()
         {
             base.PostOpen();
-            // Fresh figures the moment the tab appears, and it releases zones deleted since the
-            // last time it was open.
-            GrowZoneStatusCache.Clear();
-            scroll = Vector2.zero;
+
+            UIGuard.Try("GrowZones.TabOpen", () =>
+            {
+                // Fresh figures the moment the tab appears, and it releases zones deleted since the
+                // last time it was open.
+                GrowZoneStatusCache.Clear();
+                scroll = Vector2.zero;
+            }, "The growing zones tab may show figures cached from the last time it was open.");
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("GrowZones.Tab", inRect, () => DrawContents(inRect),
+                "The growing zones tab shows a failure notice. Zones and their bills are unaffected -- they can "
+                + "still be reached through each zone's inspect pane.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             Widgets.DrawBoxSolid(inRect, GzpPalette.BG);
 
@@ -238,7 +255,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             string subtitle = status.Plant == null
                 ? $"{zone.CellCount} cells"
-                : $"{zone.CellCount} cells · {status.PlantCount} planted";
+                : $"{zone.CellCount} cells Â· {status.PlantCount} planted";
             SubLabel(new Rect(r.x, r.y + 28f, r.width - 6f, 20f), subtitle);
         }
 
@@ -270,7 +287,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (bill == null)
             {
                 GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
+                CenteredBarLabel(bar, "â€”", GzpPalette.TextDim);
                 return;
             }
 
@@ -292,7 +309,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (plus == null)
             {
                 GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
+                CenteredBarLabel(bar, "â€”", GzpPalette.TextDim);
                 return;
             }
 
@@ -313,7 +330,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         {
             if (!status.HasTemperature || status.Plant == null)
             {
-                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "—");
+                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "â€”");
                 return;
             }
 
@@ -363,7 +380,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 temp.ToStringTemperature("F0"), color);
 
             SubLabel(new Rect(textX, r.y + 28f, r.xMax - textX - 6f, 20f),
-                $"{props.minGrowthTemperature.ToStringTemperature("F0")} – "
+                $"{props.minGrowthTemperature.ToStringTemperature("F0")} â€“ "
                 + props.maxGrowthTemperature.ToStringTemperature("F0"));
 
             TooltipHandler.TipRegion(r, (TipSignal) tip);
@@ -375,7 +392,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (product == null)
             {
                 SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f),
-                    status.Plant == null ? "—" : "No harvest");
+                    status.Plant == null ? "â€”" : "No harvest");
                 return;
             }
 

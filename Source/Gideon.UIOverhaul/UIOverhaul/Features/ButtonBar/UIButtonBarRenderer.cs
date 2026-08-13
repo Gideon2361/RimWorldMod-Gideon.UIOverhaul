@@ -1,5 +1,7 @@
+﻿using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.Options;
@@ -39,14 +41,22 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         static UIButtonBarRenderer()
         {
-            OptionsIcon = ContentFinder<Texture2D>.Get(OptionsIconPath, false);
-
-            if (OptionsIcon == null)
+            try
             {
-                // Ours to ship, so a miss is a packaging fault rather than anything the player did. The
-                // button still works; it just draws empty.
-                Log.Error($"[Gideon.UIOverhaul] Missing '{OptionsIconPath}'. The bar's UI options button "
-                          + "will have no icon.");
+                OptionsIcon = ContentFinder<Texture2D>.Get(OptionsIconPath, false);
+
+                if (OptionsIcon == null)
+                {
+                    // Ours to ship, so a miss is a packaging fault rather than anything the player did. The
+                    // button still works; it just draws empty.
+                    Log.Error($"[Gideon.UIOverhaul] Missing '{OptionsIconPath}'. The bar's UI options button "
+                              + "will have no icon.");
+                }
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("ButtonBar.LoadOptionsIcon", ex,
+                    "The bar's UI options button draws without its icon. It still opens the settings.");
             }
         }
 
@@ -296,6 +306,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("ButtonBar.Menu", inRect, () => DrawContents(inRect),
+                "This bar menu shows a failure notice. The tabs inside it can still be reached by their "
+                + "keyboard shortcuts.");
+        }
+
+        private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             float y = inRect.y;

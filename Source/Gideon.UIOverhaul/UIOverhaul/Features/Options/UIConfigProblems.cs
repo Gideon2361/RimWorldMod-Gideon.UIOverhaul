@@ -1,5 +1,7 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -76,6 +78,11 @@ namespace Gideon.UIOverhaul.Features.Options
         }
 
         public override void DoWindowContents(Rect inRect)
+        {
+            UIGuardedPanel.Draw("Options.ProblemReport", inRect, () => DrawContents(inRect));
+        }
+
+        private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 

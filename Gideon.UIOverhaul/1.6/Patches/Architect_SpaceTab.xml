@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Collapses Odyssey's category and vanilla's Ship category into one Space category, and adds the
+       two orbital consoles vanilla leaves in Misc.
+
+       <b>The whole thing is conditional on Odyssey being installed.</b> Without it there is no
+       gravship content, so Ship on its own is a reasonable tab and merging two things into one would
+       gain nothing while renaming a category players know. The condition is a test for Odyssey's own
+       DesignationCategoryDef rather than for the DLC being active, because that def is exactly what
+       this needs to exist before it can be emptied.
+
+       <b>Both source categories are hidden, not removed.</b> They used to be removed, and the argument
+       for it was that everything naming them had already been repointed by the operations above, so
+       nothing was left to break. That holds for the defs in the game as shipped. It does not hold for a
+       mod loaded after this one: a mod that adds a building to the Ship category names a category that
+       is no longer there, which is an unresolved reference and a def error in someone else's mod caused
+       by this one. Hiding keeps the reference resolvable.
+
+       Nothing in the base game depends on their removal either way. DesignationCategoryDefOf names only
+       Production, Floors and Zone, so no DefOf resolution breaks, and no vanilla code looks either
+       category up by name.
+
+       <b>What hiding costs.</b> A mod that adds buildings to Odyssey or Ship after this patch runs now
+       puts them in a category the player cannot open, where removal would at least have produced a loud
+       error. That is the trade: a silent gap in one mod's content against a def error in it. The gap is
+       recoverable by the player disabling this mod; the error is not recoverable by anyone but its
+       author.
+
+       Order still matters within the sequence. Repoint first, hide second, so the repointing operations
+       are matching on categories that are still exactly as their authors wrote them.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <success>Normal</success>
+    <operations>
+
+      <li Class="PatchOperationConditional">
+        <xpath>Defs[DesignationCategoryDef/defName="Odyssey"]</xpath>
+
+        <match Class="PatchOperationSequence">
+          <operations>
+
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef/designationCategory[text()="Odyssey"]/text()</xpath>
+              <value>Space</value>
+            </li>
+
+            <!-- TerrainDef as well as ThingDef: gravship platforms and hull flooring are terrain, and
+                 leaving them behind would keep the old category populated and therefore visible. -->
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/TerrainDef[designationCategory[text()="Odyssey"]]/designationCategory/text()</xpath>
+              <value>Space</value>
+            </li>
+
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef/designationCategory[text()="Ship"]/text()</xpath>
+              <value>Space</value>
+            </li>
+
+            <!-- These two replace the whole element rather than its text, because vanilla files them
+                 under Misc and the element has to change value, not just content. Both belong here:
+                 an orbital trade beacon and a comms console are how a colony talks to orbit. -->
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef[defName="OrbitalTradeBeacon"]/designationCategory</xpath>
+              <value>
+                <designationCategory>Space</designationCategory>
+              </value>
+            </li>
+
+            <li Class="PatchOperationReplace">
+              <xpath>Defs/ThingDef[defName="CommsConsole"]/designationCategory</xpath>
+              <value>
+                <designationCategory>Space</designationCategory>
+              </value>
+            </li>
+
+            <li Class="PatchOperationAdd">
+              <xpath>Defs/DesignationCategoryDef[defName="Odyssey"]</xpath>
+              <value>
+                <hidden>true</hidden>
+              </value>
+            </li>
+
+            <li Class="PatchOperationAdd">
+              <xpath>Defs/DesignationCategoryDef[defName="Ship"]</xpath>
+              <value>
+                <hidden>true</hidden>
+              </value>
+            </li>
+
+          </operations>
+        </match>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

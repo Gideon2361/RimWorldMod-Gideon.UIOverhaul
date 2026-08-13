@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Finds every architect category that calls itself storage and folds its contents into
+       UnifiedStorage, whichever mod supplied it.
+
+       This is the general net. Architect_StorageTab.xml handles Adaptive Storage Framework and LWM's
+       Deep Storage by name, and this catches everything else without needing a block per mod.
+
+       <b>Matched on defName, not on label, and that is the important decision here.</b> Label would be
+       the better test of intent: a category labelled "Storage" is what a player reads as a storage tab,
+       and a mod is free to label one that way with a defName like Containers.
+
+       It cannot be used, because of what a patch operation can and cannot do. Moving the contents means
+       rewriting every designationCategory whose value is the old category's defName, and there is no way
+       in a single XPath to select categories by their label and then use the defNames of whatever
+       matched to filter a different set of nodes. Matching the label would let this hide a category
+       whose contents it had no way to move, which is strictly worse than not touching it: the buildings
+       would still exist, still be filed there, and now be unreachable.
+
+       So both halves match on the same thing, and a storage category named something else is simply
+       left alone. That is a visible gap rather than a broken one.
+
+       <b>UnifiedStorage is excluded from both halves.</b> Its own defName contains "storage", so without
+       the exclusion the second operation would hide the very category this mod adds.
+
+       The translate() call is the standard XPath trick for a case-insensitive contains: XPath 1.0 has no
+       lower-case function, so the seven letters of "storage" are mapped from upper to lower before the
+       test. It matches any mixture of case in those letters, which is all this needs.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <!-- Always, not Normal. A game with no storage mods installed matches nothing here, and that is the
+         expected outcome rather than a failure worth a line in the log. -->
+    <success>Always</success>
+    <operations>
+
+      <!-- Buildings. -->
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/ThingDef/designationCategory[contains(translate(text(),'STORAGE','storage'),'storage') and text()!='UnifiedStorage']</xpath>
+        <match Class="PatchOperationReplace">
+          <xpath>Defs/ThingDef/designationCategory[contains(translate(text(),'STORAGE','storage'),'storage') and text()!='UnifiedStorage']/text()</xpath>
+          <value>UnifiedStorage</value>
+        </match>
+      </li>
+
+      <!-- Terrain, for the same reason the Space patch handles it: a mod may file a storage floor or
+           platform as terrain, and leaving it behind keeps the old category populated. -->
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/TerrainDef/designationCategory[contains(translate(text(),'STORAGE','storage'),'storage') and text()!='UnifiedStorage']</xpath>
+        <match Class="PatchOperationReplace">
+          <xpath>Defs/TerrainDef/designationCategory[contains(translate(text(),'STORAGE','storage'),'storage') and text()!='UnifiedStorage']/text()</xpath>
+          <value>UnifiedStorage</value>
+        </match>
+      </li>
+
+      <!-- Then hide what has just been emptied.
+
+           not(hidden) keeps this from adding a second hidden element to a category one of the targeted
+           patches has already marked. The field's reader tolerates duplicates and takes the last, so
+           this is not load bearing, but a def carrying the same element twice is untidy and would
+           mislead anyone reading the patched XML. -->
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/DesignationCategoryDef[contains(translate(defName,'STORAGE','storage'),'storage') and defName!='UnifiedStorage' and not(hidden)]</xpath>
+        <match Class="PatchOperationAdd">
+          <xpath>Defs/DesignationCategoryDef[contains(translate(defName,'STORAGE','storage'),'storage') and defName!='UnifiedStorage' and not(hidden)]</xpath>
+          <value>
+            <hidden>true</hidden>
+          </value>
+        </match>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

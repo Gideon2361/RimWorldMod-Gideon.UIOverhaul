@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===========================================================================================
+       A research project that exists to be impossible, so that categories can be hidden by naming it
+       as their prerequisite.
+
+       Merged in from Gideon's Clean Architect Tabs along with the categories it serves.
+
+       <b>Why a research project and not a removal.</b> Emptying a category leaves the category itself
+       behind, and RimWorld only skips drawing one that has no designators at all. Some do keep a
+       designator: a mod may add one directly, or leave a special designator class listed. Deleting
+       the DesignationCategoryDef instead is worse, because any def still naming it in
+       designationCategory then fails to resolve, and that is a def error rather than a tidy tab bar.
+
+       DesignationCategoryDef.researchPrerequisites is the seam. A category whose research is not
+       finished is not shown, and this is a project that cannot be finished: nine million points, and
+       a hidden prerequisite on ShipBasics that puts it outside any normal tech path. So naming it
+       hides the category without removing anything or breaking any reference to it.
+
+       <b>It is reachable in principle, and says so.</b> Dev mode can complete any research, and a
+       player who does that gets the empty categories they asked for plus a letter explaining what
+       they did. That is preferable to a silent hidden project, which reads as a bug to anyone who
+       finds it in the research tree.
+       =========================================================================================== -->
+
+  <ResearchProjectDef ParentName="ShipResearchProjectBase">
+    <defName>ArchitectTabHider</defName>
+    <label>DO NOT RESEARCH</label>
+    <description>This research exists for the sole purpose of hiding extra architect tabs.  If you research it, your architect menu will be messy.</description>
+    <baseCost>9000000</baseCost>
+    <techLevel>Spacer</techLevel>
+    <researchViewX>100.00</researchViewX>
+    <researchViewY>100.00</researchViewY>
+    <discoveredLetterTitle>I WARNED YOU</discoveredLetterTitle>
+    <discoveredLetterText>You researched the forbidden garbage that now clutters your architect tab with empty and useless categories.  This was supposed to be used to prevent RimWorld from showing these unneeded categories, but you wanted them to show, so here they are.</discoveredLetterText>
+    <hiddenPrerequisites>
+      <li>ShipBasics</li>
+    </hiddenPrerequisites>
+  </ResearchProjectDef>
+
+</Defs>

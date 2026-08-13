@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -19,7 +20,22 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             soundSucceeded = SoundDefOf.Designate_ZoneAdd_Growing;
         }
 
+        /// <summary>
+        /// Guarded because this is asked once per cell under the cursor for as long as a zone is being dragged out,
+        /// and because the fertility floor is read from defs another mod could have removed.
+        ///
+        /// Refusing the cell is the fallback. It is the conservative answer: the player sees they cannot draw there
+        /// and can look at the log, where drawing a zone that should have been refused would leave a zone in a place
+        /// nothing supports.
+        /// </summary>
         public override AcceptanceReport CanDesignateCell(IntVec3 c)
+        {
+            return UIGuard.Try("GrowZones.ExpandCanDesignate", () => CanDesignateCellInner(c),
+                (AcceptanceReport) false,
+                "The zone cannot be expanded over the cell under the cursor.");
+        }
+
+        private AcceptanceReport CanDesignateCellInner(IntVec3 c)
         {
             // Checked before the base call, which would otherwise reject on fog, the map-edge
             // buffer or an overlapping thing -- all of which this setting is meant to bypass.
@@ -40,6 +56,14 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             return !(c.GetFertility(Map) < (double) minimumFertility);
         }
 
+        /// <summary>
+        /// <b>Deliberately not guarded, and deliberately not null-checked.</b> The caller registers whatever comes
+        /// back, so handing it a null would only move the failure a few frames deeper into vanilla, where it reads as
+        /// a RimWorld bug rather than one of ours.
+        ///
+        /// Find.CurrentMap cannot be null here in any case: Designator_ZoneAdd dereferences it itself, before this is
+        /// reached. If that ever stops being true the honest failure is the one thrown right here.
+        /// </summary>
         protected override Zone MakeNewZone() => new Zone_GrowingPlus(Find.CurrentMap.zoneManager);
     }
 }

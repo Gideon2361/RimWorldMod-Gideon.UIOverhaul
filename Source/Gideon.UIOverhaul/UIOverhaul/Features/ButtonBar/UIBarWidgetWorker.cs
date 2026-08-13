@@ -1,5 +1,6 @@
 using System;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -60,6 +61,20 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         /// <summary>Override to hide the widget when there is nothing for it to report.</summary>
         protected virtual bool ShouldShow => true;
+
+        /// <summary>
+        /// Whether this widget opens something else when clicked: a menu, a window, a tab.
+        ///
+        /// This decides the color of the rule along the top of the widget's slot, and it is the only thing
+        /// that does. The bar's grammar is that the accent color means "this leads somewhere", so a widget
+        /// that opens a menu earns the accent and everything else takes the disabled gray.
+        ///
+        /// <b>Handling a click is not the same as opening something.</b> The speed controls take clicks all
+        /// day and stay gray, because pressing one changes the speed and nothing else -- the widget only ever
+        /// acts on itself. Answer true only where a click puts something new on screen, or the accent stops
+        /// meaning anything.
+        /// </summary>
+        public virtual bool OpensMenu => false;
 
         /// <summary>The width the bar reserves for this widget, quantized and never shrinking.</summary>
         public float Width
@@ -140,8 +155,11 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         private void Fail(string what, Exception ex)
         {
             broken = true;
-            Log.Error($"[Gideon.UIOverhaul] Bar widget '{def?.defName ?? GetType().Name}' failed to {what} "
-                      + $"and has been switched off for this session.\n{ex}");
+
+            // Keyed by def name, so a mod's widget and ours are counted separately -- and a report says which
+            // widget it was without the reader having to work it out from the stack.
+            UIGuard.Report($"ButtonBar.Widget.{def?.defName ?? GetType().Name}.{what}", ex,
+                "This widget is switched off for the rest of the session. The rest of the bar is unaffected.");
         }
 
         // ---------------------------------------------------------------------------------------

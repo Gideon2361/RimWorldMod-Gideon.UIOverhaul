@@ -25,9 +25,17 @@ namespace Gideon.UIOverhaul.Features.Display
     [StaticConstructorOnStartup]
     public static class StartupFullscreen
     {
+        /// <summary>
+        /// Guarded, and the most worthwhile of the static constructors to guard. <see cref="Apply"/> reads the
+        /// settings file -- disk and XML -- and then changes the screen resolution, which is a good deal more
+        /// exposure than the icon loaders have. A failure here must not leave the type broken for the options page,
+        /// which calls the same method when the box is ticked.
+        /// </summary>
         static StartupFullscreen()
         {
-            Apply();
+            UIGuard.Try("Display.FullscreenOnStartup", Apply,
+                "The game opens at whatever size it was last in. The setting can still be applied from UI "
+                + "options.");
         }
 
         /// <summary>

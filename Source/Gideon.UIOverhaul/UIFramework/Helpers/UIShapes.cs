@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using Verse;
 
@@ -61,11 +62,32 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>Side of the stripe tile in pixels, which is also the distance it repeats over.</summary>
         internal const float StripePitch = 32f;
 
+        /// <summary>
+        /// <b>Guarded, and for a reason particular to static constructors.</b> RimWorld already catches these, so a
+        /// throw does not stop the game loading -- but the CLR then marks the type as failed, and every later read
+        /// of one of these fields throws <c>TypeInitializationException</c> instead of returning a texture. Since
+        /// these are read while drawing, that converts one startup fault into a fault on every frame thereafter.
+        ///
+        /// Catching it here leaves the fields null instead, which the drawing code treats as "no texture" and
+        /// survives.
+        ///
+        /// Written out rather than through <c>UIGuard.Try</c> because these fields are <c>static readonly</c>, and
+        /// C# only allows those to be assigned from the static constructor itself -- a lambda is a different method
+        /// and would not compile. Every static constructor in this mod is written this way for that reason.
+        /// </summary>
         static UIShapes()
         {
-            Disc = BuildDisc(false);
-            DiscCutout = BuildDisc(true);
-            Stripes = BuildStripes();
+            try
+            {
+                Disc = BuildDisc(false);
+                DiscCutout = BuildDisc(true);
+                Stripes = BuildStripes();
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("Framework.BuildShapes", ex,
+                    "Rounded corners, circles and the striped fill are drawn as plain rectangles.");
+            }
         }
 
         /// <param name="inverted">

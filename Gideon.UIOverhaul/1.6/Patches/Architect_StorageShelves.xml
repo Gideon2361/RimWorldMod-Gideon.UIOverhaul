@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Moves the vanilla shelves and bookcases into UnifiedStorage.
+
+       <b>Why every previous attempt at this failed.</b> None of these four defs has a
+       designationCategory element of its own. It is declared exactly once in the whole chain, on
+       FurnitureBase, as "Furniture":
+
+           FurnitureBase   designationCategory: Furniture
+             ShelfBase
+               StorageShelfBase       Shelf, ShelfSmall
+               BookcaseBase           Bookcase, BookcaseSmall
+
+       So the obvious patch, a PatchOperationReplace on
+       Defs/ThingDef[defName="Bookcase"]/designationCategory, selects nothing at all. RimWorld reports the
+       operation as failed and the bookcase does not move. Nothing is wrong with the xpath except that the
+       element it names does not exist on that def: the value the game ends up using is inherited, and
+       inheritance is resolved after patching.
+
+       <b>Add, not Replace.</b> An element added to the child overrides what it would have inherited, so
+       adding designationCategory to the concrete def is what moves it. The conditional Remove before it
+       exists only to keep this correct if a future version of the game starts declaring the element on
+       these defs: adding a second one would leave the def carrying two.
+
+       <b>Why the four defs are listed rather than patching ShelfBase.</b> Patching the shared parent is
+       tempting and would catch modded shelves for free, but it reaches further than it looks. Everything
+       else in the game and in mods that derives from ShelfBase declares its own category and so is
+       unaffected, with two exceptions that inherit: an abstract weapon rack base, and a food spot from
+       another mod. A food spot is not storage, and quietly moving another mod's content is not this
+       patch's business. Modded shelves are handled by Architect_StorageSweep.xml instead, where the test
+       is what the category calls itself rather than what a def happens to inherit from.
+
+       Shelf and ShelfSmall are included alongside the two bookcases. A Storage tab that did not contain
+       the vanilla shelf would be an odd thing to have built.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <success>Normal</success>
+    <operations>
+
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/ThingDef[defName="Shelf" or defName="ShelfSmall" or defName="Bookcase" or defName="BookcaseSmall"]/designationCategory</xpath>
+        <match Class="PatchOperationRemove">
+          <xpath>Defs/ThingDef[defName="Shelf" or defName="ShelfSmall" or defName="Bookcase" or defName="BookcaseSmall"]/designationCategory</xpath>
+        </match>
+      </li>
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/ThingDef[defName="Shelf" or defName="ShelfSmall" or defName="Bookcase" or defName="BookcaseSmall"]</xpath>
+        <value>
+          <designationCategory>UnifiedStorage</designationCategory>
+        </value>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

@@ -23,13 +23,14 @@
        binding, so space and the number keys keep working and cannot disagree with these buttons
        about what the speed is.
 
-       minWidth is the four buttons plus their inset, so this widget never has to measure. -->
+       minWidth is the four buttons plus their inset, so this widget never has to measure. Four 26px
+       buttons and 3px either side comes to 110; it was 126 when the buttons were 30 wide. -->
   <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
     <defName>Gideon_BarWidget_TimeSpeed</defName>
     <label>speed controls</label>
     <description>Pause and the three play speeds. The speed in effect is marked, and a rule appears across the buttons whenever something else is forcing the speed.</description>
     <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_TimeSpeed</workerClass>
-    <minWidth>126</minWidth>
+    <minWidth>110</minWidth>
     <order>10</order>
   </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
 

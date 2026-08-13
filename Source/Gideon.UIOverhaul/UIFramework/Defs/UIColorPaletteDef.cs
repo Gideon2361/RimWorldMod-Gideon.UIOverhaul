@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Components.Colors;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -298,10 +299,21 @@ namespace Gideon.UIFramework.Defs
             }
         }
 
+        /// <summary>
+        /// Guarded even though <c>DefDatabase.ResolveAllReferences</c> catches per def. Vanilla's handler keeps the
+        /// game loading, which is the important part, but it leaves this palette half resolved and says nothing about
+        /// which mod or which theme -- and half a palette is worse than none, because the roles that did resolve look
+        /// deliberate.
+        ///
+        /// Individual bad color strings are already handled inside EnsureResolved, which reports each one by field
+        /// name and substitutes the error color. This is for whatever is not that.
+        /// </summary>
         public override void ResolveReferences()
         {
             base.ResolveReferences();
-            EnsureResolved();
+
+            UIGuard.Try("Framework.ResolvePalette." + (defName ?? "unnamed"), EnsureResolved,
+                "This theme is unusable and anything set to it falls back to the default palette.");
         }
 
         /// <summary>

@@ -1,3 +1,5 @@
+using System;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -34,13 +36,26 @@ namespace Gideon.UIOverhaul.Features.Work
         /// <summary>A clipboard: writes the copied priorities onto the pawn.</summary>
         public static readonly Texture2D Paste;
 
+        /// <summary>
+        /// Guarded like every static constructor here: a missing texture already returns null rather than throwing,
+        /// so this is for the cases that are not a missing texture. Leaving the type initialized with null icons is
+        /// survivable; leaving it failed means the work tab throws when it reaches for a button.
+        /// </summary>
         static WorkToolIcons()
         {
-            Clear = ContentFinder<Texture2D>.Get(Folder + "Clear", false);
-            Save = ContentFinder<Texture2D>.Get(Folder + "SaveTemplate", false);
-            Apply = ContentFinder<Texture2D>.Get(Folder + "ApplyTemplate", false);
-            Copy = ContentFinder<Texture2D>.Get(Folder + "Copy", false);
-            Paste = ContentFinder<Texture2D>.Get(Folder + "Paste", false);
+            try
+            {
+                Clear = ContentFinder<Texture2D>.Get(Folder + "Clear", false);
+                Save = ContentFinder<Texture2D>.Get(Folder + "SaveTemplate", false);
+                Apply = ContentFinder<Texture2D>.Get(Folder + "ApplyTemplate", false);
+                Copy = ContentFinder<Texture2D>.Get(Folder + "Copy", false);
+                Paste = ContentFinder<Texture2D>.Get(Folder + "Paste", false);
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("Work.LoadToolIcons", ex,
+                    "The work tab's tool buttons draw without their icons.");
+            }
         }
     }
 }

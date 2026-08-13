@@ -1,3 +1,5 @@
+﻿using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
 using RimWorld;
 using System.Collections.Generic;
@@ -31,7 +33,21 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             tutorTag = "Bills";
         }
 
+        /// <summary>
+        /// Guarded even though InspectTabBase already wraps FillTab in a <c>Log.ErrorOnce</c>. Vanilla's guard stops
+        /// the flood but leaves the tab blank, with the one report scrolled far up the log by the time anyone looks;
+        /// this one puts the reason on screen where the bills should be.
+        /// </summary>
         protected override void FillTab()
+        {
+            Rect tab = new Rect(0f, 0f, WinSize.x, WinSize.y);
+
+            UIGuardedPanel.Draw("GrowZones.BillsTab", tab, () => DrawContents(),
+                "The bills tab for growing zones shows a failure notice. Existing bills keep running -- this is "
+                + "the tab that edits them, not the zone itself.");
+        }
+
+        private void DrawContents()
         {
             Zone_GrowingPlus zone = SelGrowingZone;
             if (zone == null)

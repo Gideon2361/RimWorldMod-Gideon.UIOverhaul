@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===========================================================================================
+       Consolidated architect categories.
+
+       Merged in from Gideon's Clean Architect Tabs, which this mod replaces. That mod was pure XML,
+       so nothing here needs the assembly and all of it works with the architect panel switched off.
+
+       The problem these solve: RimWorld and its expansions scatter closely related buildings across
+       categories that each hold two or three things, and every storage mod adds a category of its
+       own. The result is a column of tabs where most are nearly empty, and where finding a shelf
+       means remembering which mod supplied it.
+
+       Three new categories collect them, and the patches in 1.6/Patches move the buildings across.
+       Categories left empty afterwards are hidden rather than deleted wherever something else might
+       still reference them: see ArchitectTabHider.xml for how, and why.
+
+       Icons come from Textures/UI/ArchitectIcons, matched on defName rather than on label. Worth
+       stating because the two differ here on purpose: the storage category is named UnifiedStorage
+       and labelled "Storage", so its art file is UnifiedStorage.png. Naming it for the label is the
+       mistake that leaves a category with no icon and no error to explain why.
+       =========================================================================================== -->
+
+  <!-- Research benches, which vanilla files under Misc alongside unrelated furniture.
+
+       Order 60 puts it just after the building categories and before the zone and order tabs. -->
+  <DesignationCategoryDef>
+    <defName>Research</defName>
+    <label>Research</label>
+    <order>60</order>
+    <specialDesignatorClasses>
+      <li>Designator_Cancel</li>
+      <li>Designator_Deconstruct</li>
+    </specialDesignatorClasses>
+  </DesignationCategoryDef>
+
+  <!-- Everything to do with leaving the planet: Odyssey's gravship building, the vanilla ship parts,
+       and the two orbital consoles that vanilla leaves in Misc.
+
+       Only populated when Odyssey is installed, since that is the condition on the patch that fills
+       it. Without Odyssey the vanilla Ship category survives untouched and this one stays empty,
+       which means RimWorld does not draw it at all: a category with no designators is not Visible.
+
+       Designator_RemoveFoundation is listed because gravship platforms need it and it is not one of
+       the designators a category gets by default. -->
+  <DesignationCategoryDef>
+    <defName>Space</defName>
+    <label>Space</label>
+    <order>50</order>
+    <specialDesignatorClasses>
+      <li>Designator_Cancel</li>
+      <li>Designator_Deconstruct</li>
+      <li>Designator_RemoveFoundation</li>
+    </specialDesignatorClasses>
+  </DesignationCategoryDef>
+
+  <!-- One home for shelves and containers, whichever mod supplied them.
+
+       The defName is UnifiedStorage rather than Storage so it cannot collide with the category any
+       one storage mod already defines. Several use "Storage" outright.
+
+       Order 580 rather than something near the building categories: storage is placed and forgotten,
+       so it belongs down with the tabs you reach for rarely, not between Structure and Furniture. -->
+  <DesignationCategoryDef>
+    <defName>UnifiedStorage</defName>
+    <label>Storage</label>
+    <order>580</order>
+    <specialDesignatorClasses>
+      <li>Designator_Cancel</li>
+      <li>Designator_Deconstruct</li>
+    </specialDesignatorClasses>
+  </DesignationCategoryDef>
+
+</Defs>

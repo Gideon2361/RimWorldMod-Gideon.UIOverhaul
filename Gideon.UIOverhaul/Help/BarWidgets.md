@@ -234,6 +234,10 @@ is read whenever it loads and the widget appears in the editor's list the next t
   come from any mod, and one bad frame must not cost the player the bar they navigate the game with.
 - **Clicks are absorbed.** The bar consumes any click in your slot that you did not take, so a
   readout cannot leak a click through to the map and issue an order behind the bar.
+- **The tray and its rule are drawn for you**, before `Draw` is called. The top 3 pixels of your slot are
+  the rule, so inset past it if you are drawing controls rather than text. The shipped speed controls take
+  `UIButtonBarRenderer.AccentRuleHeight` off the top and then their own padding, which keeps a visible gap
+  between the rule and the buttons instead of welding the two together.
 
 ### A trap worth knowing about
 
@@ -279,7 +283,23 @@ that corner is a stack, and removing one line from the middle of it moves the al
 the game conditions above it. Nothing has been patched out, so nothing has been broken; the widgets
 add a place to read this, they do not take the old place away.
 
-**Why the tray is sunken.** Tab buttons are raised, with a colored rule along the top edge carrying
-their state. Widgets get a sunken tray and no rule. That is a deliberate visual grammar: raised and
-ruled means you can press it, sunken means it is telling you something. The speed controls sit inside
-their tray as raised buttons, so within one slot the distinction still reads correctly.
+**Why the tray is sunken.** Tab buttons are raised; widgets get a sunken tray. That is a deliberate
+visual grammar: raised means you can press it, sunken means it is telling you something. The speed
+controls sit inside their tray as raised buttons, so within one slot the distinction still reads
+correctly.
+
+**Why the rule is gray.** Every slot on the bar carries a rule along its top edge, widgets included, so
+the strip has one continuous edge rather than rules that stop and start across it. The *color* is what
+carries meaning, and it means the same thing on a widget as on a tab: the accent says "this leads
+somewhere". A readout leads nowhere, so it takes the disabled gray.
+
+Handling a click is not the same as leading somewhere. The speed controls take clicks all day and stay
+gray, because pressing one changes the speed and nothing else — the widget only ever acts on itself.
+Override `OpensMenu` to return true where a click actually puts something new on screen:
+
+```csharp
+public override bool OpensMenu => true;
+```
+
+That is the only thing that changes the color, and it is worth being strict about. If a widget claims the
+accent for reacting to a click at all, the accent stops distinguishing anything.
