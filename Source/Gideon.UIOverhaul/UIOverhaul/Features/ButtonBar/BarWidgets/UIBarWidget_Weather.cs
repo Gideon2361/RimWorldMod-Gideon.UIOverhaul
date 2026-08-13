@@ -16,8 +16,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
     /// manager because every map does, but it has no sky, so reporting "clear" for the inside of an
     /// undercave would be inventing information.
     ///
-    /// <b>Text only, no icon.</b> <c>WeatherDef</c> carries no art. Every weather icon set in circulation is
-    /// something a mod drew, so an icon here would mean either shipping our own or borrowing someone else's.
+    /// <b>Icon and name.</b> <c>WeatherDef</c> carries no art of its own, so the glyph comes from
+    /// <see cref="UIBarGlyphs"/>, which generates one per kind of weather rather than shipping art files or
+    /// borrowing another mod's set. A mod that wants drawn art for its own weather can supply a texture at
+    /// <c>UI/WeatherIcons/&lt;defName&gt;</c> and it wins.
     /// </summary>
     public class UIBarWidget_Weather : UIBarWidgetWorker
     {
@@ -32,7 +34,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 
         protected override float MeasureWidth()
         {
-            return TextWidth(Reading()) + 16f;
+            WeatherDef weather = Current;
+            return weather == null
+                ? 0f
+                : IconReadoutWidth(UIBarGlyphs.ForWeather(weather), weather.LabelCap) + 16f;
         }
 
         public override void Draw(Rect rect, UIColorPaletteDef palette)
@@ -43,15 +48,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 
             // The def's own description, which is what vanilla puts on its readout. Bad weather is not
             // recolored: "bad" covers everything from a light rain to a toxic fallout, and a warning color on
-            // a drizzle would cry wolf.
-            DrawReadout(rect, weather.LabelCap, palette.TextSecondary,
+            // a drizzle would cry wolf. The glyph takes the same color as the text for the same reason.
+            DrawIconReadout(rect, UIBarGlyphs.ForWeather(weather), weather.LabelCap, palette.TextSecondary,
                 weather.description.NullOrEmpty() ? null : weather.description);
-        }
-
-        private static string Reading()
-        {
-            WeatherDef weather = Current;
-            return weather != null ? weather.LabelCap.ToString() : "";
         }
 
         private static WeatherDef Current

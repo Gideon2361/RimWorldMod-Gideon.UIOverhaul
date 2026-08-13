@@ -59,8 +59,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// </summary>
         public string icon;
 
-        /// <summary>defNames revealed by this menu, in order. Empty on a tab.</summary>
-        public List<string> children = new List<string>();
+        /// <summary>
+        /// The slots this menu reveals, in order. Empty on a tab.
+        ///
+        /// Entries rather than bare defNames, so a tab inside a menu carries the same rename, icon and
+        /// display mode as one on the bar and can be edited the same way. It was a list of names while a
+        /// menu's contents were only ever a list to click; once they became editable there was nowhere to
+        /// put the label. <see cref="ReadEntry"/> still accepts the old name-only form.
+        ///
+        /// One level only. The bar draws a menu as a single popup column, so a menu inside a menu has
+        /// nowhere to appear; the editor refuses to nest one and the reader drops it with a warning.
+        /// </summary>
+        public List<UIButtonBarEntry> children = new List<UIButtonBarEntry>();
 
         /// <summary>
         /// Keeps this slot at the end of the bar, after anything appended.
@@ -176,12 +186,12 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 {
                     // A menu whose every child is gone would be an empty button that does nothing.
                     bool anyChild = false;
-                    foreach (string child in entry.children)
+                    foreach (UIButtonBarEntry child in entry.children)
                     {
-                        if (DefDatabase<MainButtonDef>.GetNamedSilentFail(child) == null || IsHidden(child))
+                        if (child.tab.NullOrEmpty() || child.Def == null || IsHidden(child.tab))
                             continue;
 
-                        placed.Add(child);
+                        placed.Add(child.tab);
                         anyChild = true;
                     }
 
@@ -398,11 +408,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                         break;
 
                     case "children":
-                        foreach (XmlNode child in field.ChildNodes)
-                        {
-                            if (child is XmlElement item && !item.InnerText.NullOrEmpty())
-                                entry.children.Add(item.InnerText.Trim());
-                        }
+                        ReadChildren(field, entry);
                         break;
 
                     default:
@@ -412,6 +418,43 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
 
             return entry;
+        }
+
+        /// <summary>
+        /// A menu's contents, in either form.
+        ///
+        /// <c>&lt;entry&gt;</c> is what this writes now, and carries a child's label, icon and mode.
+        /// <c>&lt;li&gt;SomeTab&lt;/li&gt;</c> is the old name-only form, still read so that a layout written
+        /// before children could be edited keeps its menus. Anything else in there names a tab the same way
+        /// the old form did, which is why the fallback is by element content rather than by element name.
+        ///
+        /// A menu among the children is dropped. The bar draws one level of menu, so a nested one would be a
+        /// button with nowhere to open, and silently keeping it in the file would mean the editor showing a
+        /// row the bar never draws.
+        /// </summary>
+        private static void ReadChildren(XmlElement field, UIButtonBarEntry entry)
+        {
+            foreach (XmlNode node in field.ChildNodes)
+            {
+                if (!(node is XmlElement item))
+                    continue;
+
+                UIButtonBarEntry child = item.Name == "entry"
+                    ? ReadEntry(item)
+                    : new UIButtonBarEntry { tab = item.InnerText?.Trim() };
+
+                if (child.IsMenu)
+                {
+                    Log.Warning($"[Gideon.UIOverhaul] Menu '{entry.menu}' contains a menu "
+                                + $"('{child.menu}'), which the bar cannot draw; it has been dropped.");
+                    continue;
+                }
+
+                if (child.tab.NullOrEmpty() && !child.IsWidget)
+                    continue;
+
+                entry.children.Add(child);
+            }
         }
 
         /// <summary>
@@ -448,40 +491,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     writer.WriteStartElement("ButtonBar");
 
                     foreach (UIButtonBarEntry entry in entries)
-                    {
-                        writer.WriteStartElement("entry");
-
-                        if (entry.IsMenu)
-                            writer.WriteElementString("menu", entry.menu);
-                        else if (entry.IsWidget)
-                            writer.WriteElementString("widget", entry.widget);
-                        else if (!entry.tab.NullOrEmpty())
-                            writer.WriteElementString("tab", entry.tab);
-
-                        if (!entry.icon.NullOrEmpty())
-                            writer.WriteElementString("icon", entry.icon);
-
-                        if (!entry.label.NullOrEmpty())
-                            writer.WriteElementString("label", entry.label);
-
-                        if (entry.mode != UIBarButtonMode.Default)
-                            writer.WriteElementString("mode", entry.mode.ToString());
-
-                        // Written so a player's own layout keeps the pause menu pinned to the end after they
-                        // rearrange the bar, rather than losing it the first time they save.
-                        if (entry.last)
-                            writer.WriteElementString("last", "true");
-
-                        if (entry.children.Count > 0)
-                        {
-                            writer.WriteStartElement("children");
-                            foreach (string child in entry.children)
-                                writer.WriteElementString("li", child);
-                            writer.WriteEndElement();
-                        }
-
-                        writer.WriteEndElement();
-                    }
+                        WriteEntry(writer, entry);
 
                     if (hidden.Count > 0)
                     {
@@ -499,6 +509,52 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             {
                 Log.Error($"[Gideon.UIOverhaul] Could not write the button bar layout to {path}.\n{ex}");
             }
+        }
+
+        /// <summary>
+        /// One entry, and its children if it has any.
+        ///
+        /// A child is written with the same element and the same fields as a top-level slot, so the two
+        /// cannot drift apart and a child that gains a rename or an icon keeps it. <c>last</c> is written
+        /// either way rather than suppressed inside a menu: it means nothing there, but reading and writing
+        /// the same shape is what keeps a hand-edited file predictable.
+        /// </summary>
+        private static void WriteEntry(XmlWriter writer, UIButtonBarEntry entry)
+        {
+            writer.WriteStartElement("entry");
+
+            if (entry.IsMenu)
+                writer.WriteElementString("menu", entry.menu);
+            else if (entry.IsWidget)
+                writer.WriteElementString("widget", entry.widget);
+            else if (!entry.tab.NullOrEmpty())
+                writer.WriteElementString("tab", entry.tab);
+
+            if (!entry.icon.NullOrEmpty())
+                writer.WriteElementString("icon", entry.icon);
+
+            if (!entry.label.NullOrEmpty())
+                writer.WriteElementString("label", entry.label);
+
+            if (entry.mode != UIBarButtonMode.Default)
+                writer.WriteElementString("mode", entry.mode.ToString());
+
+            // Written so a player's own layout keeps the pause menu pinned to the end after they rearrange
+            // the bar, rather than losing it the first time they save.
+            if (entry.last)
+                writer.WriteElementString("last", "true");
+
+            if (entry.children.Count > 0)
+            {
+                writer.WriteStartElement("children");
+
+                foreach (UIButtonBarEntry child in entry.children)
+                    WriteEntry(writer, child);
+
+                writer.WriteEndElement();
+            }
+
+            writer.WriteEndElement();
         }
     }
 }

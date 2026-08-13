@@ -126,7 +126,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             MainButtonWorker worker = def.Worker;
 
-            bool clicked = UIButtonBarRenderer.Draw(slot, LabelFor(entry, def), IconFor(entry, def),
+            bool clicked = UIButtonBarRenderer.Draw(slot,
+                UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                 Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
                 worker?.ButtonBarPercent ?? 0f, palette);
 
@@ -136,22 +137,22 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         private static void DrawMenuSlot(Rect slot, UIButtonBarEntry entry, UIColorPaletteDef palette)
         {
-            List<MainButtonDef> children = new List<MainButtonDef>();
+            List<UIButtonBarEntry> children = new List<UIButtonBarEntry>();
             bool anyOpen = false;
 
-            foreach (string childName in entry.children)
+            foreach (UIButtonBarEntry child in entry.children)
             {
-                MainButtonDef child = DefDatabase<MainButtonDef>.GetNamedSilentFail(childName);
-                if (child == null || UIButtonBarConfig.Current.IsHidden(childName))
+                MainButtonDef def = child.Def;
+                if (def == null || UIButtonBarConfig.Current.IsHidden(child.tab))
                     continue;
 
-                MainButtonWorker worker = child.Worker;
+                MainButtonWorker worker = def.Worker;
                 if (worker != null && !worker.Visible)
                     continue;
 
                 children.Add(child);
 
-                if (Find.MainTabsRoot?.OpenTab == child)
+                if (Find.MainTabsRoot?.OpenTab == def)
                     anyOpen = true;
             }
 
@@ -160,7 +161,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             // Highlighted when one of its children is the open tab, so a menu shows where you are rather
             // than looking untouched while the tab it contains is on screen.
-            bool clicked = UIButtonBarRenderer.Draw(slot, LabelFor(entry, null), IconFor(entry, null),
+            bool clicked = UIButtonBarRenderer.Draw(slot,
+                UIButtonBarRenderer.LabelFor(entry, null), UIButtonBarRenderer.IconFor(entry, null),
                 anyOpen, false, 0f, palette);
 
             if (!clicked)
@@ -212,71 +214,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 return worker?.Width ?? UIButtonBarRenderer.MinimizedWidth;
             }
 
-            return IsIconOnly(entry) ? UIButtonBarRenderer.MinimizedWidth : -1f;
-        }
-
-        /// <summary>
-        /// Whether this slot draws no text, and so should be sized to its icon rather than share the bar.
-        ///
-        /// Asked of <see cref="LabelFor"/> rather than tested against the mode directly, so the one place
-        /// that decides whether a label is drawn is also the place that decides the width. Reading
-        /// <c>mode == Minimize</c> here would miss a def carrying vanilla's own <c>minimized</c> flag, and
-        /// would go wrong again the moment a new mode is added.
-        /// </summary>
-        private static bool IsIconOnly(UIButtonBarEntry entry)
-        {
-            return LabelFor(entry, entry.IsMenu ? null : entry.Def).NullOrEmpty();
-        }
-
-        /// <summary>
-        /// The text on a button, or null for an icon-only one.
-        ///
-        /// LabelCap, not ShortenedLabelCap. Vanilla abbreviates because its bar divides the full screen
-        /// width between every tab at a fixed height; ours can be arranged, so a truncated word like
-        /// "Architec" is a worse trade than a slightly tighter fit. A label too wide for its slot is
-        /// clipped by the button, which reads as a layout to fix rather than as the tab's name.
-        /// </summary>
-        private static string LabelFor(UIButtonBarEntry entry, MainButtonDef def)
-        {
-            switch (entry.mode)
-            {
-                case UIBarButtonMode.Minimize:
-                    return null;
-
-                case UIBarButtonMode.TextOnly:
-                case UIBarButtonMode.Maximize:
-                    break;
-
-                default:
-                    // minimized is a vanilla field, so a def that asked to be icon-only is honored
-                    // without the player having to say so again. Maximize is what overrides it.
-                    if (def != null && def.minimized)
-                        return null;
-                    break;
-            }
-
-            if (!entry.label.NullOrEmpty())
-                return entry.label;
-
-            return def != null ? def.LabelCap.ToString() : entry.tab;
-        }
-
-        /// <summary>
-        /// The entry's own icon wins over the def's, which is how a tab that shipped without one gets an
-        /// icon and how one that shipped with an unwanted icon gets a better one. Failing both, this mod's
-        /// own art for the vanilla tabs that ship bare.
-        ///
-        /// The def's icon is checked before ours on purpose: most of the bar has no art, but the few tabs
-        /// that do should keep the look their own mod chose.
-        ///
-        /// Text-only mode suppresses it entirely, which is the point of that mode.
-        /// </summary>
-        private static Texture2D IconFor(UIButtonBarEntry entry, MainButtonDef def)
-        {
-            if (entry.mode == UIBarButtonMode.TextOnly)
-                return null;
-
-            return UIBarDefaultIcons.Resolve(entry, def);
+            return UIButtonBarRenderer.IsIconOnly(entry) ? UIButtonBarRenderer.MinimizedWidth : -1f;
         }
 
         /// <summary>
@@ -304,13 +242,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                 if (entry.IsMenu)
                 {
-                    foreach (string childName in entry.children)
+                    foreach (UIButtonBarEntry child in entry.children)
                     {
-                        MainButtonDef child = DefDatabase<MainButtonDef>.GetNamedSilentFail(childName);
-                        MainButtonWorker childWorker = child?.Worker;
+                        MainButtonDef childDef = child.Def;
+                        MainButtonWorker childWorker = childDef?.Worker;
 
-                        if (child != null && (childWorker == null || childWorker.Visible)
-                                          && !UIButtonBarConfig.Current.IsHidden(childName))
+                        if (childDef != null && (childWorker == null || childWorker.Visible)
+                                             && !UIButtonBarConfig.Current.IsHidden(child.tab))
                         {
                             result.Add(entry);
                             break;

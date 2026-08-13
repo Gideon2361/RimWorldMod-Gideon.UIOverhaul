@@ -740,9 +740,63 @@ Two things worth knowing, both checked against the game rather than assumed:
 - **It closes without the tab-close sound**, because the designator's own activate sound has already played and
   the two together read as two clicks for one action.
 
+### The pause menu is called "Pause Menu"
+
+Vanilla's `Menu` tab is labelled just "menu". That was unambiguous on a bar where nothing else could be
+a menu; on this one the player can build menus of their own, so the bare word describes both the pause
+screen and the thing they just made.
+
+Renamed the same way this mod supplies icons for the vanilla tabs that ship without one: a fallback
+resolved at draw time, in `UIBarDefaultLabels`, never written into the player's layout. So it reaches an
+existing layout as well as a fresh one, it needs no migration when the list changes, and a player who
+renames the tab themselves keeps their own name — a rename is a decision, this is only a default.
+
+Unlike the icon fallback, this one overrides the def's own label rather than filling a gap, because the
+name it replaces is not missing, only ambiguous. Only vanilla defNames are listed; renaming another
+mod's tab from here would be this mod deciding what somebody else's feature is called.
+
+## Menus on the button bar
+
+A menu is a slot that reveals a column of tabs when clicked. Made in **UI Options → Manage Tabs → Open
+Manager** with "New menu", filled by dragging a tab onto it or with its own "add a tab" row.
+
+A tab inside a menu is a full entry, not just a name. It carries its own rename, icon and display mode
+and is edited from the same card as a tab on the bar, and the popup column draws it through the same
+label and icon resolution the bar uses — so a rename made inside a menu is a rename you can see.
+
+Because the contents are entries, the layout file nests them:
+
+```xml
+<entry>
+  <menu>Colony</menu>
+  <children>
+    <entry><tab>Work</tab><label>Jobs</label></entry>
+    <entry><tab>Schedule</tab><mode>Minimize</mode></entry>
+  </children>
+</entry>
+```
+
+The older `<children><li>Work</li></children>` form is still read, so a layout written before menus
+were editable keeps its menus. A menu inside a menu is dropped with a warning: the bar draws one level
+of popup, so a nested one would be a button with nowhere to open.
+
+Rows can be dragged **into** a menu, **out** of one, and between two of them. The insertion line is
+indented to show which of those a drop will do.
+
+**Deleting a menu takes its tabs off the bar with it.** They go to "Not on the bar", where they can be
+picked back up. Deleting used to remove only the menu, which left its tabs named nowhere — and because
+the bar appends any `MainButtonDef` the layout does not mention, every one of them reappeared as a
+top-level button while this editor listed them as off the bar.
+
+**Every tab and menu needs a name, and no two may share one.** Save is disabled while that is not
+true, with the reason beside the button and the offending rows' stripes turned red. Clearing a name box
+leaves the entry's stored name alone rather than writing the blank, so nothing is lost by tabbing
+through a field — and a menu cannot be un-named into an entry with no kind at all, which is what
+clearing its box used to do.
+
 ## Widgets on the button bar
 
-The bar can carry readouts and controls as well as tabs: the play speed buttons, the date and hour,
+The bar can carry readouts and controls as well as tabs: the play speed buttons, the date and time,
 the outdoor temperature, the weather. Four ship with the mod, and any mod can add more with a def and
 a class.
 
@@ -778,6 +832,33 @@ width within the first few seconds of play and then stops changing.
 A widget with nothing to report hides itself and gives its slot back rather than leaving a gap. The
 weather does this on pocket maps, which have a weather manager only by virtue of being maps and have no
 sky.
+
+### The clock shows minutes, and its format is a setting
+
+The date widget writes the time of day on a 24-hour clock with minutes by default: `14:30` where
+vanilla writes `14h`. **UI Options → Clock** offers 24-hour, 12-hour and RimWorld's own bare-hour
+form, the last being character for character what vanilla produces.
+
+RimWorld has no minute. A day is 60000 ticks and an hour is 2500, so the minute shown is the position
+within the current hour divided into sixty. Nothing in the game changes on that boundary. It is shown
+because a bare hour cannot say how much of itself is left, and shift ends, caravan arrivals and
+growing seasons are all read off that line.
+
+This changes only this mod's widget. RimWorld's own date readout in the bottom right is untouched, as
+everything else in that corner is.
+
+### Weather and date carry icons
+
+The weather widget draws a glyph for the weather beside its name, and the date widget a calendar.
+`WeatherDef` carries no art, so the glyphs are generated at startup rather than shipped as files, the
+same way the framework's other non-rectangular shapes are: a generated glyph tints to the active
+palette, so it is legible on a light theme and a dark one from one definition, and there is no file on
+disk for another mod to shadow.
+
+Thirteen glyphs cover twenty-two weathers, and a weather from a mod this one has never heard of is
+classified from its own `rainRate`, `snowRate`, `sandRate` and `windSpeedFactor`. A texture at
+`UI/WeatherIcons/<defName>` overrides the generated glyph, so drawn art can replace any of them
+without a code change. See [BarWidgets.md](BarWidgets.md).
 
 ### Speed controls handle clicks and nothing else
 

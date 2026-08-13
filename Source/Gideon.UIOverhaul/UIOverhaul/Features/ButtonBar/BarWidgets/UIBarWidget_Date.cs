@@ -1,5 +1,6 @@
 using System.Text;
 using Gideon.UIFramework.Defs;
+using Gideon.UIOverhaul.Features.Options;
 using RimWorld;
 using RimWorld.Planet;
 using UnityEngine;
@@ -17,6 +18,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
     /// <b>Local time, not game time.</b> Everything here goes through the current map's longitude, as the
     /// vanilla readout does, so the hour shown is the hour where the colony is rather than an absolute tick
     /// count. Two colonies on opposite sides of the planet do not read the same clock.
+    ///
+    /// <b>The clock format is the player's.</b> 24-hour with minutes by default, changeable in UI options;
+    /// see <see cref="UIClock"/> for what the choices mean and where the minutes come from.
     /// </summary>
     public class UIBarWidget_Date : UIBarWidgetWorker
     {
@@ -24,7 +28,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
         private const int TooltipId = 0x71DE_0A7E;
 
         private string cached;
-        private int cachedHour = int.MinValue;
+        private int cachedMinute = int.MinValue;
+        private UITimeFormat cachedFormat;
         private float cachedLongitude = float.NaN;
 
         protected override bool ShouldShow => Location.HasValue;
@@ -32,7 +37,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
         protected override float MeasureWidth()
         {
             Vector2? location = Location;
-            return location.HasValue ? TextWidth(Reading(location.Value)) + 16f : 0f;
+            return location.HasValue
+                ? IconReadoutWidth(UIBarGlyphs.Calendar, Reading(location.Value)) + 16f
+                : 0f;
         }
 
         public override void Draw(Rect rect, UIColorPaletteDef palette)
@@ -41,7 +48,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
             if (!location.HasValue)
                 return;
 
-            DrawReadout(rect, Reading(location.Value), palette.TextSecondary);
+            DrawIconReadout(rect, UIBarGlyphs.Calendar, Reading(location.Value), palette.TextSecondary);
 
             // Built only on hover. It is four translated lines and a StringBuilder, which is not something
             // to do every frame for a tooltip that is usually not being looked at.
@@ -50,11 +57,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
         }
 
         /// <summary>
-        /// The date string, rebuilt when the hour turns over or the colony's longitude changes.
+        /// The date string, rebuilt when the displayed minute turns over, the clock format changes, or the
+        /// colony's longitude does.
         ///
-        /// Keyed on the hour rather than compared against the last string: the string is the expensive part,
-        /// and an in-game hour is 2500 ticks, so this rebuilds a few times a minute at normal speed instead
-        /// of sixty times a second.
+        /// Keyed on those three rather than compared against the last string: the string is the expensive
+        /// part -- a translated ordinal and a quadrum label -- and this way it is built once per in-game
+        /// minute instead of sixty times a second.
+        ///
+        /// The minute is the key even in the vanilla format, which shows only the hour and so rebuilds an
+        /// identical string fifty-nine times an hour it did not need to. One concat and one translate per
+        /// in-game minute is not worth a second code path to avoid.
         /// </summary>
         private string Reading(Vector2 longLat)
         {
@@ -63,12 +75,19 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
                 return cached ?? "";
 
             int absTicks = ticks.TicksAbs;
-            int hour = absTicks / GenDate.TicksPerHour;
+            UITimeFormat format = UIOverhaulSettingsFile.Current.timeFormat;
+            int minute = UIClock.MinuteOfDay(absTicks, longLat.x);
 
-            if (cached == null || hour != cachedHour || !Mathf.Approximately(longLat.x, cachedLongitude))
+            if (cached == null || minute != cachedMinute || format != cachedFormat
+                || !Mathf.Approximately(longLat.x, cachedLongitude))
             {
-                cached = GenDate.DateFullStringWithHourAt(absTicks, longLat);
-                cachedHour = hour;
+                // Composed rather than calling GenDate.DateFullStringWithHourAt, which hard-codes the hour
+                // format. In the vanilla setting the two produce the same characters; see UIClock.Time.
+                cached = GenDate.DateFullStringAt(absTicks, longLat) + ", "
+                         + UIClock.Time(absTicks, longLat.x, format);
+
+                cachedMinute = minute;
+                cachedFormat = format;
                 cachedLongitude = longLat.x;
             }
 

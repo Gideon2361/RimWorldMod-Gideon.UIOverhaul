@@ -33,16 +33,19 @@
     <order>10</order>
   </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
 
-  <!-- The colony date and the hour, on one line.
+  <!-- The colony date and the time, on one line, behind a calendar icon.
 
        Vanilla stacks the hour, the date and the season in a tall column that the bar has no room
-       for, so the season moves into the tooltip along with the quadrum calendar. -->
+       for, so the season moves into the tooltip along with the quadrum calendar.
+
+       The time is written on a 24-hour clock with minutes by default. UI options carries the choice,
+       RimWorld's own bare-hour form included. -->
   <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
     <defName>Gideon_BarWidget_Date</defName>
     <label>date and time</label>
-    <description>The colony date and hour, read at the current map's longitude. Hover for the season and the quadrum calendar.</description>
+    <description>The colony date and time, read at the current map's longitude. Hover for the season and the quadrum calendar.</description>
     <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_Date</workerClass>
-    <minWidth>150</minWidth>
+    <minWidth>180</minWidth>
     <order>20</order>
   </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
 
@@ -60,16 +63,21 @@
     <order>30</order>
   </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
 
-  <!-- The weather.
+  <!-- The weather, as an icon and a name.
 
        Hidden on pocket maps, as vanilla hides its weather line there: a pocket map has a weather
-       manager because every map does, but it has no sky. -->
+       manager because every map does, but it has no sky.
+
+       WeatherDef carries no art, so the icon is generated: one per kind of weather rather than one
+       per def, since it sits right beside the weather's own name. A mod wanting drawn art for its own
+       weather can ship a texture at "UI/WeatherIcons/" plus the weather's defName, and that is used
+       instead. -->
   <Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
     <defName>Gideon_BarWidget_Weather</defName>
     <label>weather</label>
-    <description>The weather as it currently appears, with its description on hover. Hidden on pocket maps, which have no sky.</description>
+    <description>The weather as it currently appears, with an icon for it and its description on hover. Hidden on pocket maps, which have no sky.</description>
     <workerClass>Gideon.UIOverhaul.Features.ButtonBar.BarWidgets.UIBarWidget_Weather</workerClass>
-    <minWidth>88</minWidth>
+    <minWidth>110</minWidth>
     <order>40</order>
   </Gideon.UIOverhaul.Features.ButtonBar.UIBarWidgetDef>
 

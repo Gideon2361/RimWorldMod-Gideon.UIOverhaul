@@ -161,6 +161,78 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         }
 
         /// <summary>
+        /// The text on a button, or null for an icon-only one.
+        ///
+        /// LabelCap, not ShortenedLabelCap. Vanilla abbreviates because its bar divides the full screen
+        /// width between every tab at a fixed height; ours can be arranged, so a truncated word like
+        /// "Architec" is a worse trade than a slightly tighter fit. A label too wide for its slot is
+        /// clipped by the button, which reads as a layout to fix rather than as the tab's name.
+        ///
+        /// Here rather than in the bar's patch because the menu popup draws buttons too, and the two have to
+        /// agree about what a slot is called. A menu's own name is <c>entry.menu</c>: leaving that out of the
+        /// fallback chain was why a named menu drew as a bare icon whatever display mode it was given, since
+        /// a null label is exactly how this reports "icon only".
+        /// </summary>
+        public static string LabelFor(UIButtonBarEntry entry, MainButtonDef def)
+        {
+            switch (entry.mode)
+            {
+                case UIBarButtonMode.Minimize:
+                    return null;
+
+                case UIBarButtonMode.TextOnly:
+                case UIBarButtonMode.Maximize:
+                    break;
+
+                default:
+                    // minimized is a vanilla field, so a def that asked to be icon-only is honored
+                    // without the player having to say so again. Maximize is what overrides it.
+                    if (def != null && def.minimized)
+                        return null;
+                    break;
+            }
+
+            if (!entry.label.NullOrEmpty())
+                return entry.label;
+
+            if (entry.IsMenu)
+                return entry.menu;
+
+            return UIBarDefaultLabels.DefaultNameFor(entry, def);
+        }
+
+        /// <summary>
+        /// The entry's own icon wins over the def's, which is how a tab that shipped without one gets an
+        /// icon and how one that shipped with an unwanted icon gets a better one. Failing both, this mod's
+        /// own art for the vanilla tabs that ship bare.
+        ///
+        /// The def's icon is checked before ours on purpose: most of the bar has no art, but the few tabs
+        /// that do should keep the look their own mod chose.
+        ///
+        /// Text-only mode suppresses it entirely, which is the point of that mode.
+        /// </summary>
+        public static Texture2D IconFor(UIButtonBarEntry entry, MainButtonDef def)
+        {
+            if (entry.mode == UIBarButtonMode.TextOnly)
+                return null;
+
+            return UIBarDefaultIcons.Resolve(entry, def);
+        }
+
+        /// <summary>
+        /// Whether a slot draws no text, and so should be sized to its icon rather than share the bar.
+        ///
+        /// Asked of <see cref="LabelFor"/> rather than tested against the mode directly, so the one place
+        /// that decides whether a label is drawn is also the place that decides the width. Reading
+        /// <c>mode == Minimize</c> here would miss a def carrying vanilla's own <c>minimized</c> flag, and
+        /// would go wrong again the moment a new mode is added.
+        /// </summary>
+        public static bool IsIconOnly(UIButtonBarEntry entry)
+        {
+            return LabelFor(entry, entry.IsMenu ? null : entry.Def).NullOrEmpty();
+        }
+
+        /// <summary>
         /// Opens this mod's settings.
         ///
         /// Our own window rather than a page in the vanilla Options dialog. Dialog_Options only lists
@@ -189,7 +261,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         private const float RowHeight = 32f;
         private const float RowGap = 2f;
 
-        private readonly List<MainButtonDef> items;
+        private readonly List<UIButtonBarEntry> items;
         private readonly float slotX;
         private readonly float slotWidth;
 
@@ -197,7 +269,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             new Vector2(Mathf.Max(slotWidth, 160f),
                 items.Count * (RowHeight + RowGap) + RowGap * 2f);
 
-        public Window_BarMenu(List<MainButtonDef> items, float slotX, float slotWidth)
+        public Window_BarMenu(List<UIButtonBarEntry> items, float slotX, float slotWidth)
         {
             this.items = items;
             this.slotX = slotX;
@@ -228,14 +300,20 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             float y = inRect.y;
 
-            foreach (MainButtonDef def in items)
+            foreach (UIButtonBarEntry entry in items)
             {
+                MainButtonDef def = entry.Def;
+                if (def == null)
+                    continue;
+
                 MainButtonWorker worker = def.Worker;
                 Rect row = new Rect(inRect.x, y, inRect.width, RowHeight);
 
-                // Full label, not the abbreviation: a menu column is as wide as it needs to be, so there
-                // is nothing to be gained by truncating.
-                bool clicked = UIButtonBarRenderer.Draw(row, def.LabelCap, def.Icon,
+                // Through the same label and icon resolution the bar uses, so a tab renamed or given an icon
+                // inside a menu shows that here. Reading def.LabelCap and def.Icon directly, as this used to,
+                // meant edits to a child were stored and then ignored by the only thing that drew it.
+                bool clicked = UIButtonBarRenderer.Draw(row,
+                    UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                     Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
                     worker?.ButtonBarPercent ?? 0f, palette);
 

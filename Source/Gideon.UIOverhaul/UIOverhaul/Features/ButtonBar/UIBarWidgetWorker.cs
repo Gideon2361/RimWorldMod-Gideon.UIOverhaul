@@ -88,6 +88,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
         }
 
+        /// <summary>
+        /// Forgets the widest this widget has ever been, so the next frame measures from nothing.
+        ///
+        /// For a setting that changes what the widget shows. <see cref="highWater"/> never shrinks on its own,
+        /// which is right for an hour ticking over and wrong for a player switching the clock from "14h" to
+        /// "14:30" and back -- without this, the slot would keep the wider form's width until the next launch.
+        /// </summary>
+        public void ResetWidth()
+        {
+            highWater = 0f;
+        }
+
         /// <summary>How much room this widget wants right now, before quantizing.</summary>
         protected abstract float MeasureWidth();
 
@@ -154,6 +166,69 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             Text.Font = previous;
 
             return width;
+        }
+
+        /// <summary>Side of the icon a readout may carry, and the gap between it and the text.</summary>
+        protected const float IconSize = 16f;
+
+        protected const float IconGap = 5f;
+
+        /// <summary>Width of a readout drawn as an icon followed by text.</summary>
+        protected static float IconReadoutWidth(Texture2D icon, string text)
+        {
+            float width = TextWidth(text);
+
+            if (icon != null)
+                width += IconSize + IconGap;
+
+            return width;
+        }
+
+        /// <summary>
+        /// An icon and a line of text, together, centered in the slot as one group.
+        ///
+        /// Centered as a group rather than the icon being pinned left and the text centered in what remains:
+        /// the slot is wider than the content whenever the high water mark is holding room for a longer
+        /// reading, and a pinned icon would drift away from its own text as that happened.
+        ///
+        /// A null icon draws the text alone, so a widget whose glyph failed to resolve is still readable.
+        /// </summary>
+        protected static void DrawIconReadout(Rect rect, Texture2D icon, string text, Color color,
+            string tooltip = null)
+        {
+            if (icon == null)
+            {
+                DrawReadout(rect, text, color, tooltip);
+                return;
+            }
+
+            float textWidth = TextWidth(text);
+            float total = IconSize + IconGap + textWidth;
+            float x = rect.x + Mathf.Max(0f, (rect.width - total) * 0.5f);
+
+            Color previousColor = GUI.color;
+            GUI.color = color;
+
+            GUI.DrawTexture(new Rect(x, rect.y + (rect.height - IconSize) * 0.5f, IconSize, IconSize),
+                icon, ScaleMode.ScaleToFit);
+
+            GUI.color = previousColor;
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = color;
+
+            Widgets.Label(new Rect(x + IconSize + IconGap, rect.y, textWidth + 2f, rect.height), text);
+
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+
+            if (!tooltip.NullOrEmpty())
+                TooltipHandler.TipRegion(rect, (TipSignal) tooltip);
         }
 
         /// <summary>Centered single line of text, with an optional tooltip over the whole slot.</summary>

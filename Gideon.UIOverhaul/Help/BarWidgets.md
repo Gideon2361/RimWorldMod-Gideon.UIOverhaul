@@ -38,9 +38,9 @@ content rather than a label and an icon.
 | Widget | defName | Shows |
 |---|---|---|
 | Speed controls | `Gideon_BarWidget_TimeSpeed` | Pause and the three play speeds |
-| Date and time | `Gideon_BarWidget_Date` | The colony date and hour |
+| Date and time | `Gideon_BarWidget_Date` | The colony date and time, behind a calendar icon |
 | Outdoor temperature | `Gideon_BarWidget_Temperature` | The current map's outdoor temperature |
-| Weather | `Gideon_BarWidget_Weather` | The weather as it currently appears |
+| Weather | `Gideon_BarWidget_Weather` | The weather as it currently appears, with an icon for it |
 
 **Speed controls** mark the speed in effect and draw a rule across the buttons whenever something
 else is deciding it: a window that forces pause, or a threat that forces normal speed. Clicks are
@@ -53,11 +53,28 @@ dev-mode single tick all keep working and cannot disagree with these buttons abo
 Ultrafast is not offered, matching vanilla: the enum has five values and the base game's own control
 deliberately draws four.
 
-**Date and time** is one line where vanilla stacks three, because the bar is 35 pixels tall. It is
-`GenDate.DateFullStringWithHourAt`, which is the same information translated; the season and the
-quadrum-to-season calendar move into the tooltip, which is vanilla's own tooltip text. The hour is
-read at the current map's longitude, so two colonies on opposite sides of the planet do not read the
-same clock.
+**Date and time** is one line where vanilla stacks three, because the bar is 35 pixels tall. The date
+is `GenDate.DateFullStringAt`, vanilla's own translated string; the season and the quadrum-to-season
+calendar move into the tooltip, which is vanilla's own tooltip text. It is read at the current map's
+longitude, so two colonies on opposite sides of the planet do not read the same clock.
+
+The time of day is written on a **24-hour clock with minutes** by default. UI options has the choice,
+under "Clock":
+
+| Setting | Shows |
+|---|---|
+| 24-hour | `14:30` |
+| 12-hour | `2:30 PM` |
+| RimWorld's | `14h` |
+
+The last is character for character what vanilla writes, for anyone who wants the readout the widget
+had before there was a choice.
+
+RimWorld has **no minute**. A day is 60000 ticks and an hour is 2500, so the minute is the position
+within the current hour divided into sixty, and it exists so that the readout looks like a clock.
+Nothing in the game changes on that boundary, which is worth knowing before reading anything into
+`:59`. The reason to show it anyway is that a bare hour cannot tell you how much of itself is left,
+and shift ends, caravan arrivals and growing seasons are all read off this line.
 
 **Outdoor temperature** is always the outdoor temperature. Vanilla's readout reports the room under
 the cursor and only falls back to outdoors when there is no room, which is right for something you
@@ -73,8 +90,33 @@ arriving; the perceived value is the one that agrees with what the player is loo
 itself on pocket maps, as vanilla hides its own weather line there, because a pocket map has a
 weather manager only by virtue of being a map and has no sky.
 
-There is no weather icon. `WeatherDef` carries no art, so an icon here would mean either drawing a
-set or borrowing somebody else's.
+It draws an **icon** beside the name. `WeatherDef` carries no art, so the icons are generated at
+startup rather than shipped as files, the same bargain the framework's other generated shapes make: a
+generated glyph is tinted to whatever palette role the widget draws in, so it is legible on a light
+theme and a dark one without a second set of files, and there is nothing on disk for another mod to
+shadow with a texture of the same path.
+
+There are **thirteen glyphs for twenty-two weathers**, because the icon sits immediately to the left
+of the weather's own name. Its job is to be recognizable at sixteen pixels, not to be uniquely
+decodable: blood rain and toxic rain both get the rain glyph, and the word beside it says which.
+
+A weather this mod has never heard of still gets a sensible icon. Every Core, Anomaly and Odyssey
+weather is mapped by name; anything else is classified from the def's own fields, in this order:
+
+| Test | Glyph |
+|---|---|
+| `snowRate > 0` | Snow, or blizzard when `windSpeedFactor > 1.5` |
+| `sandRate > 0` | Sand |
+| `rainRate > 0` | Rain, or heavy rain at `rainRate >= 1.5` |
+| `windSpeedFactor > 1.5` | Wind |
+| otherwise | Overcast |
+
+Overcast is the fallback rather than clear, because a clear sky is a specific claim and the sun would
+be wrong for the darkness weathers several mods add.
+
+**Drawn art wins.** A texture at `UI/WeatherIcons/<defName>` is used in preference to the generated
+glyph, so a mod can ship real art for its own weather without a code change, and without this mod
+having to know the name.
 
 ## Why nothing is on the bar by default
 
@@ -216,7 +258,8 @@ Widgets are slots in the same file as everything else on the bar,
 ```
 
 An `<entry>` is exactly one of `<tab>`, `<menu>` or `<widget>`. A widget entry ignores `<label>`,
-`<icon>` and `<mode>`, which have nothing to act on.
+`<icon>` and `<mode>`, which have nothing to act on. A `<menu>` carries its contents as nested
+`<entry>` elements under `<children>`; see [GameChanges.md](GameChanges.md#menus-on-the-button-bar).
 
 An entry naming a widget whose mod is no longer installed is skipped and **left in the file**, the
 same as an entry naming a missing tab, so turning that mod off and on again does not cost the player

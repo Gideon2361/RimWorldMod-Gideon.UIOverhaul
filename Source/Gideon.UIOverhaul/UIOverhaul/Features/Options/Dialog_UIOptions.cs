@@ -4,6 +4,7 @@ using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
+using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -71,9 +72,11 @@ namespace Gideon.UIOverhaul.Features.Options
 
             Text.Font = GameFont.Small;
 
-            // Raised with the diagnostics section, which the old height had no room for -- the scroll view would
-            // have clipped it rather than scrolled to it.
-            float viewHeight = 700f;
+            // The fixed sections, plus a row for each palette, since that list is as long as whatever the
+            // player has installed. Computed rather than a constant that has to be raised by hand every time
+            // a section is added: a height short of the content does not scroll to the rest, it clips it
+            // away, and the shortfall only shows up on someone else's mod list.
+            float viewHeight = 760f + (UIColorPaletteDef.All?.Count ?? 0) * (RowHeight + 2f);
             Rect view = new Rect(0f, 0f, inner.width - 18f, viewHeight);
             Widgets.BeginScrollView(inner, ref scroll, view);
 
@@ -81,6 +84,8 @@ namespace Gideon.UIOverhaul.Features.Options
             DrawThemeSection(view, ref y, palette, settings);
             y += 14f;
             DrawBarSection(view, ref y, palette, settings);
+            y += 14f;
+            DrawClockSection(view, ref y, palette, settings);
             y += 14f;
             DrawDisplaySection(view, ref y, palette, settings);
             y += 14f;
@@ -159,9 +164,9 @@ namespace Gideon.UIOverhaul.Features.Options
         private void DrawBarSection(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings)
         {
-            SectionHeader(view, ref y, "Button bar", palette);
+            SectionHeader(view, ref y, "Manage Tabs", palette);
 
-            if (SmallButton(new Rect(0f, y, 200f, RowHeight), "Arrange the bar...", palette))
+            if (SmallButton(new Rect(0f, y, 200f, RowHeight), "Open Manager", palette))
             {
                 Find.WindowStack.Add(new Dialog_ButtonBarEditor());
                 SoundDefOf.Click.PlayOneShotOnCamera();
@@ -174,6 +179,51 @@ namespace Gideon.UIOverhaul.Features.Options
                 "Reorder tabs, rename them, take them off the bar, group them into menus, and choose "
                 + "icons.");
             y += 44f;
+            GUI.color = palette.TextPrimary;
+        }
+
+        /// <summary>
+        /// The clock section.
+        ///
+        /// Only the date widget reads this today, and the section says so: a player who has not put that
+        /// widget on the bar would otherwise change the setting and see nothing happen anywhere.
+        /// </summary>
+        private void DrawClockSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Clock", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 38f),
+                "How the date and time widget writes the time of day. RimWorld's own readouts are not "
+                + "affected.");
+            y += 42f;
+            GUI.color = palette.TextPrimary;
+
+            foreach (UITimeFormat option in (UITimeFormat[]) System.Enum.GetValues(typeof(UITimeFormat)))
+            {
+                bool chosen = settings.timeFormat == option;
+                Rect row = new Rect(0f, y, view.width, RowHeight);
+
+                if (UIRadioButtonControl.Draw(row, chosen, palette,
+                        UIClock.Label(option) + "   " + UIClock.Example(option))
+                    && !chosen)
+                {
+                    settings.timeFormat = option;
+                    settings.Save();
+
+                    // The widget's slot is sized by the widest reading it has ever given, which never
+                    // shrinks on its own. Without this, going from "14:30" back to "14h" would leave the
+                    // slot holding the wider form's width until the next launch.
+                    foreach (UIBarWidgetDef def in DefDatabase<UIBarWidgetDef>.AllDefsListForReading)
+                        def.WorkerIfCreated?.ResetWidth();
+
+                    SoundDefOf.Click.PlayOneShotOnCamera();
+                }
+
+                y += RowHeight + 2f;
+            }
+
             GUI.color = palette.TextPrimary;
         }
 

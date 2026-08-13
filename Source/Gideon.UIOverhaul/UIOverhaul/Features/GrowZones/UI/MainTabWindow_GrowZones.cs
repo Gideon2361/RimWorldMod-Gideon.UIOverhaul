@@ -181,10 +181,13 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             //
             // The interior stays hand-laid: the cells are proportional columns of the row's width, and a
             // column layout is clearer as arithmetic than as elements with fixed bounds.
+            //
+            // DrawChrome, not Draw: Draw would claim the click with its own ButtonInvisible, and the row's
+            // click is taken at the bottom of this method, after the cells have had their turn.
             rowCard.Padding = 0f;
             rowCard.AccentColor = zone.color;
             rowCard.BackgroundColor = GzpPalette.PanelBG;
-            rowCard.Draw(r);
+            rowCard.DrawChrome(r);
 
             GrowZoneStatus status = GrowZoneStatusCache.For(zone);
             float width = r.width;
