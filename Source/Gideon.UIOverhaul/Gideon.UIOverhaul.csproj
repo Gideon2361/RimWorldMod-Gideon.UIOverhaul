@@ -16,7 +16,11 @@
         <RootNamespace>Gideon</RootNamespace>
         <Product>Gideon's UI Overhaul</Product>
         <Company>Gideon</Company>
-        <Version>1.6.0.0</Version>
+        <!-- Kept in step with <modVersion> in About/About.xml, which is the number the player sees.
+             Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
+             build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
+             The first three move when the game does; the last increments on every change. -->
+        <Version>1.6.4871.14086</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
