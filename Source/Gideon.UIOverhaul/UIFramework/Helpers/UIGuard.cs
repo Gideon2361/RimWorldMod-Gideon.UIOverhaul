@@ -272,7 +272,7 @@ namespace Gideon.UIFramework.Helpers
                 // and there is nothing left to fall back to after this.
                 try
                 {
-                    Log.Error("[Gideon] Contained an exception at " + site
+                    Log.Error(UILogTag.Prefix + "Contained an exception at " + site
                               + ", and then failed to describe it.");
                 }
                 catch
@@ -290,7 +290,7 @@ namespace Gideon.UIFramework.Helpers
         {
             StringBuilder text = new StringBuilder();
 
-            text.Append("[Gideon] Contained an exception at ").Append(site).Append(".");
+            text.Append(UILogTag.Prefix + "Contained an exception at ").Append(site).Append(".");
 
             if (novel && failures > 1)
                 text.Append(" This is a new fault at a site that has already failed ")
@@ -299,8 +299,13 @@ namespace Gideon.UIFramework.Helpers
                 text.Append(" This has now happened ").Append(failures).Append(" times; the next report is at ")
                     .Append(failures * 10).Append(".");
 
-            text.Append("\nThe game was not interrupted, so what follows is a bug in this mod rather than a "
-                        + "cause of one elsewhere.");
+            // Deliberately does not claim the fault is ours. The site is where the exception was caught, and a guard
+            // wraps calls into vanilla and into whatever has patched it, so the throw may well have come from another
+            // mod's code reached through ours. Asserting otherwise sent readers looking in the wrong place, and it
+            // also promised that nothing else was affected, which containment does not establish either.
+            text.Append("\nThe site above is where this was caught, which is not necessarily where it came from: the "
+                        + "throw may be in this mod's own code, or in vanilla or another mod's code called from "
+                        + "inside it. Whatever was in progress at that point did not finish.");
 
             if (!consequence.NullOrEmpty())
                 text.Append("\nEffect: ").Append(consequence);

@@ -2,6 +2,7 @@ using HarmonyLib;
 using RimWorld;
 using System;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.GrowZones
 {
@@ -96,7 +97,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
                 }
                 catch (Exception ex)
                 {
-                    Log.Error("[Gideon.UIOverhaul] Could not read Designator_ZoneAdd.zoneTypeToPlace; "
+                    Log.Error(UILogTag.Prefix + "Could not read Designator_ZoneAdd.zoneTypeToPlace; "
                               + "the 'draw anywhere' setting will be ignored.\n" + ex);
                 }
             }

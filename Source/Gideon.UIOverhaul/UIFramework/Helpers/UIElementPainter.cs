@@ -172,35 +172,123 @@ namespace Gideon.UIFramework.Helpers
             Color ambient = GUI.color;
             Color previous = ambient;
 
-            Widgets.DrawBoxSolid(box, palette.SurfaceSunken * ambient);
+            // The rect handed over may be square -- a grid cell, or a vanilla caller that still thinks in
+            // 24 by 24 boxes. The switch is drawn to its own proportions inside whatever it is given and
+            // centered there, rather than stretched to fill: a squashed track with an oval knob reads as a
+            // rendering fault rather than as a control.
+            Rect frame = SwitchFrame(box);
 
-            Color mark = disabled ? palette.TextDisabled : palette.Accent;
+            Color track = TrackColor(state, palette, disabled);
 
+            Widgets.DrawBoxSolid(frame, track * ambient);
+
+            // The border is the track darkened rather than a color of its own. The reference art is an exact
+            // multiply on both states, and deriving it means a palette that changes the accent gets a matching
+            // edge without having to name a second color for it.
+            //
             // DrawBox honors GUI.color, unlike DrawBoxSolid which resets it to white -- hence the assignment
             // here and the restore after, rather than one color set up front.
-            GUI.color = (state == MultiCheckboxState.Off ? palette.Border : mark) * ambient;
-            Widgets.DrawBox(box, Mathf.Max(1, Mathf.RoundToInt(box.width / 20f)));
+            GUI.color = new Color(track.r * SwitchBorderFactor, track.g * SwitchBorderFactor,
+                track.b * SwitchBorderFactor, track.a) * ambient;
+            Widgets.DrawBox(frame, 1);
             GUI.color = previous;
 
-            // Proportional rather than a fixed 4px, because these are drawn at anything from a 20px cell in
-            // our own grids to whatever size a caller of Widgets.CheckboxDraw asks for.
-            float inset = box.width * 0.2f;
+            // A pixel of track shows all the way around the knob, which is what stops it reading as a block
+            // that has slid off the end of its own control.
+            Rect interior = frame.ContractedBy(1f);
+            float knobSize = Mathf.Max(2f, interior.height - 2f);
+            float knobX;
 
-            if (state == MultiCheckboxState.On)
+            switch (state)
             {
-                Widgets.DrawBoxSolid(box.ContractedBy(inset), mark * ambient);
-            }
-            else if (state == MultiCheckboxState.Partial)
-            {
-                // A bar rather than a smaller square: "some of these" has to be distinguishable from "yes" at
-                // a glance, and two nested squares differing only in size are not.
-                float thickness = Mathf.Max(2f, box.height * 0.14f);
+                case MultiCheckboxState.On:
+                    knobX = interior.xMax - 1f - knobSize;
+                    break;
 
-                Widgets.DrawBoxSolid(new Rect(box.x + inset, box.center.y - thickness * 0.5f,
-                    box.width - inset * 2f, thickness), mark * ambient);
+                case MultiCheckboxState.Partial:
+                    // Centered, which is most of why a switch suits a tri-state: "some of these" becomes a
+                    // position rather than a different shape, and position reads from across a row.
+                    knobX = interior.center.x - knobSize * 0.5f;
+                    break;
+
+                default:
+                    knobX = interior.x + 1f;
+                    break;
             }
+
+            Rect knob = new Rect(knobX, interior.center.y - knobSize * 0.5f, knobSize, knobSize);
+
+            Widgets.DrawBoxSolid(knob, KnobColor(state, palette, disabled) * ambient);
 
             GUI.color = previous;
+        }
+
+        /// <summary>
+        /// How much darker a track's border is than the track itself.
+        ///
+        /// Measured off the reference art, where it is an exact multiply in both states: the checked track
+        /// #73BFFF carries a #4B7CA6 edge and the unchecked #2F3337 carries #1F2124. Both are the fill at 0.65.
+        /// </summary>
+        private const float SwitchBorderFactor = 0.65f;
+
+        /// <summary>
+        /// The switch's proportions, taken from the reference art: 40 wide by 20 tall.
+        ///
+        /// Two to one, from the original textures. The PNGs measured while working this out were 38 wide, but
+        /// that was the round trip through Paint.NET losing two columns, not the authored size.
+        /// </summary>
+        private const float SwitchAspect = 2f;
+
+        /// <summary>
+        /// The largest switch of the right shape that fits a rect, centered in it.
+        ///
+        /// Bounded on both axes rather than scaled from the height alone, because callers hand this everything
+        /// from a tall narrow grid cell to a wide row.
+        /// </summary>
+        internal static Rect SwitchFrame(Rect box)
+        {
+            float height = Mathf.Min(box.height, box.width / SwitchAspect);
+            float width = height * SwitchAspect;
+
+            return new Rect(box.center.x - width * 0.5f, box.center.y - height * 0.5f, width, height);
+        }
+
+        /// <summary>
+        /// The track color for a state.
+        ///
+        /// <b>Every one is an existing palette role, and deliberately so.</b> The reference art was authored
+        /// from the palette: its checked track is <c>Accent</c> to the byte, its unchecked track is
+        /// <c>SurfaceRaised</c>, and its knobs are <c>SurfaceSunken</c> and <c>TextSecondary</c>. Naming new
+        /// roles for colors the palette already carries would give every palette author two places to keep in
+        /// step, and a theme where the switch quietly disagreed with everything around it.
+        ///
+        /// Partial takes <c>Warning</c>, which is the amber the art uses for it.
+        /// </summary>
+        private static Color TrackColor(MultiCheckboxState state, UIColorPaletteDef palette, bool disabled)
+        {
+            if (disabled)
+                return palette.SurfaceRaised;
+
+            switch (state)
+            {
+                case MultiCheckboxState.On: return palette.Accent;
+                case MultiCheckboxState.Partial: return palette.Warning;
+                default: return palette.SurfaceRaised;
+            }
+        }
+
+        /// <summary>
+        /// The knob color for a state: dark on a lit track, light on an unlit one.
+        ///
+        /// The knob is always the high-contrast element against whatever it sits on, which is what keeps its
+        /// position readable at a glance -- and position is the entire signal a switch carries.
+        /// </summary>
+        private static Color KnobColor(MultiCheckboxState state, UIColorPaletteDef palette, bool disabled)
+        {
+            if (disabled)
+                return palette.TextDisabled;
+
+            return state == MultiCheckboxState.Off ? palette.TextSecondary : palette.SurfaceSunken;
         }
 
         /// <summary>
@@ -214,7 +302,7 @@ namespace Gideon.UIFramework.Helpers
         /// outer disc is the ring color, the next one covers all but a rim of it, and the innermost is the
         /// mark. Each is a tint of one generated texture -- see <see cref="UIShapes.Disc"/>.
         /// </summary>
-        /// <summary>How much of the accent a hovered but unselected ring carries. See the notes on ring color.</summary>
+        /// <summary>How far a hovered but unselected rim is lifted toward the accent. See the notes on rim color.</summary>
         private const float HoverRingStrength = 0.55f;
 
         /// <param name="over">
@@ -237,37 +325,38 @@ namespace Gideon.UIFramework.Helpers
             Color ambient = GUI.color;
             Color previous = ambient;
 
-            // Ring color, in precedence order. Selection outranks hover: a hovered button that is already
-            // selected has nothing to promise, and the pointer being somewhere is worth less than the state
-            // being set.
-            //
-            // Hover is the accent at part strength rather than at full. Selected is what full accent means
-            // here, and hovering an unselected button at the same strength made the two indistinguishable
-            // until the pointer moved away -- which defeats the point of coloring the selected one at all.
-            Color ring;
+            // The same colors and the same proportions as the toggle switch, on a circle instead of a track.
+            // A radio button has to stay round -- round means one of several, square means independent, and
+            // that distinction is worth more than shape consistency -- but nothing else about it needs to
+            // differ, and everything else about it used to. It was drawn from Border, AccentMuted and
+            // WindowBackground, none of which the switch uses, so the two read as parts of different themes.
+            Color fill = selected && !disabled ? palette.Accent : palette.SurfaceRaised;
 
-            if (disabled)
-                ring = palette.TextDisabled;
-            else if (selected)
-                ring = palette.Accent;
-            else if (over)
-                ring = new Color(palette.Accent.r, palette.Accent.g, palette.Accent.b,
-                    palette.Accent.a * HoverRingStrength);
-            else
-                ring = palette.Border;
+            // Derived from the fill exactly as the switch's border is, including the same 0.65.
+            Color rim = new Color(fill.r * SwitchBorderFactor, fill.g * SwitchBorderFactor,
+                fill.b * SwitchBorderFactor, fill.a);
 
-            // Both derived from the 24px these are actually drawn at, where each comes out at the intended
-            // 2px. Scaled rather than fixed so a caller drawing one small still gets a visible ring.
-            float thickness = Mathf.Max(1f, size / 12f);
-            float gap = Mathf.Max(1f, size / 12f);
+            // Hover lifts the rim toward the accent rather than recoloring the whole control. Selection
+            // outranks it: a button that is already selected has nothing to promise, and the pointer being
+            // somewhere is worth less than the state being set.
+            if (over && !selected && !disabled)
+                rim = Color.Lerp(rim, palette.Accent, HoverRingStrength);
 
-            Disc(circle, ring * ambient);
-            Disc(circle.ContractedBy(thickness),
-                (selected ? palette.AccentMuted : palette.WindowBackground) * ambient);
+            Color mark = disabled ? palette.TextDisabled : palette.SurfaceSunken;
 
-            // Absent entirely when not selected: the interior above is the whole of the unselected state.
+            // The switch's own proportions, read off the reference art and expressed as fractions of the
+            // control's height so they carry across to a circle: a 20px switch is 1px of border, 2px of track,
+            // a 14px knob, then track and border again. On a disc that is a rim, a gap, and a mark of 70%.
+            float border = Mathf.Max(1f, size * 0.05f);
+            float gap = Mathf.Max(1f, size * 0.10f);
+
+            Disc(circle, rim * ambient);
+            Disc(circle.ContractedBy(border), fill * ambient);
+
+            // Absent entirely when not selected: the fill above is the whole of the unselected state, the same
+            // way an unlit switch is a bare track.
             if (selected)
-                Disc(circle.ContractedBy(thickness + gap), palette.WindowBackground * ambient);
+                Disc(circle.ContractedBy(border + gap), mark * ambient);
 
             GUI.color = previous;
         }

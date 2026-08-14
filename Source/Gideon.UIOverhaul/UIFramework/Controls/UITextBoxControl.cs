@@ -231,7 +231,24 @@ namespace Gideon.UIFramework.Controls
             // color is ours. A themed caret would mean reimplementing text editing, which is not worth it.
             GUI.SetNextControlName(controlName);
             GUI.color = palette.TextPrimary;
-            string edited = Widgets.TextField(inner, text, MaxLength);
+
+            // The shared style carries a fill and a border for every text field in the game, which is what
+            // vanilla's own fields rely on to have an edge at all. This control already drew its frame, around
+            // a rect wider than the editable area so it encloses the icon and the clear button -- so the style
+            // is asked to stand down for the length of this one call, or the field would sit in a second border
+            // inside the first. try/finally because leaving it off would silently un-border the whole game.
+            string edited;
+
+            UISkinRestyler.SetFieldChrome(false);
+            try
+            {
+                edited = Widgets.TextField(inner, text, MaxLength);
+            }
+            finally
+            {
+                UISkinRestyler.SetFieldChrome(true);
+            }
+
             GUI.color = previousColor;
 
             bool changed = edited != text;

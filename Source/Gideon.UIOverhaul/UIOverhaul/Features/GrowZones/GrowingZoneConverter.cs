@@ -2,6 +2,7 @@ using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.GrowZones
 {
@@ -39,7 +40,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
                     converted++;
             }
 
-            Log.Message($"[Gideon.UIOverhaul] Converted {converted} vanilla growing zone(s) to "
+            Log.Message(UILogTag.Prefix + $"Converted {converted} vanilla growing zone(s) to "
                         + $"Growing Zones Plus zones on map {map.Index}.");
         }
 

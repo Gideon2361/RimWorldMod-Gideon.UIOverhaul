@@ -85,7 +85,7 @@ namespace Gideon.UIOverhaul.Features.Work
 
                 if (found != 1)
                 {
-                    Log.Error($"[Gideon.UIOverhaul] Expected exactly one priority bound in "
+                    Log.Error(UILogTag.Prefix + $"Expected exactly one priority bound in "
                               + $"Pawn_WorkSettings.SetPriority but found {found}, so the method has been left "
                               + $"as vanilla wrote it. Work priorities above {WorkPriorityRange.VanillaLowest} "
                               + "will be rejected; the rest of the work tab still works.");

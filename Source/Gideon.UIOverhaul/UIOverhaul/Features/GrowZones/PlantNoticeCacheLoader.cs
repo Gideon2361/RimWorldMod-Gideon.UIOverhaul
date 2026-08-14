@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Xml;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.GrowZones
 {
@@ -81,13 +82,13 @@ namespace Gideon.UIOverhaul.Features.GrowZones
                         if (!IsOwn(mod))
                         {
                             contributed = true;
-                            Log.Message($"[Gideon.UIOverhaul] Loaded {added} plant notice "
+                            Log.Message(UILogTag.Prefix + $"Loaded {added} plant notice "
                                         + $"entr{(added == 1 ? "y" : "ies")} from '{mod.Name}'.");
                         }
                     }
                     catch (Exception ex)
                     {
-                        Log.Error($"[Gideon.UIOverhaul] Could not read the plant notice file supplied by "
+                        Log.Error(UILogTag.Prefix + $"Could not read the plant notice file supplied by "
                                   + $"'{mod.Name}' at {path}. It was skipped.\n{ex}");
                     }
                 }
@@ -97,7 +98,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             }
 
             if (contributingMods > 0)
-                Log.Message($"[Gideon.UIOverhaul] {contributingMods} mod(s) contributed plant notice entries.");
+                Log.Message(UILogTag.Prefix + $"{contributingMods} mod(s) contributed plant notice entries.");
 
             return rows;
         }
@@ -172,7 +173,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             if (row.plant.NullOrEmpty() && row.thingClass.NullOrEmpty()
                 && row.compClass.NullOrEmpty() && row.harvestedThing.NullOrEmpty())
             {
-                Log.Error($"[Gideon.UIOverhaul] Entry {index} in {path} sets no match key "
+                Log.Error(UILogTag.Prefix + $"Entry {index} in {path} sets no match key "
                           + "(plant, thingClass, compClass or harvestedThing). Skipped.");
                 return null;
             }
@@ -180,13 +181,13 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             string kind = Text(entry, "kind");
             if (kind.NullOrEmpty())
             {
-                Log.Error($"[Gideon.UIOverhaul] Entry {index} in {path} has no <kind>. Skipped.");
+                Log.Error(UILogTag.Prefix + $"Entry {index} in {path} has no <kind>. Skipped.");
                 return null;
             }
 
             if (!Enum.TryParse(kind, true, out PlantNoticeKind parsed))
             {
-                Log.Error($"[Gideon.UIOverhaul] Entry {index} in {path} has an unrecognized kind "
+                Log.Error(UILogTag.Prefix + $"Entry {index} in {path} has an unrecognized kind "
                           + $"'{kind}'. Valid values are CreatesHazard, RequiresHazard, "
                           + "PossibleHazard, CreatesBenefit and None. Skipped.");
                 return null;
@@ -205,7 +206,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
                 }
                 else
                 {
-                    Log.Warning($"[Gideon.UIOverhaul] Entry {index} in {path} has an unrecognized "
+                    Log.Warning(UILogTag.Prefix + $"Entry {index} in {path} has an unrecognized "
                                 + $"light '{light}'. Valid values are Deadly, Any and Normal. "
                                 + "Ignoring the light override; the rest of the entry was kept.");
                 }

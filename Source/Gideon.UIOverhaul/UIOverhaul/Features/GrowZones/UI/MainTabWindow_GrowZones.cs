@@ -255,7 +255,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             string subtitle = status.Plant == null
                 ? $"{zone.CellCount} cells"
-                : $"{zone.CellCount} cells Â· {status.PlantCount} planted";
+                : $"{zone.CellCount} cells · {status.PlantCount} planted";
             SubLabel(new Rect(r.x, r.y + 28f, r.width - 6f, 20f), subtitle);
         }
 
@@ -287,7 +287,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (bill == null)
             {
                 GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "â€”", GzpPalette.TextDim);
+                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
                 return;
             }
 
@@ -309,7 +309,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (plus == null)
             {
                 GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "â€”", GzpPalette.TextDim);
+                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
                 return;
             }
 
@@ -330,7 +330,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         {
             if (!status.HasTemperature || status.Plant == null)
             {
-                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "â€”");
+                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "—");
                 return;
             }
 
@@ -380,7 +380,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 temp.ToStringTemperature("F0"), color);
 
             SubLabel(new Rect(textX, r.y + 28f, r.xMax - textX - 6f, 20f),
-                $"{props.minGrowthTemperature.ToStringTemperature("F0")} â€“ "
+                $"{props.minGrowthTemperature.ToStringTemperature("F0")} – "
                 + props.maxGrowthTemperature.ToStringTemperature("F0"));
 
             TooltipHandler.TipRegion(r, (TipSignal) tip);
@@ -392,7 +392,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             if (product == null)
             {
                 SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f),
-                    status.Plant == null ? "â€”" : "No harvest");
+                    status.Plant == null ? "—" : "No harvest");
                 return;
             }
 

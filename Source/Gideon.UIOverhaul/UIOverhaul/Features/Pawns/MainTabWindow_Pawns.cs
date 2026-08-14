@@ -22,6 +22,30 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <summary>Zero, because the panel does its own insetting -- the same arrangement the work tab uses.</summary>
         protected override float Margin => 0f;
 
+        /// <summary>
+        /// Resizes the window when the work pane opens or closes.
+        ///
+        /// <b>Why this is needed at all.</b> <c>RequestedTabSize</c> is only read when a window opens --
+        /// <c>SetInitialSizeAndPosition</c> runs from <c>PreOpen</c> -- so a width that changes while the tab is
+        /// already open changes nothing on its own. Without this the pane would have to be drawn inside the width
+        /// the grid alone asked for, squeezing the table every time somebody expanded a row.
+        ///
+        /// In <c>WindowUpdate</c> rather than in <c>DoWindowContents</c> on purpose: this runs outside the GUI pass,
+        /// so the rect is settled before anything lays out against it. Moving the window mid-draw would leave the
+        /// frame's controls positioned against a rect that no longer exists.
+        ///
+        /// The comparison is against the actual rect rather than a remembered value, so the check answers "does the
+        /// window match what it should be" instead of "did we notice the change" -- and it therefore also corrects
+        /// itself after a resolution change or anything else that moves the window.
+        /// </summary>
+        public override void WindowUpdate()
+        {
+            base.WindowUpdate();
+
+            if (Mathf.Abs(windowRect.width - PawnsPanel.WindowWidth) > 0.5f)
+                SetInitialSizeAndPosition();
+        }
+
         public override void DoWindowContents(Rect inRect)
         {
             UIGuardedPanel.Draw("Pawns.Tab", inRect, () =>

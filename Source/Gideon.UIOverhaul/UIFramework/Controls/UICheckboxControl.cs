@@ -36,8 +36,17 @@ namespace Gideon.UIFramework.Controls
     /// </summary>
     public static class UICheckboxControl
     {
-        /// <summary>Side of the box itself. The row it sits in may be taller.</summary>
+        /// <summary>Height of the switch itself. The row it sits in may be taller.</summary>
         public const float BoxSize = 20f;
+
+        /// <summary>
+        /// Width of the switch, which is no longer square.
+        ///
+        /// A toggle is drawn instead of a box, so the slot it needs is wider than it is tall. Kept as its own
+        /// constant rather than derived at each call site, because every layout that reserves room for one has
+        /// to reserve the same amount or the labels beside them stop lining up.
+        /// </summary>
+        public const float BoxWidth = BoxSize * 2f;
 
         private const float LabelGap = 8f;
         private const float EdgePad = 4f;
@@ -65,12 +74,12 @@ namespace Gideon.UIFramework.Controls
             // Centered when there is no label: a bare box in a grid cell should sit in the middle of it
             // rather than hug an edge that only matters when text follows.
             float boxX = boxOnly
-                ? rect.center.x - BoxSize * 0.5f
+                ? rect.center.x - BoxWidth * 0.5f
                 : side == UICheckboxSide.Right
-                    ? rect.xMax - BoxSize - EdgePad
+                    ? rect.xMax - BoxWidth - EdgePad
                     : rect.x + EdgePad;
 
-            Rect box = new Rect(boxX, rect.y + (rect.height - BoxSize) * 0.5f, BoxSize, BoxSize);
+            Rect box = new Rect(boxX, rect.y + (rect.height - BoxSize) * 0.5f, BoxWidth, BoxSize);
             DrawBox(box, value, palette, disabled);
 
             if (!boxOnly)
@@ -86,7 +95,7 @@ namespace Gideon.UIFramework.Controls
                     : hover ? palette.TextPrimary
                     : palette.TextSecondary;
 
-                Widgets.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.width - BoxSize - EdgePad * 2f
+                Widgets.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.width - BoxWidth - EdgePad * 2f
                                                                  - LabelGap), rect.height), label);
 
                 GUI.color = previousColor;

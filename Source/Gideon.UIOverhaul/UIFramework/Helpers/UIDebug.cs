@@ -71,7 +71,7 @@ namespace Gideon.UIFramework.Helpers
         /// </summary>
         private static string Prefix(string message)
         {
-            return $"[Gideon.UIFramework] [debug f{Time.frameCount}] {message}";
+            return UILogTag.Prefix + $"[debug f{Time.frameCount}] {message}";
         }
     }
 }

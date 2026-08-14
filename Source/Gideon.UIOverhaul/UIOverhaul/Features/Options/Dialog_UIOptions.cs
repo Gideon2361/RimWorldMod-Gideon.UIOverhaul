@@ -1,10 +1,13 @@
 ﻿using System.Collections.Generic;
+using Gideon.UIFramework.Components.Colors;
+using Gideon.UIFramework.Components.Images;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Panel;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -28,9 +31,114 @@ namespace Gideon.UIOverhaul.Features.Options
         private const float Pad = 16f;
         private const float RowHeight = 32f;
 
-        private Vector2 scroll;
+        /// <summary>
+        /// Width of the category column.
+        ///
+        /// Sized for mod names rather than for ours. Our own six are short and fitted comfortably in 196; the
+        /// children are named by whoever wrote them, and "Vanilla Expanded Framework" or longer is ordinary.
+        /// Widened until the common ones fit, with the labels set to ellipsize so the ones that still do not are
+        /// cut deliberately rather than clipped mid-letter, and the card's tooltip carries the full name.
+        /// </summary>
+        private const float ColumnWidth = 260f;
 
-        public override Vector2 InitialSize => new Vector2(620f, 560f);
+        private const float ColumnGap = 10f;
+        /// <summary>
+        /// Two lines of text and the padding around them.
+        ///
+        /// Sized for <c>Small</c> on both lines rather than for the <c>Tiny</c> the blurb asks for, because
+        /// <c>Text.Font = GameFont.Tiny</c> is a request rather than a result: the setter substitutes
+        /// <c>Small</c> whenever <c>TinyFontSupported</c> is false, which covers several languages, the
+        /// "disable tiny text" preference and the Steam Deck. A rect shorter than the line it holds does not
+        /// shrink the text, it shaves the top and bottom off it.
+        /// </summary>
+        private const float CardHeight = 56f;
+
+        private const float CardPadding = 6f;
+        private const float CardLine = 22f;
+        private const float CardGap = 6f;
+
+        /// <summary>How far a child card sits in from its parent.</summary>
+        private const float ChildIndent = 14f;
+
+        /// <summary>
+        /// The mod icon on a card. Square, and the height of the two text lines it sits beside.
+        /// </summary>
+        private const float IconSize = 32f;
+
+        private const float IconGap = 8f;
+
+        private Vector2 scroll;
+        private Vector2 categoryScroll;
+
+        private List<Category> categories;
+
+        /// <summary>
+        /// Which category is showing, and which of its children if it has any.
+        ///
+        /// Static, so closing the window and opening it again comes back to where the player was rather than to
+        /// the top of the list. Someone adjusting a setting and checking the result is going to do that several
+        /// times in a row, and sending them back to Theme each time would make the window feel like it forgot.
+        ///
+        /// Indices rather than a reference to the category itself, precisely because they are static: the
+        /// category objects are rebuilt per window, so a held reference would point at the previous window's
+        /// list. The lists are built the same way every time, so the indices survive where a reference would not.
+        /// </summary>
+        private static int selectedCategory;
+
+        /// <summary>Which child of the selected category, or -1 for the category itself.</summary>
+        private static int selectedChild = -1;
+
+        /// <summary>
+        /// The mod whose settings were last drawn, so its <c>WriteSettings</c> can be called when we leave it.
+        ///
+        /// Vanilla's <c>Dialog_ModSettings</c> writes on close, because closing is the only way to leave it.
+        /// Here a player can click straight from one mod to the next without the window going anywhere, and that
+        /// is a leave too -- so this is the record of what to write when it happens.
+        /// </summary>
+        private Mod lastSettingsMod;
+
+        /// <summary>
+        /// Wide enough that the settings pane is no narrower than the single column it replaced.
+        ///
+        /// The column, its gap and the window padding take a little over 200, so the old 620 would have left the
+        /// settings themselves with 50 less than before. Every explanatory paragraph in this window is drawn into
+        /// a rect of a height fixed for the number of lines it takes at the width it was written for, and a
+        /// narrower pane is what turns a two line paragraph into a three line one that runs out of its rect.
+        /// </summary>
+        /// <summary>How far the settings pane is inset from its panel.</summary>
+        private const float PaneInset = 10f;
+
+        /// <summary>
+        /// Sized so a mod settings page fits at its authored size, rather than sized for our own sections.
+        ///
+        /// <b>Derived from the parts rather than written as a number.</b> Everything between the window edge and
+        /// the pane is accounted for here -- the outer padding, the category column, the gap after it, and the
+        /// pane's own inset -- so changing any of those keeps the window the right size instead of silently
+        /// putting a mod page back under the scale factor.
+        ///
+        /// One size whatever is selected. A window that grew when a mod was picked would jump under the cursor,
+        /// which is worse than a Theme page with room around it.
+        ///
+        /// Clamped to the screen, because a window wider than the display cannot be reached. The clamp is not a
+        /// failure case: <see cref="DrawModSettings"/> still scales to whatever it is given, so a small display
+        /// gets the page shrunk to fit rather than cropped.
+        /// </summary>
+        private static float RequiredWidth =>
+            VanillaModPane.x + PaneInset * 2f + ColumnWidth + ColumnGap + Pad * 2f;
+
+        private static float RequiredHeight =>
+            VanillaModPane.y + PaneInset * 2f + HeaderHeight + FooterHeight;
+
+        public override Vector2 InitialSize => new Vector2(
+            Mathf.Min(RequiredWidth, UI.screenWidth - 20f),
+            Mathf.Min(RequiredHeight, UI.screenHeight - 20f));
+
+        /// <summary>Writes the open mod's settings out, the way closing vanilla's dialog would.</summary>
+        public override void PreClose()
+        {
+            base.PreClose();
+            LeaveModSettings();
+        }
 
         protected override float Margin => 0f;
 
@@ -54,7 +162,9 @@ namespace Gideon.UIOverhaul.Features.Options
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
             UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;
 
-            Widgets.DrawBoxSolid(inRect, palette.WindowBackground);
+            // No fill here. Margin is zero, so inRect is the whole window, and RimWorld has already painted
+            // exactly this color across it through the patched Widgets.DrawWindowBackground -- along with the
+            // border, which a second fill over the top was quietly erasing.
 
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -73,35 +183,562 @@ namespace Gideon.UIOverhaul.Features.Options
             Rect body = new Rect(inRect.x + Pad, inRect.y + HeaderHeight,
                 inRect.width - Pad * 2f, inRect.height - HeaderHeight - FooterHeight);
 
-            Widgets.DrawBoxSolid(body, palette.PanelBackground);
-            Rect inner = body.ContractedBy(10f);
+            EnsureCategories();
+
+            Rect column = new Rect(body.x, body.y, ColumnWidth, body.height);
+            Rect pane = new Rect(column.xMax + ColumnGap, body.y,
+                body.width - ColumnWidth - ColumnGap, body.height);
 
             Text.Font = GameFont.Small;
 
-            // The fixed sections, plus a row for each palette, since that list is as long as whatever the
-            // player has installed. Computed rather than a constant that has to be raised by hand every time
-            // a section is added: a height short of the content does not scroll to the rest, it clips it
-            // away, and the shortfall only shows up on someone else's mod list.
-            float viewHeight = 760f + (UIColorPaletteDef.All?.Count ?? 0) * (RowHeight + 2f);
-            Rect view = new Rect(0f, 0f, inner.width - 18f, viewHeight);
-            Widgets.BeginScrollView(inner, ref scroll, view);
+            DrawCategoryColumn(column, palette);
 
-            float y = 0f;
-            DrawThemeSection(view, ref y, palette, settings);
-            y += 14f;
-            DrawBarSection(view, ref y, palette, settings);
-            y += 14f;
-            DrawClockSection(view, ref y, palette, settings);
-            y += 14f;
-            DrawDisplaySection(view, ref y, palette, settings);
-            y += 14f;
-            DrawDiagnosticsSection(view, ref y, palette, settings);
+            // Only the settings pane gets the panel fill. The category cards carry their own, so leaving the
+            // column on the window background is what makes them read as cards sitting on it rather than as
+            // rows ruled inside a second panel.
+            Widgets.DrawBoxSolid(pane, palette.PanelBackground);
 
-            Widgets.EndScrollView();
+            Category current = Resolve();
+
+            Rect inner = pane.ContractedBy(PaneInset);
+
+            // Writing out happens on the way past rather than on the way in, so a mod that was being edited a
+            // moment ago has its settings saved whether the player moved to another mod, to one of our own
+            // sections, or closed the window.
+            if (current.Mod != lastSettingsMod)
+                LeaveModSettings();
+
+            if (current.RawPane)
+            {
+                lastSettingsMod = current.Mod;
+                DrawModSettings(inner, current.Mod);
+            }
+            else
+            {
+                // Height comes from what the section actually drew last frame rather than from a constant per
+                // section. The old single figure had to be raised by hand whenever a section grew, and a figure
+                // short of the content does not scroll to the rest -- it clips it away, somewhere nobody looks.
+                // Measuring is exact from the second frame on and needs nothing maintained; the seed only has to
+                // be too big rather than right, and too big costs one frame of empty scroll space.
+                Rect view = new Rect(0f, 0f, inner.width - 18f, current.MeasuredHeight);
+                Widgets.BeginScrollView(inner, ref scroll, view);
+
+                float y = 0f;
+                current.Draw(view, ref y, palette, settings);
+
+                Widgets.EndScrollView();
+
+                current.MeasuredHeight = y;
+            }
 
             Text.Anchor = previousAnchor;
             GUI.color = previousColor;
             Text.Font = previousFont;
+        }
+
+        /// <summary>Whether a mod's own settings page is what the pane is showing.</summary>
+        private bool ShowingModSettings
+        {
+            get
+            {
+                if (categories == null || selectedCategory < 0 || selectedCategory >= categories.Count)
+                    return false;
+
+                List<Category> children = categories[selectedCategory].Children;
+
+                return children != null && selectedChild >= 0 && selectedChild < children.Count;
+            }
+        }
+
+        /// <summary>
+        /// The category the pane should draw, clamped so a stale index cannot throw.
+        ///
+        /// The indices are static and outlive any one window, so they can point past the end of a list that has
+        /// since been rebuilt -- a mod removed between sessions is enough.
+        /// </summary>
+        private Category Resolve()
+        {
+            selectedCategory = Mathf.Clamp(selectedCategory, 0, categories.Count - 1);
+            Category category = categories[selectedCategory];
+
+            if (category.Children == null || selectedChild < 0)
+            {
+                selectedChild = -1;
+                return category;
+            }
+
+            if (selectedChild >= category.Children.Count)
+            {
+                selectedChild = -1;
+                return category;
+            }
+
+            return category.Children[selectedChild];
+        }
+
+        /// <summary>
+        /// The rect vanilla's <c>Dialog_ModSettings</c> hands a mod.
+        ///
+        /// Its window is 900 by 700; it spends 40 on the heading and <c>CloseButSize.y</c> on the close button,
+        /// and gives the mod the rest. Every mod settings page in the game was laid out looking at this rect, so
+        /// it is the one measurement worth treating as the authored size.
+        /// </summary>
+        private static Vector2 VanillaModPane =>
+            new Vector2(900f, 700f - 40f - Window.CloseButSize.y);
+
+        /// <summary>
+        /// Hands the pane to another mod to draw into, scaled so its layout arrives whole.
+        ///
+        /// <b>Scaled rather than resized, because their layout is not ours to reflow.</b> A settings page is
+        /// arbitrary IMGUI code: some of it is a <c>Listing_Standard</c> that would adapt to a narrower rect,
+        /// and plenty of it is hard-coded rects, fixed label widths and columns positioned by arithmetic. Handing
+        /// that a smaller rect is what cuts labels off and wraps them badly, and nothing can be inspected ahead of
+        /// time to tell which kind a given page is.
+        ///
+        /// So the page is given exactly <see cref="VanillaModPane"/> -- the rect it was authored against -- and
+        /// the whole coordinate space is scaled to fit our pane through <c>GUI.matrix</c>. The layout that
+        /// results is identical to the one in vanilla's dialog, because it <i>is</i> that layout; only the
+        /// magnification differs. Nothing reflows, so nothing reflows badly.
+        ///
+        /// Uniform on both axes, never above 1. Scaling the axes separately would stretch text and turn every
+        /// icon into an ellipse, and magnifying a page that already fits would be inventing a problem.
+        ///
+        /// <b>Input follows the matrix.</b> Unity transforms <c>Event.current.mousePosition</c> by it, so clicks,
+        /// drags and <c>Mouse.IsOver</c> all land where they look like they should, and tooltips register against
+        /// the rects the page actually drew. The thing to watch is anything that captures a coordinate here and
+        /// uses it after this returns, once the matrix is back -- that is worth a look on a real page rather than
+        /// an assurance from me.
+        ///
+        /// <b>Guarded, and this is the one place in this window where that is not a formality.</b> Everything
+        /// else drawn here is ours; this is arbitrary code from another author running inside our window every
+        /// frame. Left unguarded, a mod whose settings page throws would take this whole window down with it and
+        /// look for all the world like our bug. The matrix is restored in a finally, because leaving it set would
+        /// scale everything drawn after it for the rest of the frame.
+        /// </summary>
+        private static void DrawModSettings(Rect rect, Mod mod)
+        {
+            if (mod == null)
+                return;
+
+            UIGuardedPanel.Draw("Options.ModSettings." + mod.GetType().Name, rect,
+                () =>
+                {
+                    Vector2 authored = VanillaModPane;
+                    float scale = Mathf.Min(rect.width / authored.x, rect.height / authored.y, 1f);
+
+                    Matrix4x4 previous = GUI.matrix;
+
+                    try
+                    {
+                        // Multiplied into whatever is already there rather than assigned, so this composes with
+                        // the window's own transform instead of replacing it.
+                        GUI.matrix = previous * Matrix4x4.TRS(new Vector3(rect.x, rect.y, 0f),
+                            Quaternion.identity, new Vector3(scale, scale, 1f));
+
+                        mod.DoSettingsWindowContents(new Rect(0f, 0f, authored.x, authored.y));
+                    }
+                    finally
+                    {
+                        GUI.matrix = previous;
+                    }
+                },
+                "This mod's settings page could not be drawn. The fault is in that mod rather than in this one; "
+                + "its own settings window from the mod list may still work.");
+        }
+
+        /// <summary>Saves the settings of whichever mod was last shown, if any.</summary>
+        private void LeaveModSettings()
+        {
+            if (lastSettingsMod == null)
+                return;
+
+            Mod leaving = lastSettingsMod;
+            lastSettingsMod = null;
+
+            UIGuard.Try("Options.WriteModSettings." + leaving.GetType().Name,
+                () => leaving.WriteSettings(),
+                "That mod's settings may not have been saved. Its own settings window from the mod list writes "
+                + "them the same way.");
+        }
+
+        /// <summary>
+        /// The category column: one card per section, the chosen one lit.
+        /// </summary>
+        private void DrawCategoryColumn(Rect column, UIColorPaletteDef palette)
+        {
+            float contentHeight = VisibleRowCount() * (CardHeight + CardGap);
+
+            // Scrolls only when it has to. The six categories fit today, but a column that silently ran off
+            // the bottom would put a whole section out of reach with nothing on screen saying so.
+            bool scrolls = contentHeight > column.height;
+            Rect view = new Rect(0f, 0f, column.width - (scrolls ? 18f : 0f), contentHeight);
+
+            Widgets.BeginScrollView(column, ref categoryScroll, view);
+
+            float y = 0f;
+
+            for (int index = 0; index < categories.Count; index++)
+            {
+                Category category = categories[index];
+                bool expanded = index == selectedCategory && category.Children != null;
+
+                // Copied per iteration before the lambda closes over it. A for loop's counter is one variable
+                // shared by every pass, not a fresh one each time -- so all of these closures would otherwise
+                // read the same slot, and read it after the loop had finished, when it holds Count. That is
+                // exactly what happened: every card selected an index one past the end, Resolve clamped it to
+                // the last category, and clicking anything at all landed on Mod Settings with its children
+                // still showing. The inner loop below already did this; this one did not.
+                int captured = index;
+
+                DrawCategoryCard(new Rect(0f, y, view.width, CardHeight), category, palette,
+                    chosen: index == selectedCategory && selectedChild < 0, indent: 0f,
+                    onClick: () =>
+                    {
+                        // Choosing a branch reveals its children rather than picking one of them: the category
+                        // page explains what the list is, and guessing which mod they wanted would be wrong more
+                        // often than not. Choosing anything else collapses whatever was open, because expansion
+                        // is read from this one field rather than stored per category.
+                        selectedCategory = captured;
+                        selectedChild = -1;
+                    });
+
+                y += CardHeight + CardGap;
+
+                if (!expanded)
+                    continue;
+
+                for (int childIndex = 0; childIndex < category.Children.Count; childIndex++)
+                {
+                    Category child = category.Children[childIndex];
+                    int capturedChild = childIndex;
+
+                    // Indented, and narrower for it, so the list reads as belonging to the entry above rather
+                    // than as more categories that happen to be lower down.
+                    DrawCategoryCard(new Rect(ChildIndent, y, view.width - ChildIndent, CardHeight), child,
+                        palette, chosen: selectedChild == childIndex, indent: ChildIndent,
+                        onClick: () => selectedChild = capturedChild);
+
+                    y += CardHeight + CardGap;
+                }
+            }
+
+            Widgets.EndScrollView();
+        }
+
+        /// <summary>How many cards the column is showing, counting the children of an expanded category.</summary>
+        private int VisibleRowCount()
+        {
+            int count = categories.Count;
+
+            if (selectedCategory >= 0 && selectedCategory < categories.Count)
+                count += categories[selectedCategory].Children?.Count ?? 0;
+
+            return count;
+        }
+
+        /// <summary>
+        /// One card in the column, at whatever rect and depth the caller decided.
+        /// </summary>
+        private void DrawCategoryCard(Rect rect, Category category, UIColorPaletteDef palette, bool chosen,
+            float indent, System.Action onClick)
+        {
+            // Resolved every frame rather than held on the card, because the palette can change while this
+            // window is open -- the Theme section is one click away -- and a color baked in at construction
+            // would leave the categories drawn in the old theme until the window was reopened.
+            Color highlight = palette.Get(category.Highlight);
+            bool marked = category.Highlight != UIColorRole.Accent;
+
+            UICardControl card = category.Card;
+            card.Selected = chosen;
+            card.AccentColor = chosen ? highlight : Faded(highlight, marked, palette);
+
+            // A wash over the card's own fill, at the same weight the critical alert card uses, so a marked
+            // category is tinted rather than filled and its text stays as readable as any other.
+            card.BackgroundTexture = marked ? BaseContent.WhiteTex : null;
+            card.BackgroundTint = new Color(highlight.r, highlight.g, highlight.b, 0.13f);
+
+            category.Title.Color = chosen ? palette.TextPrimary : palette.TextSecondary;
+            category.Blurb.Color = palette.TextSecondary;
+
+            // Sized here rather than at construction because the column narrows by the width of a scrollbar when
+            // one appears, and an indented card is narrower again. Nothing clips a card's contents to the card,
+            // so a label left at its old width would write across the gap and into the settings pane.
+            float textLeft = category.Icon != null ? IconSize + IconGap : 0f;
+            float labelWidth = rect.width - card.Padding * 2f - card.AccentWidth - textLeft;
+
+            category.Title.Bounds.x = textLeft;
+            category.Title.Bounds.width = labelWidth;
+            category.Blurb.Bounds.x = textLeft;
+            category.Blurb.Bounds.width = labelWidth;
+
+            if (category.IconElement != null)
+            {
+                category.IconElement.Texture = category.Icon;
+                category.IconElement.Visible = category.Icon != null;
+
+                // Centred against the two lines of text rather than pinned to the top, so a square icon sits
+                // level with the block it labels whichever of the two lines is longer.
+                category.IconElement.Bounds =
+                    new Rect(0f, (CardLine * 2f - IconSize) * 0.5f, IconSize, IconSize);
+            }
+
+            if (!card.Draw(rect, palette) || chosen)
+                return;
+
+            onClick();
+
+            // The pane it is about to show has its own length, and keeping the old offset would open a short
+            // section already scrolled past its end.
+            scroll = Vector2.zero;
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// The unlit form of a category's highlight.
+        ///
+        /// A palette author names <c>accentMuted</c> deliberately as the quiet companion to their accent, so the
+        /// ordinary case uses it as written instead of a color this mod derived. The marked case has no authored
+        /// companion -- no palette names a muted warning -- so that one is mixed toward the panel behind it, which
+        /// is the same thing the authored pair does to the eye.
+        /// </summary>
+        private static Color Faded(Color highlight, bool marked, UIColorPaletteDef palette)
+        {
+            return marked ? Color.Lerp(highlight, palette.PanelBackground, 0.55f) : palette.AccentMuted;
+        }
+
+        /// <summary>
+        /// Draws one category's settings into the pane, advancing <paramref name="y"/> past what it drew.
+        ///
+        /// A named delegate rather than an <c>Action</c> because of the <c>ref</c>: every section already writes
+        /// its height back through one, and changing that would mean rewriting all six to hand a cursor object
+        /// around for no gain.
+        /// </summary>
+        private delegate void SectionDrawer(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings);
+
+        /// <summary>
+        /// One entry in the category column, and the section it shows.
+        /// </summary>
+        private sealed class Category
+        {
+            public UICardControl Card;
+            public UICardLabel Title;
+            public UICardLabel Blurb;
+            public SectionDrawer Draw;
+
+            /// <summary>
+            /// The palette role the card's accent stripe and wash take.
+            ///
+            /// <see cref="UIColorRole.Accent"/> is an ordinary category. <see cref="UIColorRole.Warning"/> marks
+            /// one as holding experimental settings, which is the whole of what marking a category involves --
+            /// the card already knows how to draw a stripe and a wash, so nothing else has to be told about it.
+            /// Nothing is marked today; the settings here are all finished ones.
+            ///
+            /// A role rather than a color because the player can change the palette from inside this window, so
+            /// the color has to be looked up when it is drawn rather than when the category is built.
+            /// </summary>
+            public UIColorRole Highlight = UIColorRole.Accent;
+
+            /// <summary>
+            /// Sub-entries revealed when this one is chosen, or null for an ordinary category.
+            ///
+            /// Only one level. A settings list that nests further is a settings list nobody can find anything in,
+            /// and there is nothing below a mod to show anyway.
+            /// </summary>
+            public List<Category> Children;
+
+            /// <summary>The mod this entry shows the settings for, on a child of the mod settings category.</summary>
+            public Mod Mod;
+
+            /// <summary>
+            /// The mod's own icon, shown at the left of its card. Null on our own categories, which have none.
+            ///
+            /// Held on the category rather than added to the card at construction because the labels have to
+            /// move over to make room for it, and that is decided where the card is laid out.
+            /// </summary>
+            public Texture Icon;
+
+            /// <summary>The card element the icon is drawn through, hidden on categories without one.</summary>
+            public UICardImage IconElement;
+
+            /// <summary>
+            /// Whether the pane hands this category the rect directly instead of putting it in a scroll view.
+            ///
+            /// True for another mod's settings, and it has to be. <c>DoSettingsWindowContents</c> is given a
+            /// plain rect by vanilla and a good many mods open their own scroll view inside it; nesting one
+            /// scroll view in another gives two scrollbars that fight, and the inner one usually wins by
+            /// swallowing the wheel.
+            /// </summary>
+            public bool RawPane;
+
+            /// <summary>
+            /// How tall this category's content was the last time it drew.
+            ///
+            /// Seeded far above any real section so the first frame over-reaches rather than clipping. Over-
+            /// reaching shows one frame of scroll space below the content and then corrects itself; falling
+            /// short hides the bottom of a section until someone happens to notice it missing.
+            /// </summary>
+            public float MeasuredHeight = 1400f;
+        }
+
+        private void EnsureCategories()
+        {
+            if (categories != null)
+                return;
+
+            categories = new List<Category>
+            {
+                MakeCategory("Theme", "Colors and palettes", DrawThemeSection),
+                MakeCategory("Manage Tabs", "The button bar", DrawBarSection),
+                MakeCategory("Clock", "How the time reads", DrawClockSection),
+                MakeCategory("Desktop Widgets", "Readouts in the corners", DrawWidgetSection),
+                MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
+                MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
+                MakeModSettingsCategory()
+            };
+        }
+
+        /// <summary>
+        /// The mod settings category: every other mod that offers settings, as children of one entry.
+        ///
+        /// <b>The list is exactly vanilla's.</b> A mod appears here if <c>SettingsCategory()</c> returns
+        /// something, which is the same test <c>Dialog_ModsConfig</c> uses to decide whether to offer the button
+        /// at all. Anything else would be this mod inventing an opinion about whose settings are worth showing.
+        ///
+        /// Built once, because <c>LoadedModManager.ModHandles</c> is fixed for the session -- mods cannot be
+        /// loaded or unloaded without a restart, so a list rebuilt every frame would be the same list.
+        ///
+        /// Sorted by the name shown rather than by load order, because the player is looking for a name.
+        /// </summary>
+        private Category MakeModSettingsCategory()
+        {
+            Category parent = MakeCategory("Mod Settings", "Other mods' options", DrawModPickerSection);
+            parent.Children = new List<Category>();
+
+            IEnumerable<Mod> handles = UIGuard.Try("Options.ListModsWithSettings",
+                () => LoadedModManager.ModHandles, null,
+                "The mod settings list is empty.");
+
+            if (handles == null)
+                return parent;
+
+            List<Mod> withSettings = new List<Mod>();
+
+            foreach (Mod mod in handles)
+            {
+                // Guarded per mod: SettingsCategory is another mod's code, and one that throws should cost its
+                // own row rather than the whole list.
+                string category = UIGuard.Try("Options.ReadModSettingsCategory",
+                    () => mod?.SettingsCategory(), null,
+                    "One mod is left out of the mod settings list.");
+
+                if (!category.NullOrEmpty())
+                    withSettings.Add(mod);
+            }
+
+            withSettings.SortBy(m => m.SettingsCategory());
+
+            foreach (Mod mod in withSettings)
+            {
+                Category child = MakeCategory(mod.SettingsCategory(), mod.Content?.Name ?? "", null);
+                child.Mod = mod;
+                child.RawPane = true;
+                child.Icon = IconFor(mod);
+                parent.Children.Add(child);
+            }
+
+            return parent;
+        }
+
+        /// <summary>
+        /// A mod's own icon, the one the mod list shows.
+        ///
+        /// <c>ModMetaData.Icon</c> never returns null -- it falls back to RimWorld's generic mod icon when the
+        /// author shipped no ModIcon.png -- so a card either shows the mod's mark or the same placeholder the
+        /// mod list would show it with. It does file I/O the first time it is asked, which is why this is called
+        /// while the list is built rather than every frame.
+        ///
+        /// Guarded because it touches the filesystem and another mod's About folder, neither of which is owed
+        /// to us in any particular state.
+        /// </summary>
+        private static Texture IconFor(Mod mod)
+        {
+            return UIGuard.Try("Options.ReadModIcon",
+                () => (Texture) mod?.Content?.ModMetaData?.Icon, null,
+                "That mod's card shows no icon.");
+        }
+
+        /// <summary>
+        /// What the mod settings category itself shows: what to do, or why there is nothing to do.
+        /// </summary>
+        private void DrawModPickerSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Mod Settings", palette);
+
+            int count = categories[selectedCategory].Children?.Count ?? 0;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 56f),
+                count == 0
+                    ? "No other mod you have loaded offers settings. Mods that do will appear here on their own."
+                    : "Choose a mod from the list to the left. Its own settings page opens here, drawn by the "
+                      + "mod itself, and is saved when you move away from it or close this window.");
+
+            y += 60f;
+            GUI.color = palette.TextPrimary;
+        }
+
+        /// <summary>
+        /// Builds a category and its card once.
+        ///
+        /// The card is kept and reassigned between frames rather than rebuilt, which is what it is designed for:
+        /// the two labels are held by reference so a frame only writes the colors that changed.
+        /// </summary>
+        private static Category MakeCategory(string label, string blurb, SectionDrawer draw)
+        {
+            UICardControl card = new UICardControl
+            {
+                Height = CardHeight,
+                Padding = CardPadding,
+                AccentWidth = 3f
+            };
+
+            Category category = new Category
+            {
+                Card = card,
+                Draw = draw,
+                // Added before the labels so it draws under them if they ever overlap, and so the element order
+                // matches the reading order.
+                IconElement = card.Add(new UICardImage
+                {
+                    Fit = UIImageFit.Contain,
+                    Visible = false
+                }),
+                Title = card.Add(new UICardLabel
+                {
+                    Text = label,
+                    Bounds = new Rect(0f, 0f, 0f, CardLine),
+                    Anchor = TextAnchor.MiddleLeft,
+                    Ellipses = true
+                }),
+                Blurb = card.Add(new UICardLabel
+                {
+                    Text = blurb,
+                    Bounds = new Rect(0f, CardLine, 0f, CardLine),
+                    Font = GameFont.Tiny,
+                    Anchor = TextAnchor.MiddleLeft,
+                    Ellipses = true
+                })
+            };
+
+            // The full text on hover, since ellipsizing is a promise that nothing is lost, only hidden. Both
+            // lines, because a mod's name and the pack it came from are different things and either can be the
+            // one that was cut.
+            card.Tooltip = blurb.NullOrEmpty() ? label : label + "\n" + blurb;
+
+            return category;
         }
 
         private void DrawThemeSection(Rect view, ref float y, UIColorPaletteDef palette,
@@ -264,6 +901,143 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "This puts it back. Leaving fullscreen during a session still works; it just no longer sticks.");
             y += 60f;
             GUI.color = palette.TextPrimary;
+        }
+
+        /// <summary>
+        /// The desktop widgets section: which of this mod's corner readouts are drawn.
+        ///
+        /// <b>A master switch above six individual ones, rather than six alone.</b> "I want my corner back" is a
+        /// different request from "I want the season but not the weather", and answering the first by asking someone
+        /// to clear six boxes -- and to remember which six they had cleared if they change their mind -- is a worse
+        /// answer than one box.
+        ///
+        /// The six stay enabled and readable while the master switch is off rather than being greyed out. Their
+        /// values are still what they were and are still what comes back when it is switched on again, so showing
+        /// them as unavailable would misrepresent what turning it back on will do.
+        ///
+        /// <b>Everything defaults to on.</b> A readout nobody can see is a readout nobody learns to want.
+        /// </summary>
+        private void DrawWidgetSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Desktop Widgets", palette);
+
+            const float indent = 18f;
+
+            GroupLabel(view, ref y, palette, "This mod's widgets");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Speed control icons",
+                settings.showSpeedGlyphs, value =>
+                {
+                    settings.showSpeedGlyphs = value;
+
+                    // Swapped now rather than at the next launch, so the row under the cursor changes while the
+                    // box is still being looked at.
+                    SpeedGlyphs.Set(value);
+                },
+                "This mod's drawn pause and speed glyphs, in place of RimWorld's. The buttons themselves, and "
+                + "the keyboard shortcuts, are unchanged either way.");
+
+            y += 6f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(indent, y, view.width - indent, 36f),
+                "The rest of this mod's corner is still to come, and each piece of it gets a switch here.");
+            y += 40f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "RimWorld's corner");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Play setting toggles",
+                settings.showGlobalControlsWidget, value => settings.showGlobalControlsWidget = value,
+                "The row of small buttons: zones, roof overlay, colonist bar and the rest.\n\nThe same toggles "
+                + "are in the Controls tab, so this can be switched off to reclaim the corner. The beauty, room "
+                + "stats and map search keys keep working either way.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Speed controls",
+                settings.showSpeedControlsWidget, value => settings.showSpeedControlsWidget = value,
+                "Hides the buttons. Space and the speed number keys keep working.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Date, season and hour",
+                settings.showDateWidget, value => settings.showDateWidget = value,
+                "RimWorld draws these three lines as one readout and gives no way to separate them, so they "
+                + "share a switch.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Real-time clock",
+                settings.showTimeWidget, value => settings.showTimeWidget = value,
+                "The wall clock time. RimWorld keeps this behind a preference in its own options; this switch "
+                + "overrides it in both directions, and starts out matching whatever that preference already "
+                + "said.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Performance meter (FPS and TPS)",
+                settings.showPerformanceWidget, value => settings.showPerformanceWidget = value,
+                "RimWorld keeps these counters behind its developer view settings. This shows them without "
+                + "turning developer mode on.\n\nSwitching it off gives the developer settings the last word "
+                + "again rather than hiding a counter you turned on there.");
+
+            // Shown but not yet operable, rather than left out. Leaving them out would read as this mod having
+            // no opinion about them; showing them greyed says the row exists, this is where its switch will be,
+            // and it is not ready. The tooltip says why, because "greyed out" on its own is just a dead end.
+            const string pending =
+                "Not yet. RimWorld draws this one inside the method that lays the whole corner out, rather than "
+                + "through a call of its own, so hiding it leaves a gap where it was. It becomes a real switch "
+                + "when this mod takes over that panel.";
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Temperature",
+                settings.showTemperatureWidget, value => settings.showTemperatureWidget = value,
+                pending, disabled: true);
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Weather",
+                settings.showWeatherWidget, value => settings.showWeatherWidget = value,
+                pending, disabled: true);
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Game conditions",
+                settings.showConditionsWidget, value => settings.showConditionsWidget = value,
+                pending, disabled: true);
+
+            y += 12f;
+        }
+
+        /// <summary>
+        /// A heading inside a section, for the two halves of the widget list.
+        ///
+        /// Lighter than <see cref="SectionHeader"/> on purpose: these divide a section rather than start one, and
+        /// giving them the same weight would read as two sections that had lost their place in the category list.
+        /// </summary>
+        private static void GroupLabel(Rect view, ref float y, UIColorPaletteDef palette, string title)
+        {
+            Color previous = GUI.color;
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 24f), title);
+            GUI.color = previous;
+
+            y += 24f;
+            Widgets.DrawBoxSolid(new Rect(0f, y, view.width, 1f), palette.Border);
+            y += 6f;
+        }
+
+        /// <summary>
+        /// One widget's checkbox.
+        ///
+        /// Takes a setter rather than a <c>ref</c> to a field, because the six of these differ only in which field
+        /// they write and a ref parameter cannot be handed a field of an object in a list-like call sequence without
+        /// each line becoming its own block. Six near-identical blocks is exactly how one of them ends up saving the
+        /// wrong setting.
+        /// </summary>
+        private static void WidgetToggle(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings, float indent, string label, bool current,
+            System.Action<bool> apply, string tooltip = null, bool disabled = false)
+        {
+            bool value = current;
+
+            if (UICheckboxControl.Draw(new Rect(indent, y, view.width - indent, RowHeight), ref value, palette,
+                    label, tooltip, disabled: disabled))
+            {
+                apply(value);
+                settings.Save();
+            }
+
+            y += RowHeight + 2f;
         }
 
         /// <summary>

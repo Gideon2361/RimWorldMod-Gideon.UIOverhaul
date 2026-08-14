@@ -299,7 +299,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 $"Coldest temperature it will grow in.\nBelow this it stops growing and may die.");
             x += wMin;
 
-            StatPair(x, wideRowY, wIdeal, GzpTex.IdealTemp, $"{idealLow}â€“{idealHigh}",
+            StatPair(x, wideRowY, wIdeal, GzpTex.IdealTemp, $"{idealLow}–{idealHigh}",
                 $"Grows fastest between {idealLow} and {idealHigh}.\n"
                 + $"Full range: {coldest} to {hottest}.");
             x += wIdeal;

@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIFramework.Components.Images
 {
@@ -85,7 +86,7 @@ namespace Gideon.UIFramework.Components.Images
             string file = FindFile(texturePath);
             if (file == null)
             {
-                Log.Warning($"[Gideon.UIFramework] No texture found for '{texturePath}'. Looked for "
+                Log.Warning(UILogTag.Prefix + $"No texture found for '{texturePath}'. Looked for "
                             + string.Join(", ", Extensions) + " under every active mod's Textures folder.");
                 return new UIImage(null, false, null);
             }
@@ -113,7 +114,7 @@ namespace Gideon.UIFramework.Components.Images
             }
             catch (Exception ex)
             {
-                Log.Error($"[Gideon.UIFramework] Could not load texture '{texturePath}' from {file}\n{ex}");
+                Log.Error(UILogTag.Prefix + $"Could not load texture '{texturePath}' from {file}\n{ex}");
                 return new UIImage(null, false, file);
             }
         }
@@ -238,7 +239,7 @@ namespace Gideon.UIFramework.Components.Images
         {
             if (bytes.Length < DdsHeaderSize || BitConverter.ToUInt32(bytes, 0) != DdsMagic)
             {
-                Log.Error($"[Gideon.UIFramework] {file} is not a DDS file.");
+                Log.Error(UILogTag.Prefix + $"{file} is not a DDS file.");
                 return null;
             }
 
@@ -253,7 +254,7 @@ namespace Gideon.UIFramework.Components.Images
 
             if (width <= 0 || height <= 0)
             {
-                Log.Error($"[Gideon.UIFramework] {file}: bad DDS dimensions {width}x{height}.");
+                Log.Error(UILogTag.Prefix + $"{file}: bad DDS dimensions {width}x{height}.");
                 return null;
             }
 
@@ -270,7 +271,7 @@ namespace Gideon.UIFramework.Components.Images
                     case 0x30315844:                                        // "DX10"
                         if (bytes.Length < DdsHeaderSize + Dx10HeaderSize)
                         {
-                            Log.Error($"[Gideon.UIFramework] {file}: DX10 header is truncated.");
+                            Log.Error(UILogTag.Prefix + $"{file}: DX10 header is truncated.");
                             return null;
                         }
 
@@ -284,14 +285,14 @@ namespace Gideon.UIFramework.Components.Images
                             case 28: format = TextureFormat.RGBA32; break;          // R8G8B8A8_UNORM
                             case 87: format = TextureFormat.BGRA32; break;          // B8G8R8A8_UNORM
                             default:
-                                Log.Error($"[Gideon.UIFramework] {file}: unsupported DXGI format {dxgi}. "
+                                Log.Error(UILogTag.Prefix + $"{file}: unsupported DXGI format {dxgi}. "
                                           + "Save as BC1 (DXT1), BC3 (DXT5) or BC7.");
                                 return null;
                         }
                         break;
 
                     default:
-                        Log.Error($"[Gideon.UIFramework] {file}: unsupported DDS fourCC "
+                        Log.Error(UILogTag.Prefix + $"{file}: unsupported DDS fourCC "
                                   + $"'{FourCcText(fourCc)}'. DXT3 in particular has no Unity equivalent; "
                                   + "save as DXT1 or DXT5.");
                         return null;
@@ -304,7 +305,7 @@ namespace Gideon.UIFramework.Components.Images
             }
             else
             {
-                Log.Error($"[Gideon.UIFramework] {file}: unsupported DDS pixel format "
+                Log.Error(UILogTag.Prefix + $"{file}: unsupported DDS pixel format "
                           + $"(flags 0x{pixelFormatFlags:X}, {rgbBitCount} bpp).");
                 return null;
             }
@@ -312,7 +313,7 @@ namespace Gideon.UIFramework.Components.Images
             int available = bytes.Length - dataOffset;
             if (available <= 0)
             {
-                Log.Error($"[Gideon.UIFramework] {file}: DDS has a header but no pixel data.");
+                Log.Error(UILogTag.Prefix + $"{file}: DDS has a header but no pixel data.");
                 return null;
             }
 
@@ -324,7 +325,7 @@ namespace Gideon.UIFramework.Components.Images
 
             if (available < required)
             {
-                Log.Error($"[Gideon.UIFramework] {file}: DDS is truncated -- {available} bytes of pixel "
+                Log.Error(UILogTag.Prefix + $"{file}: DDS is truncated -- {available} bytes of pixel "
                           + $"data, {required} needed for {width}x{height} {format}.");
                 return null;
             }

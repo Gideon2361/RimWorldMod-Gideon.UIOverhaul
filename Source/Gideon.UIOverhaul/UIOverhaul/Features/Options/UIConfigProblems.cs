@@ -27,7 +27,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 return;
 
             // The log still gets it, so a bug report includes the detail even if the window was dismissed.
-            Log.Warning($"[Gideon.UIOverhaul] Discarded {file}:\n  " + string.Join("\n  ", problems));
+            Log.Warning(UILogTag.Prefix + $"Discarded {file}:\n  " + string.Join("\n  ", problems));
 
             if (Find.WindowStack == null)
                 return;

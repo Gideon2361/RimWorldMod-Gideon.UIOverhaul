@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Pawns.Templates;
 using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
@@ -160,7 +161,7 @@ namespace Gideon.UIOverhaul.Features.Work
 
                 Grid.Columns.Add(new UIDesignatorTabColumn
                 {
-                    Label = ColumnLabel(work),
+                    Label = LabelOf(work),
                     Width = WorkColumnWidth,
                     Tooltip = work.gerundLabel.CapitalizeFirst() + "\n\n" + work.description,
                     DrawCell = (cell, row, palette) =>
@@ -177,7 +178,7 @@ namespace Gideon.UIOverhaul.Features.Work
 
         /// <summary>
         /// The same list the grid's columns come from, for anything that has to line up with them --
-        /// <see cref="Dialog_WorkTemplates"/> lists a template's contents in this order so a template reads in
+        /// <see cref="Dialog_PawnTemplates"/> lists a template's contents in this order so a template reads in
         /// the same sequence as the row it was captured from.
         /// </summary>
         internal static List<WorkTypeDef> VisibleWorkTypes => WorkTypes;
@@ -327,6 +328,21 @@ namespace Gideon.UIOverhaul.Features.Work
 
         private static readonly Dictionary<Pawn, int[]> Remembered = new Dictionary<Pawn, int[]>();
 
+        /// <summary>
+        /// Drops the snapshot for one pawn, because their priorities have been rewritten by something other than
+        /// this grid.
+        ///
+        /// Anything that writes a pawn's whole assignment has to call this, or the next round trip through the
+        /// manual-priorities toggle would restore the numbers that were there before -- silently undoing a pasted or
+        /// applied template. Internal rather than private because the template window is now one of the things that
+        /// rewrites them, and it is not part of this panel.
+        /// </summary>
+        internal static void ForgetRemembered(Pawn pawn)
+        {
+            if (pawn != null)
+                Remembered.Remove(pawn);
+        }
+
         private static void Remember()
         {
             Remembered.Clear();
@@ -405,39 +421,14 @@ namespace Gideon.UIOverhaul.Features.Work
         };
 
         /// <summary>
-        /// Whether a pawn survives the search, matched on name alone.
+        /// Whether a pawn survives the search.
         ///
-        /// Read off <c>Name</c> rather than any of the label properties, because a pawn's label is not its
-        /// name. <c>Pawn.LabelNoCount</c> is the name followed by the backstory title -- "Maxwell, Sailor" --
-        /// and the title half is run through <c>Colorize</c>, so the string also carries <c>&lt;color=#...&gt;</c>
-        /// markup. Filtering on it matched a colonist's profession, which is how searching "sa" turned up a
-        /// sailor named Maxwell alongside Sam, and would equally have matched "col" against every titled pawn
-        /// in the colony.
-        ///
-        /// First, nick and last are each tested separately rather than against the assembled full name, so a
-        /// search cannot match across the join between two of them.
+        /// The matching itself lives in <see cref="Features.Pawns.PawnSearch"/>, shared with the pawns tab. It
+        /// is subtler than it looks -- a pawn's label is not their name -- and the note there says why.
         /// </summary>
         private static bool Matches(Pawn pawn)
         {
-            if (Search.IsEmpty)
-                return true;
-
-            if (pawn.Name is NameTriple triple)
-            {
-                return Search.Matches(triple.First)
-                       || Search.Matches(triple.Nick)
-                       || Search.Matches(triple.Last);
-            }
-
-            if (pawn.Name is NameSingle single)
-                return Search.Matches(single.Name);
-
-            // A Name subclass from a mod, or no name at all. ToStringShort is the nearest thing to a bare
-            // name that every Name is required to have; LabelShortCap covers a pawn with no Name, where it
-            // falls through to the kind label rather than dereferencing null.
-            return pawn.Name != null
-                ? Search.Matches(pawn.Name.ToStringShort)
-                : Search.Matches(pawn.LabelShortCap);
+            return Features.Pawns.PawnSearch.Matches(Search, pawn);
         }
 
         /// <summary>
@@ -476,12 +467,17 @@ namespace Gideon.UIOverhaul.Features.Work
         }
 
         /// <summary>
-        /// A work type's name for a column title, capitalized per word: "Bed Rest", not "bed rest".
+        /// A work type's name as a label, capitalized per word: "Bed Rest", not "bed rest".
         ///
         /// <c>labelShort</c> is the compact name the game keeps for exactly this purpose, and it is authored
-        /// lowercase for use mid-sentence. A column heading is not mid-sentence.
+        /// lowercase for use mid-sentence. A heading is not mid-sentence.
+        ///
+        /// <b>Shared, so a work type is called the same thing everywhere this mod names one.</b> Not just column
+        /// headings any more: the pawns tab's work pane and the template manager both label a work type with this.
+        /// <c>gerundLabel</c> -- "Doctoring", "Hauling" -- is the other candidate and is deliberately kept for
+        /// tooltips only, where it reads as a description of the activity rather than as the name of a setting.
         /// </summary>
-        private static string ColumnLabel(WorkTypeDef work)
+        internal static string LabelOf(WorkTypeDef work)
         {
             string source = work.labelShort.NullOrEmpty() ? work.gerundLabel : work.labelShort;
             if (source.NullOrEmpty())
@@ -660,21 +656,21 @@ namespace Gideon.UIOverhaul.Features.Work
             if (ToolButton(new Rect(x, top, ToolButtonSize, ToolButtonSize), WorkToolIcons.Clear, "0", palette,
                     "Clear every work priority for " + pawn.LabelShortCap))
             {
-                ConfirmClear(pawn);
+                ConfirmClearPriorities(pawn);
             }
 
             if (ToolButton(new Rect(x + step, top, ToolButtonSize, ToolButtonSize), WorkToolIcons.Copy, "C",
                     palette, "Copy " + pawn.LabelShortCap + "'s priorities"))
             {
-                Copy(pawn);
+                CopyPriorities(pawn);
             }
 
             // Nothing to paste is a disabled button rather than a hidden one: a tool that appears once you
             // have used another tool is a tool nobody finds.
             if (ToolButton(new Rect(x + step * 2f, top, ToolButtonSize, ToolButtonSize), WorkToolIcons.Paste,
-                    "P", palette, PasteTooltip(pawn), clipboard == null))
+                    "P", palette, PasteTooltip(pawn), !HasClipboard))
             {
-                Paste(pawn);
+                PastePriorities(pawn);
             }
 
             // --- saved templates ---------------------------------------------------------------
@@ -682,68 +678,77 @@ namespace Gideon.UIOverhaul.Features.Work
             if (ToolButton(new Rect(x, bottom, ToolButtonSize, ToolButtonSize), WorkToolIcons.Save, "S",
                     palette, "Save " + pawn.LabelShortCap + "'s priorities as a template"))
             {
-                WorkPriorityTemplate saved = WorkTemplateStore.CaptureFrom(pawn);
-                Find.WindowStack.Add(new Dialog_WorkTemplates(null, saved));
+                PawnTemplate saved = PawnTemplateStore.CaptureFrom(pawn, PawnTemplateScope.Priorities);
+                Find.WindowStack.Add(new Dialog_PawnTemplates(null, PawnTemplateScope.Priorities, saved));
             }
 
             if (ToolButton(new Rect(x + step, bottom, ToolButtonSize, ToolButtonSize), WorkToolIcons.Apply,
                     "A", palette, "Apply a saved template to " + pawn.LabelShortCap))
             {
-                Find.WindowStack.Add(new Dialog_WorkTemplates(pawn));
+                // Scoped to priorities, so this tab's apply button writes priorities even when the template the
+                // player picks is a whole-pawn one that also carries a schedule and policies.
+                Find.WindowStack.Add(new Dialog_PawnTemplates(pawn, PawnTemplateScope.Priorities));
             }
         }
 
         // ---------------------------------------------------------------------------------------
         // Copy and paste
         //
-        // The clipboard is a WorkPriorityTemplate, which is not a coincidence: an unnamed set of priorities
-        // lifted off one pawn to put on another is exactly what a template is, and reusing the type means
-        // copy and paste inherit its handling of work a pawn cannot do rather than repeating it.
+        // The clipboard is a PawnTemplate scoped to priorities, which is not a coincidence: an unnamed set of
+        // priorities lifted off one pawn to put on another is exactly what a template is, and reusing the type
+        // means copy and paste inherit its handling of work a pawn cannot do rather than repeating it.
         //
         // Held for the session and never written to disk. A template is the deliberate, named, kept version;
         // this is the one you are using right now, and persisting it would blur the two.
         // ---------------------------------------------------------------------------------------
 
-        private static WorkPriorityTemplate clipboard;
+        private static PawnTemplate clipboard;
 
-        private static void Copy(Pawn pawn)
+        /// <summary>
+        /// Whether anything has been copied, for a paste button that has to be disabled rather than hidden.
+        ///
+        /// The clipboard itself stays private: it is shared with the pawns tab's work pane, which is the point --
+        /// copying in one tab and pasting in the other is obviously wanted -- but the pane has no business reading
+        /// or replacing it directly.
+        /// </summary>
+        internal static bool HasClipboard => clipboard != null;
+
+        internal static void CopyPriorities(Pawn pawn)
         {
             // From() skips work this pawn cannot do, so their incapabilities are not copied as zeros onto
             // someone who is perfectly capable of the work.
-            clipboard = WorkPriorityTemplate.From(pawn, pawn.LabelShortCap);
+            clipboard = PawnTemplate.From(pawn, pawn.LabelShortCap, PawnTemplateScope.Priorities);
 
             SoundDefOf.Tick_High.PlayOneShotOnCamera();
             Messages.Message("Copied " + pawn.LabelShortCap + "'s work priorities.",
                 MessageTypeDefOf.SilentInput, false);
         }
 
-        private static void Paste(Pawn pawn)
+        internal static void PastePriorities(Pawn pawn)
         {
             if (clipboard == null)
                 return;
 
             // ApplyTo() leaves work this pawn cannot do at 0 rather than erroring, which is the other half of
             // respecting capabilities: the copy ignored the source's, and this ignores the target's.
-            int skipped = clipboard.ApplyTo(pawn);
+            PawnTemplateApplyResult result = clipboard.ApplyTo(pawn, PawnTemplateScope.Priorities);
 
             // The remembered snapshot described the old numbers, and would put them back the next time manual
             // priorities were switched off and on again.
-            Remembered.Remove(pawn);
+            ForgetRemembered(pawn);
 
             SoundDefOf.Tick_High.PlayOneShotOnCamera();
 
             string message = "Pasted " + clipboard.name + "'s work priorities onto " + pawn.LabelShortCap + ".";
-            if (skipped > 0)
-            {
-                message += " " + skipped + (skipped == 1 ? " work type was" : " work types were")
-                                         + " left off; " + pawn.LabelShortCap + " cannot do "
-                                         + (skipped == 1 ? "it." : "them.");
-            }
+            string trouble = result.Describe(pawn.LabelShortCap);
+
+            if (!trouble.NullOrEmpty())
+                message += " " + trouble;
 
             Messages.Message(message, MessageTypeDefOf.SilentInput, false);
         }
 
-        private static string PasteTooltip(Pawn pawn)
+        internal static string PasteTooltip(Pawn pawn)
         {
             if (clipboard == null)
                 return "Nothing copied yet. Use the copy button on a colonist to pick up their priorities.";
@@ -759,7 +764,7 @@ namespace Gideon.UIOverhaul.Features.Work
         /// only read the row or write a template over it, and a template can be applied again. A pawn with
         /// nothing set has nothing to lose, so that case skips the question.
         /// </summary>
-        private static void ConfirmClear(Pawn pawn)
+        internal static void ConfirmClearPriorities(Pawn pawn)
         {
             List<WorkTypeDef> assigned = new List<WorkTypeDef>();
 
@@ -1022,7 +1027,7 @@ namespace Gideon.UIOverhaul.Features.Work
         /// Construction and Artistic -- so the average across relevantSkills is what the number reports,
         /// matching how the game itself decides competence at the work rather than at one skill.
         /// </summary>
-        private static Color SkillColor(Pawn pawn, WorkTypeDef work, UIColorPaletteDef palette,
+        internal static Color SkillColor(Pawn pawn, WorkTypeDef work, UIColorPaletteDef palette,
             out string label)
         {
             if (pawn.skills == null || work.relevantSkills == null || work.relevantSkills.Count == 0)

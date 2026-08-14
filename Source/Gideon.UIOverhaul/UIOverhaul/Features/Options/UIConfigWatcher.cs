@@ -4,6 +4,7 @@ using System.Threading;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using UnityEngine;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.Options
 {
@@ -62,7 +63,8 @@ namespace Gideon.UIOverhaul.Features.Options
 
             // Matched by the same filter, so an edit to the templates file already wakes the watcher; without
             // this it would report a reload and then keep serving the old templates.
-            Features.Work.WorkTemplateStore.Reload();
+            Features.Pawns.Templates.PawnTemplateStore.Reload();
+            Features.Notifications.AlertState.Reload();
 
             // Touching Current forces the read now rather than on some later first use, so a bad file is
             // reported at a predictable moment.
@@ -96,7 +98,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 string folder = GenFilePaths.ConfigFolderPath;
                 if (folder.NullOrEmpty() || !Directory.Exists(folder))
                 {
-                    Log.Warning("[Gideon.UIOverhaul] Config folder not found; edits to the settings files "
+                    Log.Warning(UILogTag.Prefix + "Config folder not found; edits to the settings files "
                                 + "will not be picked up until the game is restarted.");
                     return;
                 }
@@ -122,7 +124,7 @@ namespace Gideon.UIOverhaul.Features.Options
             catch (Exception ex)
             {
                 // Watching is a convenience. Losing it must not cost the player their settings.
-                Log.Warning("[Gideon.UIOverhaul] Could not watch the config folder for changes; edits "
+                Log.Warning(UILogTag.Prefix + "Could not watch the config folder for changes; edits "
                             + "will need a restart to apply.\n" + ex);
                 watcher = null;
             }
@@ -162,11 +164,11 @@ namespace Gideon.UIOverhaul.Features.Options
             try
             {
                 Ingest();
-                Log.Message("[Gideon.UIOverhaul] Settings changed on disk; reloaded.");
+                Log.Message(UILogTag.Prefix + "Settings changed on disk; reloaded.");
             }
             catch (Exception ex)
             {
-                Log.Error("[Gideon.UIOverhaul] Failed to reload settings after a change on disk.\n" + ex);
+                Log.Error(UILogTag.Prefix + "Failed to reload settings after a change on disk.\n" + ex);
             }
         }
 

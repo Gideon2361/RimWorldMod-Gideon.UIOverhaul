@@ -183,7 +183,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         private void DrawContents(Rect inRect)
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
-            Widgets.DrawBoxSolid(inRect, palette.WindowBackground);
+            // Deliberately no fill: RimWorld has already painted this color and the window border across
+            // inRect, and repainting it here covered the border. See Patch_Widgets_WindowChrome.
 
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;

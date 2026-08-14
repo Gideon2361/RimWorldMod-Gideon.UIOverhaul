@@ -169,7 +169,7 @@ namespace Gideon.UIFramework.Defs
 
             Texture2D found = ContentFinder<Texture2D>.Get(path, false);
             if (found == null)
-                Log.ErrorOnce($"[Gideon.UIFramework] Palette '{defName}': no texture at '{path}'. "
+                Log.ErrorOnce(UILogTag.Prefix + $"Palette '{defName}': no texture at '{path}'. "
                               + "Buttons will be drawn flat.", 0x17C0_10B2 ^ path.GetHashCode());
 
             return found;
@@ -271,7 +271,7 @@ namespace Gideon.UIFramework.Defs
                     continue;
                 }
 
-                Log.Error($"[Gideon.UIFramework] {defName}.{FieldNameOf(role)}: {error}. "
+                Log.Error(UILogTag.Prefix + $"{defName}.{FieldNameOf(role)}: {error}. "
                           + "Using the error color so it is visible on screen.");
                 resolved[i] = UIColorParser.ErrorColor;
             }
@@ -284,7 +284,7 @@ namespace Gideon.UIFramework.Defs
             {
                 if (entry == null || entry.name.NullOrEmpty())
                 {
-                    Log.Error($"[Gideon.UIFramework] {defName} has a custom color with no name.");
+                    Log.Error(UILogTag.Prefix + $"{defName} has a custom color with no name.");
                     continue;
                 }
 
@@ -294,7 +294,7 @@ namespace Gideon.UIFramework.Defs
                     continue;
                 }
 
-                Log.Error($"[Gideon.UIFramework] {defName} custom color '{entry.name}': {error}.");
+                Log.Error(UILogTag.Prefix + $"{defName} custom color '{entry.name}': {error}.");
                 resolvedCustom[entry.name] = UIColorParser.ErrorColor;
             }
         }
@@ -547,7 +547,7 @@ namespace Gideon.UIFramework.Defs
                 if (PlayDataLoader.Loaded)
                 {
                     Log.ErrorOnce(
-                        $"[Gideon.UIFramework] No palette named '{DefaultPaletteDefName}' is loaded. "
+                        UILogTag.Prefix + $"No palette named '{DefaultPaletteDefName}' is loaded. "
                         + "Falling back to the compiled-in palette; check that the mod's Defs folder is intact.",
                         0x17C0_10AB);
                 }

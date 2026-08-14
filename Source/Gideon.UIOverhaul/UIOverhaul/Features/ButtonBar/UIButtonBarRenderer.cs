@@ -49,7 +49,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 {
                     // Ours to ship, so a miss is a packaging fault rather than anything the player did. The
                     // button still works; it just draws empty.
-                    Log.Error($"[Gideon.UIOverhaul] Missing '{OptionsIconPath}'. The bar's UI options button "
+                    Log.Error(UILogTag.Prefix + $"Missing '{OptionsIconPath}'. The bar's UI options button "
                               + "will have no icon.");
                 }
             }

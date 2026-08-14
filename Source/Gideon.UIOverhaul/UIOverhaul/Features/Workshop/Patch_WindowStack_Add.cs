@@ -155,7 +155,7 @@ namespace Gideon.UIOverhaul.Features.Workshop
             }
             catch (Exception ex)
             {
-                Log.Warning("[Gideon.UIOverhaul] Could not resolve the mod behind the authorship prompt, "
+                Log.Warning(UILogTag.Prefix + "Could not resolve the mod behind the authorship prompt, "
                             + "leaving it in place: " + ex);
             }
 

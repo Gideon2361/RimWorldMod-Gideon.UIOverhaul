@@ -472,9 +472,27 @@ namespace Gideon.UIFramework.Controls
         /// <summary>
         /// Draws the tab: the layout's panels, and the grid inside whichever panel hosts it.
         /// </summary>
+        /// <summary>
+        /// Which section heading the pointer was over, and which one to draw as hovered.
+        ///
+        /// <b>Two fields, one frame apart, because a heading is drawn twice.</b> A pinned split draws each
+        /// heading once for the scrolling region and once for the pinned strip, and the scrolling half goes
+        /// first -- so when it asks whether it is hovered, the pointer may be in the pinned half it has not
+        /// reached yet. Testing each rect alone lit only the half under the pointer, which made one bar read as
+        /// two panels butted together. Recording the answer and using it on the next frame covers both halves
+        /// at a cost of about sixteen milliseconds, which nobody can see.
+        /// </summary>
+        private string hoverSection;
+
+        private string hoverSectionDrawn;
+
         public void Draw(Rect inRect, UIColorPaletteDef palette = null)
         {
             palette = palette ?? UIColorPaletteDef.Active;
+
+            // Rolled over before anything draws, so both passes this frame read the same answer.
+            hoverSectionDrawn = hoverSection;
+            hoverSection = null;
 
             int count = PanelCount;
 
@@ -660,7 +678,9 @@ namespace Gideon.UIFramework.Controls
                 if (row.IsSection)
                 {
                     hidden = IsCollapsed(row);
-                    DrawSectionHeader(rect, row, palette);
+
+                    // One region, so this heading carries both halves.
+                    DrawSectionHeader(rect, row, palette, showLabel: true, showSuffix: true);
                     y += height;
                     continue;
                 }
@@ -721,15 +741,22 @@ namespace Gideon.UIFramework.Controls
                 DrawHeader(pinnedHeader, palette, 0, pinned, 0f, 0);
             }
 
+            // The count sits on the right of the scrolling region, which is the only one that reaches the right
+            // edge. The name goes to the pinned strip below, unless nothing is pinned, in which case this region
+            // is the whole heading and carries both.
+            bool nothingPinned = pinnedWidth <= 0f;
+
             Widgets.BeginScrollView(scrollBody, ref Scroll, view);
-            WalkRows(view.width, -pinnedWidth, pinned, Columns.Count, true, palette);
+            WalkRows(view.width, -pinnedWidth, pinned, Columns.Count, true, palette,
+                sectionLabels: nothingPinned, sectionSuffixes: true);
             Widgets.EndScrollView();
 
             // Clipped rather than trusted to stay inside: a row is handed its full width so its card and accent
             // stripe are positioned as they always are, and the group is what stops the rest of it painting over
             // the scrolling region.
             GUI.BeginGroup(pinnedBody);
-            WalkRows(pinnedWidth, 0f, 0, pinned, false, palette);
+            WalkRows(pinnedWidth, 0f, 0, pinned, false, palette,
+                sectionLabels: true, sectionSuffixes: false);
             GUI.EndGroup();
         }
 
@@ -747,7 +774,7 @@ namespace Gideon.UIFramework.Controls
         /// itself. Everything else about the two passes is identical.
         /// </param>
         private void WalkRows(float regionWidth, float rowX, int firstColumn, int lastColumn, bool scrolled,
-            UIColorPaletteDef palette)
+            UIColorPaletteDef palette, bool sectionLabels, bool sectionSuffixes)
         {
             float y = scrolled ? 0f : -Scroll.y;
             bool hidden = false;
@@ -762,7 +789,8 @@ namespace Gideon.UIFramework.Controls
 
                     // Spans the region rather than the row, so the heading's background reaches the edge in both
                     // passes. Its label is at the left, which is why the pinned strip keeps it legible.
-                    DrawSectionHeader(new Rect(0f, y, regionWidth, height), row, palette);
+                    DrawSectionHeader(new Rect(0f, y, regionWidth, height), row, palette,
+                        sectionLabels, sectionSuffixes);
                     y += height;
                     continue;
                 }
@@ -864,18 +892,45 @@ namespace Gideon.UIFramework.Controls
             }
         }
 
-        private void DrawSectionHeader(Rect rect, UIDesignatorTabRow row, UIColorPaletteDef palette)
+        /// <summary>
+        /// Draws a section heading across one region.
+        ///
+        /// <b>The heading is drawn once per region but its text belongs to one of them.</b> Both passes need the
+        /// background, or the heading would stop at the pinned split; neither needs the words twice. Drawing the
+        /// full heading in both gave the label a region-width rect in the pinned strip, where after the arrow and
+        /// the space reserved for the suffix there is barely room for a word -- so a name as ordinary as "Colony"
+        /// wrapped onto two lines and then clipped, next to a second, correct copy of itself.
+        ///
+        /// So the label goes on the left of the pinned strip and the count on the right of the scrolling region,
+        /// which is where each of them was always meant to sit. With nothing pinned, one region does both.
+        /// </summary>
+        private void DrawSectionHeader(Rect rect, UIDesignatorTabRow row, UIColorPaletteDef palette,
+            bool showLabel, bool showSuffix)
         {
             bool collapsible = CollapsibleSections && !row.SectionLabel.NullOrEmpty();
             bool collapsed = IsCollapsed(row);
-            bool over = collapsible && Mouse.IsOver(rect);
+
+            // Recorded for the next frame as well as used now, so hovering either half of a split heading
+            // lights the whole of it. See the notes on hoverSection.
+            bool pointerHere = collapsible && Mouse.IsOver(rect);
+
+            if (pointerHere)
+                hoverSection = row.SectionLabel;
+
+            bool over = collapsible
+                        && (pointerHere
+                            || (!row.SectionLabel.NullOrEmpty() && row.SectionLabel == hoverSectionDrawn));
 
             Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
 
             if (over)
                 Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
 
-            Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, 3f, rect.height), palette.Accent);
+            // Only on the half carrying the label. Drawn in both passes it put a second stripe partway along
+            // the bar, at the seam where the pinned strip ends -- which is most of what made one heading look
+            // like two containers side by side.
+            if (showLabel)
+                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, 3f, rect.height), palette.Accent);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -883,7 +938,7 @@ namespace Gideon.UIFramework.Controls
 
             float textX = rect.x + 12f;
 
-            if (collapsible)
+            if (collapsible && showLabel)
             {
                 // Vanilla's own tree arrows, so the affordance is one players already read as foldable rather
                 // than a glyph of our own invention.
@@ -902,11 +957,20 @@ namespace Gideon.UIFramework.Controls
             }
 
             Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = palette.TextPrimary;
-            Widgets.Label(new Rect(textX, rect.y, rect.xMax - textX - 140f, rect.height), row.SectionLabel);
 
-            if (!row.SectionSuffix.NullOrEmpty())
+            if (showLabel)
+            {
+                // Room for the suffix is only taken out of the label when the suffix shares this region. In the
+                // pinned strip it does not, and reserving it there is what left the name too narrow to fit.
+                float reserved = showSuffix ? 140f : 10f;
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextPrimary;
+                Widgets.Label(new Rect(textX, rect.y, Mathf.Max(0f, rect.xMax - textX - reserved), rect.height),
+                    row.SectionLabel);
+            }
+
+            if (showSuffix && !row.SectionSuffix.NullOrEmpty())
             {
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = palette.TextSecondary;

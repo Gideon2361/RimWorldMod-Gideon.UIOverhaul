@@ -5,6 +5,7 @@ using System.Text;
 using System.Xml;
 using RimWorld;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.ButtonBar
 {
@@ -304,7 +305,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 {
                     // Ours to fix, not the player's, so this goes to the log rather than to the config problems
                     // report they are shown.
-                    Log.Error($"[Gideon.UIOverhaul] Could not read the shipped button bar default.\n{ex}");
+                    Log.Error(UILogTag.Prefix + $"Could not read the shipped button bar default.\n{ex}");
                     return null;
                 }
             }
@@ -369,7 +370,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                         break;
 
                     default:
-                        Log.Warning($"[Gideon.UIOverhaul] Unknown button bar element <{element.Name}>; ignored.");
+                        Log.Warning(UILogTag.Prefix + $"Unknown button bar element <{element.Name}>; ignored.");
                         break;
                 }
             }
@@ -400,7 +401,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                         if (Enum.TryParse(value, true, out UIBarButtonMode parsed))
                             entry.mode = parsed;
                         else
-                            Log.Warning($"[Gideon.UIOverhaul] '{value}' is not a button mode; using Default.");
+                            Log.Warning(UILogTag.Prefix + $"'{value}' is not a button mode; using Default.");
                         break;
 
                     case "last":
@@ -412,7 +413,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                         break;
 
                     default:
-                        Log.Warning($"[Gideon.UIOverhaul] Unknown button bar entry field <{field.Name}>; ignored.");
+                        Log.Warning(UILogTag.Prefix + $"Unknown button bar entry field <{field.Name}>; ignored.");
                         break;
                 }
             }
@@ -445,7 +446,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
                 if (child.IsMenu)
                 {
-                    Log.Warning($"[Gideon.UIOverhaul] Menu '{entry.menu}' contains a menu "
+                    Log.Warning(UILogTag.Prefix + $"Menu '{entry.menu}' contains a menu "
                                 + $"('{child.menu}'), which the bar cannot draw; it has been dropped.");
                     continue;
                 }
@@ -507,7 +508,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             }
             catch (Exception ex)
             {
-                Log.Error($"[Gideon.UIOverhaul] Could not write the button bar layout to {path}.\n{ex}");
+                Log.Error(UILogTag.Prefix + $"Could not write the button bar layout to {path}.\n{ex}");
             }
         }
 

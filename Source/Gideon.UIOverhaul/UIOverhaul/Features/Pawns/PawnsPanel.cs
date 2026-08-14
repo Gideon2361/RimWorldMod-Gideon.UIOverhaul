@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -76,29 +76,86 @@ namespace Gideon.UIOverhaul.Features.Pawns
             get
             {
                 EnsureColumns();
-                return Mathf.Min(Grid.RequestedWidth + WindowChrome, UI.screenWidth - 16f);
+
+                float wanted = Grid.RequestedWidth + WindowChrome;
+
+                // The window grows for the pane rather than the grid shrinking into it. The columns are fixed
+                // widths, so taking 330px off the grid would clip a column or force a horizontal scrollbar under a
+                // table that had been fitting perfectly -- the row you clicked would move to make room for the
+                // panel describing it.
+                if (paneFor != null)
+                    wanted += PawnWorkPane.PaneWidth + PaneGap;
+
+                return Mathf.Min(wanted, UI.screenWidth - 16f);
             }
         }
+
+        /// <summary>Gap between the grid and the pane, matching the architect tab's.</summary>
+        private const float PaneGap = 8f;
 
         internal static float WindowHeight => Mathf.Min(760f, UI.screenHeight * 0.8f);
 
         /// <summary>
-        /// Which pawns have their schedule open.
+        /// The one pawn whose schedule is open, or null when none is.
         ///
-        /// A set of pawns rather than a single selection, so opening one does not close another -- comparing two
-        /// colonists' days side by side is most of the reason to look at this at all.
+        /// <b>One rather than a set, and this reverses an earlier decision.</b> It was a
+        /// <c>HashSet&lt;Pawn&gt;</c> so that opening one row did not close another, on the reasoning that
+        /// comparing two colonists' days side by side is most of the reason to look at the schedule. In practice
+        /// that left rows expanded behind the player as they worked down the list, and it disagreed with the
+        /// work pane beside it, which has always shown one pawn at a time.
+        ///
+        /// A single field rather than a set that is cleared before each add, so "only one is open" is a thing
+        /// the type cannot express otherwise, rather than a rule some future call site has to remember.
         /// </summary>
-        private static readonly HashSet<Pawn> Expanded = new HashSet<Pawn>();
+        private static Pawn expandedPawn;
 
         private static readonly List<Pawn> Roster = new List<Pawn>();
 
         /// <summary>
-        /// What clicking an hour will paint. Shared across every row, because it is a tool the player picks up
-        /// rather than a property of one pawn -- the same reason a paintbrush is not per-canvas.
+        /// The pawn the work pane is open for, or null when it is closed.
+        ///
+        /// <b>Kept beside <see cref="expandedPawn"/> rather than derived from it.</b> They move together today,
+        /// since one row is open at a time and opening it opens the pane. They are still two ideas: the pane can
+        /// be closed on its own, and a later change that opens it from somewhere other than a row would have
+        /// nothing to say about which row is unfolded.
         /// </summary>
-        private static TimeAssignmentDef brush;
+        private static Pawn paneFor;
 
-        private static TimeAssignmentDef Brush => brush ?? (brush = TimeAssignmentDefOf.Work);
+        /// <summary>
+        /// Drops the pane and the fold state for a pawn who no longer exists.
+        ///
+        /// Subscribed rather than swept, so a colonist who dies while their pane is open is gone from it in the same
+        /// frame. A destroyed pawn in <see cref="paneFor"/> would otherwise be asked for their priorities on the
+        /// next draw, which is exactly the read the caches now throw <c>InvalidCacheRequest</c> for.
+        /// </summary>
+        /// <remarks>
+        /// Wrapped, because a static constructor that throws takes the whole type with it: every later access
+        /// raises TypeInitializationException, so a failure here would not cost the pane its cleanup, it would cost
+        /// the tab its existence. Nothing inside can realistically fail, which is exactly why it is cheap to guard.
+        ///
+        /// The handler itself is not guarded here. PawnLifecycle invokes each subscriber through UIGuard already, so
+        /// a second guard would only report the same failure twice.
+        /// </remarks>
+        static PawnsPanel()
+        {
+            try
+            {
+                PawnLifecycle.Gone += pawn =>
+                {
+                    if (expandedPawn == pawn)
+                        expandedPawn = null;
+
+                    if (paneFor == pawn)
+                        paneFor = null;
+                };
+            }
+            catch (System.Exception ex)
+            {
+                UIGuard.Report("Pawns.SubscribeLifecycle", ex,
+                    "The pawns tab will not notice a colonist being destroyed, so an open work pane may have to be "
+                    + "closed by hand.");
+            }
+        }
 
         // ---------------------------------------------------------------------------------------
         // Drawing
@@ -109,10 +166,73 @@ namespace Gideon.UIOverhaul.Features.Pawns
             EnsureColumns();
             Collect();
 
-            Grid.Draw(inRect.ContractedBy(6f), UIColorPaletteDef.Active);
+            UIColorPaletteDef palette = UIColorPaletteDef.Active;
+
+            Rect content = inRect.ContractedBy(6f);
+
+            // The pane takes its width off the right before the grid is laid out, so the grid draws into what is
+            // left rather than being covered by it -- the same order the architect tab's option pane uses.
+            if (paneFor != null)
+            {
+                Rect pane = new Rect(content.xMax - PawnWorkPane.PaneWidth, content.y,
+                    PawnWorkPane.PaneWidth, content.height);
+
+                content = new Rect(content.x, content.y,
+                    content.width - PawnWorkPane.PaneWidth - PaneGap, content.height);
+
+                // The window grows on the next frame rather than this one, since its rect is settled outside the
+                // GUI pass. So the frame a pane opens on draws the grid one pane narrower and then it widens: a
+                // single frame of a tighter table, rather than a pane drawn over the top of one.
+                if (!PawnWorkPane.Draw(pane, paneFor, palette))
+                    Close(paneFor);
+            }
+
+            Grid.Draw(content, palette);
 
             // After the grid, so the scroll view a portrait was clicked in has been closed out.
             PawnCameraJump.Resolve();
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Search
+        //
+        // Filters which colonists get rows at all, rather than dimming the ones that do not match, for the same
+        // reason the work tab does: a list read by comparing rows is harder to read with gaps in it.
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Our own text box, and the reason that is safe here is a patch rather than anything in this file.
+        ///
+        /// <b>A field of our own would let W and A pan the map while being typed into.</b>
+        /// <c>WindowStack.AnySearchWidgetFocused</c> is the single gate every key binding consults, and it walks
+        /// the window stack asking each window for its <c>CommonSearchWidget</c> -- so it can only ever see a
+        /// vanilla <c>QuickSearchWidget</c> owned by a window, which this is not.
+        ///
+        /// <c>Patch_WindowStack_AnySearchWidgetFocused</c> closes that gate for every
+        /// <see cref="UITextBoxControl"/> rather than for one window, so this box inherits the protection by
+        /// being one. That is the whole reason it was written as a general patch when the work tab hit this, and
+        /// it is why nothing here has to be done about the camera.
+        /// </summary>
+        private static readonly UITextBoxControl Search = new UITextBoxControl
+        {
+            Placeholder = "Search",
+            Icon = TexButton.Search,
+            MaxLength = 30
+        };
+
+        /// <summary>
+        /// The search field, in the name column's heading.
+        ///
+        /// The "Colonist" label goes rather than sharing the cell with it. The column under a search box that
+        /// filters names does not need telling that it holds names, and a heading split between a label and a
+        /// control leaves too little of either.
+        /// </summary>
+        private static void DrawSearchHeader(Rect cell, UIColorPaletteDef palette)
+        {
+            // Scroll reset on change: filtering can leave the view scrolled past everything that still matches,
+            // which reads as the search finding nothing.
+            if (Search.Draw(new Rect(cell.x + 6f, cell.y + 7f, cell.width - 12f, 26f), palette))
+                Grid.Scroll = Vector2.zero;
         }
 
         private static void EnsureColumns()
@@ -122,11 +242,19 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Grid.Columns.Clear();
 
+            // Tall enough for the search field with air around it. The other headings are one line of text and
+            // sit centred in whatever this is, so raising it costs them nothing.
+            Grid.HeaderHeight = 40f;
+
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Colonist",
                 Width = NameColumnWidth,
                 Bandable = false,
+
+                // The search takes the name column's heading, as it does on the work tab: it filters by name, so
+                // it belongs over the names, and this is the one heading wide enough to hold a control.
+                DrawHeader = DrawSearchHeader,
                 DrawCell = DrawPawnCell
             });
 
@@ -179,6 +307,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Rows.Clear();
             Roster.Clear();
 
+            // A match inside a folded group would otherwise not be shown, which reads as the search failing. The
+            // folds themselves are remembered and come back when the search is cleared.
+            Grid.SuppressCollapse = !Search.IsEmpty;
+
             List<Map> maps = Find.Maps;
             if (maps == null)
                 return;
@@ -190,7 +322,16 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 group.Clear();
 
                 foreach (Pawn pawn in map.mapPawns.FreeColonists)
-                    group.Add(pawn);
+                {
+                    // Every colonist joins the roster, matching or not. The roster answers "is this pawn still
+                    // in the colony", which is what decides whether an open pane still has a subject -- and a
+                    // pawn filtered out of view has not gone anywhere. Building it from the matches instead
+                    // would close the pane the moment you searched for somebody else.
+                    Roster.Add(pawn);
+
+                    if (PawnSearch.Matches(Search, pawn))
+                        group.Add(pawn);
+                }
 
                 if (group.Count == 0)
                     continue;
@@ -205,7 +346,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
                 foreach (Pawn pawn in group)
                 {
-                    bool open = Expanded.Contains(pawn);
+                    bool open = expandedPawn == pawn;
 
                     Grid.Rows.Add(new UIDesignatorTabRow
                     {
@@ -215,14 +356,20 @@ namespace Gideon.UIOverhaul.Features.Pawns
                         DrawOverlay = open ? (System.Action<Rect, UIDesignatorTabRow, UIColorPaletteDef>)
                             DrawScheduleStrip : null
                     });
-
-                    Roster.Add(pawn);
                 }
             }
 
-            // Both caches are keyed by Pawn, which keeps a dead or departed colonist alive for as long as the
-            // entry lasts. Swept here because this is where the live set is known.
-            PruneRows();
+            // A pane for a pawn who has no row is a panel pointing at nothing -- they have joined a caravan, been
+            // captured, or left with a transport pod. Not a destroyed pawn, which PawnLifecycle handles directly;
+            // this is the milder case of a colonist who still exists but is no longer listed.
+            if (paneFor != null && !Roster.Contains(paneFor))
+                paneFor = null;
+
+            // No sweeping here any more. The readings live in PawnAttributes as shared per-attribute caches, and
+            // holding a departed colonist is handled where it belongs: UICacheController prunes keys whose subject
+            // has gone, and PawnLifecycle forgets a pawn outright the moment they are destroyed. Sweeping from here
+            // as well would only duplicate that, and would do it against Roster rather than against whether the
+            // pawn still exists, which is a different question.
         }
 
         /// <summary>
@@ -236,7 +383,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private static void DrawRowBackground(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
-            PawnHealthSummary summary = Data(pawn).Condition;
+            PawnHealthSummary summary = PawnAttributes.Condition.Get(pawn);
 
             RowCard.AccentColor = summary.State == PawnHealthState.Healthy
                 ? palette.SurfaceRaised
@@ -247,7 +394,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Rect band = new Rect(row.x, row.y, row.width, Mathf.Min(RowHeight, row.height));
 
-            if (Expanded.Contains(pawn))
+            if (expandedPawn == pawn)
                 Widgets.DrawBoxSolid(band, palette.SelectionOverlay);
 
             // The portrait is cut out of the row's hit target geometrically, rather than by relying on the
@@ -321,17 +468,49 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         /// <summary>
-        /// Opens or closes a row's schedule.
+        /// <summary>
+        /// Opens or closes a row's schedule, and moves the work pane with it.
         ///
         /// One method for both hit targets -- the arrow and the rest of the band -- so the two cannot come to
         /// behave differently. Same sound the group headings use, because it is the same gesture.
+        ///
+        /// Expanding is what opens the pane, which is why there is no separate control for it: the row the player
+        /// just opened is the pawn they are looking at.
+        ///
+        /// <b>Opening one row closes whichever was open.</b> Assigning the field is the whole of it -- there is no
+        /// list to walk collapsing the others, because there is never more than one to collapse.
         /// </summary>
         private static void Toggle(Pawn pawn)
         {
-            if (!Expanded.Remove(pawn))
-                Expanded.Add(pawn);
+            if (expandedPawn == pawn)
+            {
+                expandedPawn = null;
+                Close(pawn);
+            }
+            else
+            {
+                expandedPawn = pawn;
+                Open(pawn);
+            }
 
             SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        private static void Open(Pawn pawn)
+        {
+            if (paneFor == pawn)
+                return;
+
+            paneFor = pawn;
+
+            // A new pawn starts at the top of their list rather than at wherever the previous one was scrolled to.
+            PawnWorkPane.Reset();
+        }
+
+        private static void Close(Pawn pawn)
+        {
+            if (paneFor == pawn)
+                paneFor = null;
         }
 
         private static void DrawPawnCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
@@ -396,7 +575,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void DrawFoldArrow(Rect band, Pawn pawn, UIColorPaletteDef palette)
         {
-            bool open = Expanded.Contains(pawn);
+            bool open = expandedPawn == pawn;
             Rect arrowRect = ArrowFrame(band);
 
             Texture2D arrow = open ? TexButton.Collapse : TexButton.Reveal;
@@ -434,7 +613,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private static void DrawConditionCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
-            PawnHealthSummary summary = Data(pawn).Condition;
+            PawnHealthSummary summary = PawnAttributes.Condition.Get(pawn);
 
             Rect band = TopBand(cell);
 
@@ -467,13 +646,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void DrawHealthBarCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
-            RowData row = Data((Pawn) data.Payload);
+            Pawn pawn = (Pawn) data.Payload;
 
-            Color fill = row.HealthFraction > 0.9f ? palette.Success
-                : row.HealthFraction > 0.35f ? palette.Info
+            // The fraction is read live: vanilla already caches it behind a dirty flag, so it is cheaper than the
+            // dictionary lookup a cache of our own would need. The two strings are cached, because each allocates.
+            float fraction = PawnAttributes.HealthFractionOf(pawn);
+
+            Color fill = fraction > 0.9f ? palette.Success
+                : fraction > 0.35f ? palette.Info
                 : palette.Danger;
 
-            DrawLabeledBar(cell, palette, row.HealthFraction, fill, row.HealthReading, row.HealthTooltip);
+            DrawLabeledBar(cell, palette, fraction, fill,
+                PawnAttributes.HealthReading.Get(pawn), PawnAttributes.HealthTooltip.Get(pawn));
         }
 
         /// <summary>
@@ -488,11 +672,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void DrawMoodCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
-            RowData row = Data((Pawn) data.Payload);
+            Pawn pawn = (Pawn) data.Payload;
 
             Rect band = TopBand(cell);
 
-            if (!row.HasMood)
+            if (!PawnAttributes.HasMood(pawn))
             {
                 GameFont previousFont = Text.Font;
                 TextAnchor previousAnchor = Text.Anchor;
@@ -509,7 +693,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 return;
             }
 
-            DrawLabeledBar(cell, palette, row.MoodFraction, palette.Mood, row.MoodReading, row.MoodTooltip);
+            DrawLabeledBar(cell, palette, PawnAttributes.MoodFractionOf(pawn), palette.Mood,
+                PawnAttributes.MoodReading.Get(pawn), PawnAttributes.MoodTooltip.Get(pawn));
         }
 
         /// <summary>
@@ -562,7 +747,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Rect band = TopBand(cell);
 
-            string report = Data(pawn).Activity;
+            string report = PawnAttributes.Activity.Get(pawn);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -585,183 +770,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 TooltipHandler.TipRegion(band, (TipSignal) report);
         }
 
-        private static string ReadActivity(Pawn pawn)
-        {
-            JobDriver driver = pawn.jobs?.curDriver;
-
-            if (driver == null)
-                return "Idle";
-
-            try
-            {
-                string report = driver.GetReport();
-                return report.NullOrEmpty() ? "Idle" : report.CapitalizeFirst();
-            }
-            catch
-            {
-                // A mod's JobDriver, not ours to fix. Saying so beats an empty cell and beats a broken tab.
-                return "(unavailable)";
-            }
-        }
-
-        // ---------------------------------------------------------------------------------------
-        // The row cache
-        //
-        // One cache of everything a row displays, refreshed once a second, rather than a cache per reading.
-        //
-        // Reading live was the first version and was expensive out of proportion to what it bought. Nothing on
-        // this tab moves at frame rate: a condition changes with a treatment or a fight, mood over hours, a job
-        // report every few seconds. Meanwhile a frame cost, per pawn, two full condition reads -- one for the
-        // row's accent color and one for the Condition cell, each walking the hediff list twice -- a virtual
-        // GetReport that composes a sentence, and four concatenated tooltip strings that were built whether or
-        // not anyone was hovering. At 60fps with twenty colonists that is thousands of hediff walks and tens of
-        // thousands of throwaway strings a second.
-        //
-        // A row-level cache rather than one per value, because the values are wanted together and the tab will
-        // grow more of them: one clock, one lookup per row per frame, one place to add a field, and no way for
-        // two columns to end up describing different moments.
-        //
-        // What is NOT cached: the schedule strip. It reads the timetable directly and writes to it on click, so
-        // it has to be live -- a cached hour would keep painting the old color for up to a second after the
-        // player set it.
-        // ---------------------------------------------------------------------------------------
-
-        /// <summary>
-        /// How long a row's readings are reused before being taken again.
-        ///
-        /// Real seconds rather than ticks, so the rate holds whether the game is paused or running at three times
-        /// speed. Ticks would have meant three refreshes a second at high speed and none while paused --
-        /// defensible, since nothing changes while paused, but "once a second" should mean once a second.
-        /// </summary>
-        private const float RefreshSeconds = 1f;
-
-        /// <summary>
-        /// Everything one row shows, including the finished tooltip strings.
-        ///
-        /// A class rather than a struct: it is handed out by reference and read several times per frame, and
-        /// copying this much per read would give back what the cache saved.
-        /// </summary>
-        private sealed class RowData
-        {
-            public float Stamp;
-
-            public PawnHealthSummary Condition;
-
-            public float HealthFraction;
-            public string HealthReading;
-            public string HealthTooltip;
-
-            public bool HasMood;
-            public float MoodFraction;
-            public string MoodReading;
-            public string MoodTooltip;
-
-            public string Activity;
-
-            public TimeAssignmentDef Assignment;
-        }
-
-        private static readonly Dictionary<Pawn, RowData> Rows = new Dictionary<Pawn, RowData>();
-
-        /// <summary>
-        /// Forces a row's next read to take fresh readings.
-        ///
-        /// For a change the player just made. Waiting up to a second to show someone their own click is the one
-        /// case where the throttle is felt as lag rather than not noticed at all -- painting the current hour
-        /// would leave the Schedule column's swatch showing the old assignment.
-        /// </summary>
-        private static void Invalidate(Pawn pawn)
-        {
-            if (Rows.TryGetValue(pawn, out RowData data))
-                data.Stamp = float.NegativeInfinity;
-        }
-
-        /// <summary>A row's cached readings, refreshed if they have gone stale.</summary>
-        private static RowData Data(Pawn pawn)
-        {
-            float now = Time.realtimeSinceStartup;
-
-            if (!Rows.TryGetValue(pawn, out RowData data))
-            {
-                data = new RowData { Stamp = float.NegativeInfinity };
-                Rows[pawn] = data;
-            }
-
-            if (now - data.Stamp < RefreshSeconds)
-                return data;
-
-            data.Stamp = now;
-            Refresh(pawn, data);
-
-            return data;
-        }
-
-        /// <summary>
-        /// Takes every reading for one row.
-        ///
-        /// The entry is reused rather than replaced, so a refresh allocates only the strings that changed.
-        /// </summary>
-        private static void Refresh(Pawn pawn, RowData data)
-        {
-            data.Condition = PawnHealthSummary.For(pawn);
-
-            data.HealthFraction = Mathf.Clamp01(pawn.health?.summaryHealth?.SummaryHealthPercent ?? 1f);
-            data.HealthReading = data.HealthFraction.ToStringPercent();
-            data.HealthTooltip = "Overall health: " + data.HealthReading;
-
-            Need_Mood mood = pawn.needs?.mood;
-            data.HasMood = mood != null;
-
-            if (data.HasMood)
-            {
-                data.MoodFraction = Mathf.Clamp01(mood.CurLevelPercentage);
-                data.MoodReading = mood.MoodString;
-                data.MoodTooltip = "Mood: " + data.MoodFraction.ToStringPercent() + " (" + mood.MoodString + ")"
-                                   + "\n\nMental break at "
-                                   + pawn.mindState?.mentalBreaker?.BreakThresholdMinor.ToStringPercent();
-            }
-
-            data.Activity = ReadActivity(pawn);
-            data.Assignment = pawn.timetable?.CurrentAssignment;
-        }
-
-        /// <summary>
-        /// Drops rows for pawns no longer on show, so the cache cannot outgrow the roster.
-        ///
-        /// A Pawn key keeps the object alive, which matters for a colonist who has died or left: without this the
-        /// dictionary would hold them for the rest of the session. Only runs when the cache is bigger than the
-        /// roster, which is the only way it can be holding something stale, so it stops costing anything as soon
-        /// as it has caught up.
-        /// </summary>
-        private static void PruneRows()
-        {
-            if (Rows.Count <= Roster.Count)
-                return;
-
-            List<Pawn> stale = null;
-
-            foreach (Pawn pawn in Rows.Keys)
-            {
-                if (Roster.Contains(pawn))
-                    continue;
-
-                stale = stale ?? new List<Pawn>();
-                stale.Add(pawn);
-            }
-
-            if (stale == null)
-                return;
-
-            for (int i = 0; i < stale.Count; i++)
-                Rows.Remove(stale[i]);
-        }
 
         private static void DrawScheduleHintCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
             Rect band = TopBand(cell);
 
-            TimeAssignmentDef now = Data(pawn).Assignment;
+            TimeAssignmentDef now = PawnAttributes.AssignmentOf(pawn);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -816,9 +831,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// Drawn as an overlay rather than as a column because it spans the whole grid: 24 hours will not fit in
         /// any one column, and splitting it across columns would tie the schedule's layout to the column widths.
         ///
-        /// The dropdown is at the start of the row, and picking from it sets the brush rather than writing
-        /// anything -- clicking an hour is what writes. That separation is what makes painting a block of hours
-        /// one choice and several clicks instead of a choice per click.
+        /// The strip itself, the brush picker and the painting all live in <see cref="ScheduleStrip"/>, because the
+        /// template manager edits a day the same way and two copies of a paintable strip would be two copies that
+        /// could drift apart. What stays here is the part that is about a pawn's row: where it sits under the row,
+        /// which pawn it reads, and that painting invalidates that pawn's cached readings.
         /// </summary>
         private static void DrawScheduleStrip(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
@@ -830,140 +846,26 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Rect strip = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
                 row.width - RowCard.AccentWidth - 16f, ScheduleStripHeight);
 
-            const float dropdownWidth = 120f;
             const float gap = 8f;
 
-            Rect dropdown = new Rect(strip.x, strip.y + 6f, dropdownWidth, 24f);
-            DrawBrushDropdown(dropdown, palette);
+            Rect picker = new Rect(strip.x, strip.y + 6f, ScheduleStrip.BrushWidth, ScheduleStrip.CellHeight);
+            ScheduleStrip.DrawBrushPicker(picker, palette);
 
-            Rect hours = new Rect(dropdown.xMax + gap, strip.y + 6f, strip.xMax - dropdown.xMax - gap, 24f);
-            DrawHours(hours, pawn, palette);
-        }
+            Rect hours = new Rect(picker.xMax + gap, strip.y + 6f, strip.xMax - picker.xMax - gap,
+                ScheduleStrip.CellHeight);
 
-        /// <summary>
-        /// The brush picker: which assignment a click paints.
-        ///
-        /// Every entry carries its own color swatch, in the def's own color, so the menu and the strip cannot
-        /// disagree about what a color means -- and so the player picks a color rather than reading a word.
-        /// </summary>
-        private static void DrawBrushDropdown(Rect rect, UIColorPaletteDef palette)
-        {
-            bool over = Mouse.IsOver(rect);
-
-            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-
-            Rect swatch = new Rect(rect.x + 5f, rect.y + 5f, 14f, 14f);
-            Widgets.DrawBoxSolid(swatch, Brush.color);
-
-            Color previousColor = GUI.color;
-            TextAnchor previousAnchor = Text.Anchor;
-            GameFont previousFont = Text.Font;
-
-            GUI.color = palette.Border;
-            Widgets.DrawBox(swatch, 1);
-
-            GUI.color = palette.TextPrimary;
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Widgets.Label(new Rect(swatch.xMax + 6f, rect.y, rect.width - 30f, rect.height), Brush.LabelCap);
-
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
-            GUI.color = previousColor;
-
-            if (!Widgets.ButtonInvisible(rect))
-                return;
-
-            List<FloatMenuOption> options = new List<FloatMenuOption>();
-
-            foreach (TimeAssignmentDef def in Assignments)
-            {
-                TimeAssignmentDef captured = def;
-
-                // The icon constructor rather than extraPartOnGUI. extraPartOnGUI draws to the right of the
-                // label, which left the swatches ragged along the ends of variable-length words; iconTex is
-                // drawn at the left and defaults to iconJustification = Left, so they line up in a column.
-                //
-                // A white 1x1 tinted by the def's color, rather than the def's own ColorTexture: that property
-                // builds and caches a texture per def, and asking for it here would pin one for every
-                // assignment a mod ever adds when a tint of the shared white does the same job.
-                options.Add(new FloatMenuOption(captured.LabelCap, () => brush = captured,
-                    BaseContent.WhiteTex, captured.color));
-            }
-
-            Find.WindowStack.Add(new FloatMenu(options));
-        }
-
-        /// <summary>
-        /// Every loaded assignment, not the five in the DefOf.
-        ///
-        /// Mods do add assignment types, and a dropdown that could not offer them would make this tab unable to
-        /// set a schedule the vanilla tab can. Read from the database in load order, which is the order vanilla's
-        /// own schedule tab uses, so the two read the same.
-        /// </summary>
-        private static List<TimeAssignmentDef> Assignments =>
-            DefDatabase<TimeAssignmentDef>.AllDefsListForReading;
-
-        /// <summary>
-        /// The 24 hour cells.
-        ///
-        /// Dragging paints, not just clicking: setting eight hours of sleep is one gesture rather than eight
-        /// clicks. Held-button painting is why this reads the mouse state directly instead of using
-        /// ButtonInvisible -- a button reports a completed click, and a drag never completes one per cell.
-        ///
-        /// The current hour is outlined so the strip can be read against the clock without counting cells.
-        /// </summary>
-        private static void DrawHours(Rect rect, Pawn pawn, UIColorPaletteDef palette)
-        {
-            float cellWidth = rect.width / 24f;
-            int currentHour = GenLocalDate.HourOfDay(pawn);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                Rect cell = new Rect(rect.x + hour * cellWidth, rect.y, cellWidth, rect.height);
-
-                TimeAssignmentDef assignment = pawn.timetable.GetAssignment(hour);
-                Widgets.DrawBoxSolid(cell.ContractedBy(0.5f), assignment.color);
-
-                bool over = Mouse.IsOver(cell);
-
-                if (over)
-                    Widgets.DrawBoxSolid(cell.ContractedBy(0.5f), palette.HoverOverlay);
-
-                GUI.color = hour == currentHour ? palette.Accent : palette.Border;
-                Widgets.DrawBox(cell, hour == currentHour ? 2 : 1);
-
-                GUI.color = palette.TextPrimary;
-                Widgets.Label(cell, hour.ToString());
-
-                // Mouse state rather than a click: this is what lets a drag paint a run of hours.
-                if (over && Input.GetMouseButton(0) && assignment != Brush)
+            ScheduleStrip.DrawHours(hours, palette,
+                hour => pawn.timetable.GetAssignment(hour),
+                (hour, assignment) =>
                 {
-                    pawn.timetable.SetAssignment(hour, Brush);
-                    SoundDefOf.Designate_DragStandard_Changed.PlayOneShotOnCamera();
+                    pawn.timetable.SetAssignment(hour, assignment);
 
-                    // The strip reads the timetable live, but the Schedule column's swatch comes from the row
-                    // cache, so it has to be told.
-                    Invalidate(pawn);
-                }
-
-                if (over)
-                {
-                    TooltipHandler.TipRegion(cell, (TipSignal) (hour + ":00 -- " + assignment.LabelCap
-                        + "\n\nClick or drag to set " + Brush.LabelCap + "."));
-                }
-            }
-
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                    // The strip reads the timetable live, but the Schedule column's swatch is a cached reading, so
+                    // it has to be told.
+                    PawnAttributes.Invalidate(pawn);
+                },
+                GenLocalDate.HourOfDay(pawn));
         }
+
     }
 }

@@ -86,7 +86,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 {
                     // Our own table, so a bad value here is a mistake in this file rather than anything the
                     // player did. Said out loud instead of silently leaving that one assignment vanilla.
-                    Log.Error($"[Gideon.UIOverhaul] Schedule color for '{def.defName}' is unusable: {error}");
+                    Log.Error(UILogTag.Prefix + $"Schedule color for '{def.defName}' is unusable: {error}");
                     continue;
                 }
 

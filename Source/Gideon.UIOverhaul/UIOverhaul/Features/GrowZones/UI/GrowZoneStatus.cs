@@ -1,3 +1,4 @@
+﻿using Gideon.UIFramework.Caching;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -42,88 +43,71 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
     public static class GrowZoneStatusCache
     {
         /// <summary>
-        /// Rebuild interval, in real seconds. Measured against the wall clock rather than game
-        /// ticks for the same reason <see cref="Bill_Growing.CurrentCountCached"/> is: RimWorld
-        /// speeds the game up by running more ticks per frame, so a tick budget would rebuild three
-        /// times as often at 3x and never while paused.
+        /// Rebuild interval, in running game seconds.
+        ///
+        /// Five, rather than the two this used before: the figures describe crops, which change over in-game hours,
+        /// and a zone list is read rather than watched. Nothing here justified refreshing more often.
+        ///
+        /// The interval freezes while the game is paused, which is what <c>freezeWhilePaused</c> below asks for.
+        /// That behaviour came from this class originally and is now the framework's, so every cache can have it:
+        /// none of these numbers can change while the simulation is stopped, and rebuilding then is waste in the one
+        /// situation where a player is most likely to be sitting still with the tab open.
         /// </summary>
-        private const float RefreshSeconds = 2f;
-
-        private class Entry
-        {
-            public readonly GrowZoneStatus Status = new GrowZoneStatus();
-            public bool Primed;
-            public float Elapsed;
-            public float LastObserved;
-        }
-
-        private static readonly Dictionary<Zone_Growing, Entry> Entries =
-            new Dictionary<Zone_Growing, Entry>();
+        private const float RefreshSeconds = 5f;
 
         /// <summary>
-        /// Drops every cached entry. Called when the tab opens, both to show current figures
-        /// immediately and to release zones the player has since deleted -- nothing else prunes
-        /// this dictionary, so it would otherwise hold deleted zones alive for the session.
+        /// The cache itself, registered with <see cref="UICacheController"/> so it is cleared on a def reload,
+        /// pruned of deleted zones, and forgotten about when a zone goes away.
+        ///
+        /// <c>stillValid</c> is a Map test rather than a search of the zone manager, which would be a linear scan per
+        /// key. A zone that has been deleted either reports no map or throws reaching for one, and the cache treats
+        /// both as gone.
         /// </summary>
-        public static void Clear() => Entries.Clear();
+        private static readonly UICache<Zone_Growing, GrowZoneStatus> Cache =
+            new UICache<Zone_Growing, GrowZoneStatus>("GrowZones.Status", RefreshSeconds, Build,
+                zone => zone != null && zone.Map != null, true);
 
-        public static GrowZoneStatus For(Zone_Growing zone)
+        /// <summary>
+        /// Drops every cached entry, so the next read takes fresh figures. Called when the tab opens.
+        ///
+        /// Releasing deleted zones is no longer this method's job: the cache prunes them, and
+        /// <c>UICacheController.Forget</c> drops one the moment it is destroyed.
+        /// </summary>
+        public static void Clear() => Cache.Clear();
+
+        /// <summary>
+        /// This zone's figures, rebuilt if they have gone stale.
+        ///
+        /// Throws <see cref="InvalidCacheRequest"/> if the zone no longer exists, which for a caller iterating a
+        /// zone list it built this frame means the list is wrong. Use <c>Cache.TryGet</c> where a zone may legitimately
+        /// have been deleted since.
+        /// </summary>
+        public static GrowZoneStatus For(Zone_Growing zone) => Cache.Get(zone);
+
+        /// <summary>Whether this zone's figures can be read at all, without building them.</summary>
+        public static bool TryGet(Zone_Growing zone, out GrowZoneStatus status) => Cache.TryGet(zone, out status);
+
+        /// <summary>
+        /// Takes every figure for one zone: walks its cells and asks each plant what it would yield.
+        ///
+        /// Returns a fresh object rather than filling one in place, which is what the cache wants. That costs one
+        /// small allocation per zone per interval, against the previous version's zero -- a trade worth making for
+        /// the shared clearing and pruning, at five seconds apart.
+        /// </summary>
+        private static GrowZoneStatus Build(Zone_Growing zone)
         {
-            if (!Entries.TryGetValue(zone, out Entry entry))
-            {
-                entry = new Entry();
-                Entries[zone] = entry;
-            }
-
-            float now = Time.realtimeSinceStartup;
-
-            if (!entry.Primed)
-            {
-                Rebuild(zone, entry, now);
-                return entry.Status;
-            }
-
-            float delta = now - entry.LastObserved;
-            entry.LastObserved = now;
-
-            // Accumulate only while the game is running: nothing these figures describe changes
-            // while paused, so the interval freezes rather than draining. delta <= 0 guards a
-            // clock that ran backwards.
-            if (delta > 0f && !GamePaused)
-                entry.Elapsed += delta;
-
-            if (entry.Elapsed >= RefreshSeconds)
-                Rebuild(zone, entry, now);
-
-            return entry.Status;
-        }
-
-        private static bool GamePaused => Find.TickManager == null || Find.TickManager.Paused;
-
-        private static void Rebuild(Zone_Growing zone, Entry entry, float now)
-        {
-            entry.Elapsed = 0f;
-            entry.LastObserved = now;
-            entry.Primed = true;
-
-            GrowZoneStatus status = entry.Status;
-            status.PlantCount = 0;
-            status.HarvestablePlants = 0;
-            status.YieldNow = 0;
-            status.YieldAtMaturity = 0;
-            status.AverageGrowth = 0f;
-            status.HasTemperature = false;
+            GrowZoneStatus status = new GrowZoneStatus();
 
             Map map = zone.Map;
             status.Plant = zone.GetPlantDefToGrow();
             if (map == null)
-                return;
+                return status;
 
             status.HasTemperature =
                 GenTemperature.TryGetTemperatureForCell(zone.Position, map, out status.Temperature);
 
             if (status.Plant == null)
-                return;
+                return status;
 
             float growthSum = 0f;
             List<IntVec3> cells = zone.Cells;
@@ -148,6 +132,8 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             status.YieldAtMaturity = Mathf.RoundToInt(
                 status.PlantCount * status.Plant.plant.harvestYield * CropYieldFactor);
+
+            return status;
         }
 
         /// <summary>

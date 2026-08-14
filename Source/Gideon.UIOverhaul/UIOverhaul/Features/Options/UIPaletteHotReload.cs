@@ -6,6 +6,7 @@ using System.Xml;
 using Gideon.UIFramework.Components.Colors;
 using Gideon.UIFramework.Defs;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.Options
 {
@@ -82,13 +83,13 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 if (WatchedFiles.Count > 0)
                 {
-                    Log.Message($"[Gideon.UIOverhaul] Watching {WatchedFiles.Count} palette file(s) for "
+                    Log.Message(UILogTag.Prefix + $"Watching {WatchedFiles.Count} palette file(s) for "
                                 + "live edits.");
                 }
             }
             catch (Exception ex)
             {
-                Log.Warning("[Gideon.UIOverhaul] Could not watch palette files for changes; theme edits "
+                Log.Warning(UILogTag.Prefix + "Could not watch palette files for changes; theme edits "
                             + "will need a restart.\n" + ex);
             }
         }
@@ -176,7 +177,7 @@ namespace Gideon.UIOverhaul.Features.Options
 
             if (touched.Count > 0)
             {
-                Log.Message($"[Gideon.UIOverhaul] Reapplied {touched.Count} palette(s) from "
+                Log.Message(UILogTag.Prefix + $"Reapplied {touched.Count} palette(s) from "
                             + Path.GetFileName(path) + ".");
             }
         }

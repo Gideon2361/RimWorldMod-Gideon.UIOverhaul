@@ -47,6 +47,17 @@ namespace Gideon.UIFramework.Controls
         public TextAnchor Anchor = TextAnchor.MiddleLeft;
         public bool WrapText;
 
+        /// <summary>
+        /// Cuts text that will not fit and marks the cut with an ellipsis, instead of clipping it mid-letter.
+        ///
+        /// For text whose length is not ours to control -- a name from another mod, a colonist's nickname. A
+        /// hard clip leaves a word ending in half a character, which reads as a rendering fault rather than as
+        /// a name too long for the space; an ellipsis says the same thing on purpose.
+        ///
+        /// Ignored when <see cref="WrapText"/> is set, since text that wraps has no single line to shorten.
+        /// </summary>
+        public bool Ellipses;
+
         public override void Draw(Rect rect, UIColorPaletteDef palette)
         {
             if (Text.NullOrEmpty())
@@ -62,7 +73,10 @@ namespace Gideon.UIFramework.Controls
             Verse.Text.WordWrap = WrapText;
             GUI.color = Color ?? palette.TextPrimary;
 
-            Widgets.Label(rect, Text);
+            if (Ellipses && !WrapText)
+                Widgets.LabelEllipses(rect, Text);
+            else
+                Widgets.Label(rect, Text);
 
             GUI.color = previousColor;
             Verse.Text.WordWrap = previousWrap;

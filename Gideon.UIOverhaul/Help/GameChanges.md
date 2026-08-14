@@ -470,10 +470,7 @@ disagreeing about it is exactly the failure mode worth designing out.
 | Activity | `jobs.curDriver.GetReport()` |
 | Schedule | The current hour's assignment |
 
-### Everything a row shows is cached for a second
-
-One cache of a row's display values, refreshed at most once per second, rather than reading live or giving each
-value its own cache.
+### Expensive readings are cached per attribute, for a second
 
 Reading live was the first version and cost far more than it bought. Per pawn per frame it was: **two** full
 condition reads — one for the row's accent color, one for the Condition cell, each walking the hediff list twice
@@ -482,23 +479,98 @@ anyone was hovering. At 60fps with twenty colonists that is thousands of hediff 
 throwaway strings every second, for values that change on the scale of a treatment, a fight, or a mood shift over
 hours.
 
-A **row-level** cache rather than one per reading, because the values are wanted together and this tab will grow
-more of them: one clock, one dictionary lookup per row per frame, one place to add a field, and no way for two
-columns to end up describing different moments. Entries are reused rather than replaced on refresh, so only the
-strings that changed allocate.
+The fix now lives in the framework, in `UIFramework/Caching`, and this tab is one of its callers. Each cached
+reading is **its own cache, keyed by pawn** — `Pawn.Condition`, `Pawn.Activity`, `Pawn.HealthReading`,
+`Pawn.HealthTooltip`, `Pawn.MoodReading`, `Pawn.MoodTooltip` — all at one second, declared together in
+`PawnAttributes`.
 
-The clock is **real seconds**, so the rate holds whether the game is paused or running at three times speed.
-Ticks would have meant three refreshes a second at high speed and none while paused.
+**Per attribute rather than per row, because a bundle cannot be shared.** An earlier version cached one object of
+everything a row displays, which is fine while one panel reads it and wrong the moment a second one does: the
+work priorities pane wanting a pawn's condition summary would have built the whole bundle, recomputing the mood
+strings it never asked for. Separate caches mean the second reader pays nothing for what the first already took.
 
-Two things are deliberately outside it:
+**Only computed values are cached, and that is the whole selection rule.** A cache earns its place when the value
+costs CPU or allocates while being derived. These do not, and are read straight through:
+
+| Read live | Why caching it would be a loss |
+|---|---|
+| `SummaryHealthPercent` | Vanilla already caches it behind a dirty flag |
+| `CurLevelPercentage` | Effectively a field read |
+| `CurrentAssignment` | A list index behind a property |
+
+For those, a dictionary lookup and a timestamp compare would cost more than the work they skip — and would buy a
+staleness bug for nothing. They still sit in `PawnAttributes` as plain helpers, so there is one place to read a
+pawn's figures from, whether or not the reading happens to be cached.
+
+The real price of an entry is not CPU, it is **invalidation discipline**: every cached reading is something
+somebody has to remember to drop when the player changes what it describes, and a readout that ignores its own
+click is a worse bug than a slow read.
+
+### The cache clock stops when the game does
+
+Two things about the timing, both of which came out of the growing-zone version of this and are now every cache's
+behavior:
+
+**Nothing is refreshed on a timer.** A value is rebuilt when it is next *asked for* and its interval has elapsed,
+so a cache belonging to a panel nobody has open costs exactly nothing. A controller pumping every cache each frame
+would pay for the whole mod on every frame regardless of what was on screen — which is the cost these caches exist
+to avoid, not a way to avoid it.
+
+**The interval is measured in running seconds, not wall-clock seconds.** A colonist's mood, a job report, a zone's
+projected yield: none of it can change while the simulation is stopped, so refreshing on a schedule while paused is
+waste in the one situation where a player is most likely to be sitting still with a panel open. A paused game
+rebuilds nothing. Real seconds rather than ticks, though, so the rate holds at three times speed instead of
+tripling.
+
+Freezing costs no responsiveness because **anything the player can change while paused goes through invalidation
+instead of the interval**:
 
 - **The schedule strip reads the timetable live.** A cached hour would keep painting the old color for up to a
   second after the player set it.
-- **Painting an hour invalidates that row.** The strip is live but the Schedule column's swatch comes from the
-  cache, and waiting a second to show someone their own click is the one place the throttle would be felt as lag.
+- **Painting an hour invalidates that pawn.** The strip is live but the Schedule column's swatch is not, and
+  waiting a second to show someone their own click is the one place a throttle is felt as lag.
 
-The cache is swept once per frame against the roster, and only when it is larger — a `Pawn` key would otherwise
-keep a dead or departed colonist alive for the rest of the session.
+**And nothing at all happens while a long event is running** — loading a save, generating a map, switching maps.
+Partly because there is nothing to gain: nothing is simulating, nothing is drawing, and a load is not running time.
+Mostly because the game is not in a steady state. `ProgramState` is already `Playing` partway through loading a
+save while `Current.Game` is still being assembled, and `TickManager.Paused` is not the field it looks like — it
+falls through to `ForcePaused`, which reaches `Find.GravshipController`, which goes through `Find.World`, which
+dereferences `Current.Game.World` with no guard of its own. Asking whether the game was paused during a load
+therefore threw a `NullReferenceException` once per frame for the length of the load. Pruning during one would
+also be wrong on its own terms: it asks every key whether its subject still exists, and a pawn whose map has not
+finished loading can answer no.
+
+The clock deliberately **loses its place** across the event rather than bridging it. Otherwise the first frame
+after a thirty second load would find a thirty second gap since the last stamp and count all of it as running time,
+expiring every cache at once.
+
+Dead keys are cleaned up three ways, in order of directness. `PawnLifecycle` hooks `Pawn.Destroy` and tells every
+cache to **forget** that pawn in the same frame, so nothing is ever in a position to ask about them. Failing that,
+pruning sweeps every cache once a minute — housekeeping rather than correctness, since an unread entry costs a
+dictionary slot and cannot show stale data. Failing *that*, a subject that dies between reads is caught when its
+rebuild throws.
+
+Everything is dropped outright on a **def reload** and on `Game.FinalizeInit`, which is the one seam both loading a
+save and starting a new colony pass through. That second one matters more than it looks: entries are keyed by the
+object they describe, so a colonist from the previous save is a different key and cannot show wrong data — but a
+`Zone_Growing` from an abandoned map still answers a `Map` when asked, so it would survive pruning indefinitely,
+and a growing zone pins the map it belongs to.
+
+**A rebuild that throws is not treated as one thing.** A `NullReferenceException` or `ObjectDisposedException` says
+the subject is gone and its cached value is describing something that no longer exists, so the entry is emptied and
+the caller gets an `InvalidCacheRequest` telling it to re-examine its own assumptions. Any other exception is a
+failure to compute a value that is still meaningful, so the previous reading is kept and served, and the failure is
+reported once rather than every frame. Serving stale data in the first case would mean a row describing a corpse's
+former mood.
+
+**Not on a worker thread**, though it looks like it should be: the cache only reads, and reads never write. Except
+that RimWorld's reads are not pure — `TimeAssignmentDef.ColorTexture` builds a Unity texture on first access, and
+several of these readings memoize on first call — so "read-only" describes our intent, not what the callee does.
+Off the main thread that is a crash or a corrupt texture, appearing only in whichever colony happens to touch the
+uncached path first.
+
+Growing zones use the same framework at **5 seconds**, since their figures describe crops changing over in-game
+hours and the tab reads a list it built rather than watching anything.
 
 ### Condition is severity-ordered, not combined
 
@@ -546,17 +618,82 @@ opens.
 
 The dropdown at the start of the strip picks a **brush**; clicking an hour is what writes. That separation is
 what makes painting a block of hours one choice and several clicks rather than a choice per click — and the brush
-is shared across rows, because it is a tool the player picks up, not a property of one pawn. Every dropdown entry
-carries its own swatch in the def's own color, via `FloatMenuOption.extraPartOnGUI`, so the menu and the strip
-cannot disagree about what a color means.
+is shared across rows *and* windows, because it is a tool the player picks up, not a property of one pawn: choosing
+Sleep on a row and then opening a schedule template finds Sleep still in hand. Every dropdown entry carries its own
+swatch in the def's own color, so the menu and the strip cannot disagree about what a color means. Through the
+`FloatMenuOption` **icon constructor**, not `extraPartOnGUI` — that draws to the *right* of the label, which left
+the swatches ragged along the ends of variable-length words, while `iconTex` is left-justified so they line up in a
+column. The swatch is a tint of the shared white texture rather than the def's own `ColorTexture`, which would pin
+a texture per assignment for every one any mod ever adds.
 
 Hours **paint on drag**, not just on click, so eight hours of sleep is one gesture. That is why the strip reads
 `Input.GetMouseButton` directly rather than using `ButtonInvisible`: a button reports a completed click, and a
 drag never completes one per cell. The current hour is outlined in `Accent` so the strip can be read against the
 clock without counting cells.
 
+The strip, the brush and the painting live in `ScheduleStrip`, parameterized by where hours are **read from and
+written to** — the pawns tab passes a pawn's timetable, the template manager passes a template. Extracted rather
+than copied when the second one arrived, for the reason the shared portrait was: two paintable strips could drift
+apart in how a drag paints, what the tooltip says, and which hour is outlined. A template outlines **no** hour,
+since it describes any day rather than today, and an hour it has no opinion about draws as a hole rather than as
+any assignment's color.
+
 Expansion is a **set** of pawns rather than a single selection, so opening one does not close another — comparing
 two colonists' days side by side is most of the reason to look at this.
+
+### The work priorities pane
+
+Expanding a row also opens a **side pane** on the right of the window, listing every work type as a card: the
+work's name, the pawn's skill at it, and the priority. The layout is the architect tab's — the pane takes its width
+off the right before the grid is laid out, so the grid reflows into what is left rather than being covered by it.
+
+**A pane rather than more columns.** Two dozen values in a grid *is* the vanilla work tab, and that tab stays for
+players who prefer it — which is why it is not on the bar by default rather than being removed. One pawn at a time
+in a tall list gives each work type room for a name, a skill readout and a number, instead of a column heading
+leaning over a box.
+
+**It follows the most recently expanded pawn**, not a second selection the player has to manage. Rows can be open
+several at a time, but there is one pane, so opening a row moves it and closing that row puts it away. It also has
+its own close button: the row that opened it may have scrolled out of sight, and hunting for it is not an obvious
+way to close a panel.
+
+| Reads | Shows |
+|---|---|
+| `workSettings.GetPriority` | The number, colored by the same 1–3 / 4–6 / 7–9 bands the work tab uses |
+| `WorkTypeIsDisabled` | A warning stripe wash, "incapable", and a dash where the number would be |
+| `relevantSkills` average | The skill readout, through the work tab's own `SkillColor` |
+
+The card's accent stripe carries the priority's color, so the list can be read as a shape — where the green band
+ends and the red one starts — without reading two dozen numbers.
+
+**Nothing in the pane is cached.** A priority is a list index and a skill average is arithmetic over one or two
+levels, both cheaper than the dictionary lookup a cache would need, and both able to change from a click in the
+pane itself.
+
+**The window grows when the pane opens**, rather than the grid shrinking to fit it. The columns are fixed widths,
+so taking 330px out of the grid would clip a column or raise a horizontal scrollbar under a table that had been
+fitting perfectly — the row you clicked would move to make room for the panel describing it. That needs a nudge:
+`RequestedTabSize` is only read when a window opens, so the resize happens in `WindowUpdate`, which runs outside
+the GUI pass — moving the window mid-draw would leave the frame's controls laid out against a rect that no longer
+exists. The check compares against the live `windowRect` rather than a remembered value, so it answers "does the
+window match what it should be" and therefore also corrects itself after a resolution change.
+
+The five **edit tools** above the list are the work tab's own, scoped to priorities: clear, copy, paste, save as
+template, apply template. They call into `WorkPanel` rather than reimplementing anything, so the **clipboard is one
+clipboard** — copying a pawn's priorities in the work tab and pasting them here is obviously wanted, and two
+clipboards would have been a bug nobody reported because nobody would guess it was possible. Every template action
+passes `PawnTemplateScope.Priorities`, so these tools write priorities and nothing else whatever the template the
+player picks happens to carry.
+
+When **manual priorities are off** the box becomes a checkbox, the same substitution the work tab makes: the game
+treats any non-zero the same in that mode, so a number would be lying about what it controls. Editing a priority
+here also drops the work tab's remembered snapshot for that pawn, or toggling manual priorities off and on again
+would put the old numbers back.
+
+A colonist who is destroyed while their pane is open is dropped from it in the **same frame**, through
+`PawnLifecycle.Gone` — the pane is this event's first subscriber. A colonist who merely stops being listed, by
+joining a caravan or being captured, is caught by the roster check instead: still alive, but a pane pointing at a
+row that is not there.
 
 ### Schedule assignment colors
 
@@ -673,28 +810,71 @@ five in a line would cost another 60px of a window that is already as wide as th
 | Save | `UIOverhaul/Work/SaveTemplate` | Captures the pawn's priorities as a named template and opens the manager on it |
 | Apply | `UIOverhaul/Work/ApplyTemplate` | Opens the manager to put a saved template on this pawn |
 
-The clipboard **is** a `WorkPriorityTemplate`, which is not a coincidence: an unnamed set of priorities
-lifted off one pawn to put on another is exactly what a template is. Reusing the type means copy and paste
-inherit its capability handling rather than repeating it — the copy skips work the source cannot do, so
+The clipboard **is** a `PawnTemplate` scoped to priorities, which is not a coincidence: an unnamed set of
+priorities lifted off one pawn to put on another is exactly what a template is. Reusing the type means copy and
+paste inherit its capability handling rather than repeating it — the copy skips work the source cannot do, so
 their incapabilities are not copied as zeros, and the paste leaves work the target cannot do at 0. It is
 held for the session and never written to disk: a template is the named, kept version, and persisting the
 clipboard too would blur the two.
+
+### Templates cover the whole pawn, in three scopes
+
+A template is one type — `PawnTemplate` — carrying any combination of **work priorities**, the **24 hour
+schedule**, and the **assign tab's policies**. Which of those it speaks for is its `scope`, and that is what the
+edit tools differ by rather than being three separate features: the tools on a pawn's card in the pawns tab
+capture everything, the ones on the work priorities pane capture priorities alone, the ones on the schedule strip
+capture the schedule alone.
+
+**Scope is recorded, not inferred from contents.** A whole-pawn template taken from a colonist with an empty
+schedule carries no schedule entries, and inferring would quietly demote it to priorities-only.
+
+**A set of tools offers every template that *covers* its scope, and applies only its own part.** So a whole-pawn
+template appears in the schedule strip's list, and pressing apply there writes the schedule and nothing else.
+The alternative — offering only exact matches — would hide the player's most complete template from most of the
+places they would want part of it; the other alternative, applying all of it, would rewrite work priorities from
+a button labelled schedule.
+
+**Policies are matched by label, and that is a compromise worth naming.** Unlike a work type or a time
+assignment, a policy is not a def: `ApparelPolicy` and its siblings live in databases belonging to the *save*,
+and their `id` is an integer handed out per save that means nothing in another colony. So a template says "the
+policy called Nudist", which is exact within a colony, finds a policy of the same name in another, and leaves
+the pawn's alone if there is none. **Area restriction is deliberately excluded** — an `Area` belongs to a map,
+not a save, so it would be meaningless even on a second map in the same colony.
 
 Templates are stored as `UIOverhaul_WorkTemplates.xml` in RimWorld's config folder, beside the game's
 own settings — not in the save. Naming an assignment is only worth doing if it can go on the next
 colonist, in the next colony, in a save that does not exist yet. The file is picked up by the same
 watcher as the other config files, so hand-editing it applies without a restart.
 
-Keyed by `WorkTypeDef` defName rather than by def, so a work type belonging to a currently disabled mod
-survives a read and write rather than being dropped. Zeros are stored as well as non-zeros: a template
-describes a whole assignment, and "not assigned" is part of that.
+**The filename still says work priorities, on purpose.** That is what the file held when a template could only be
+one thing. Renaming it would be tidier and would silently discard every template anyone had already saved, since
+nothing would be looking at the old file — so the root element keeps its old name too. A template with no
+`<scope>` reads as priorities-only, which is exactly what every template written before scope existed was.
 
-Applying one:
+Keyed by defName rather than by def throughout, so a work type or time assignment belonging to a currently
+disabled mod survives a read and write rather than being dropped. Zeros are stored as well as non-zeros: a
+template describes a whole assignment, and "not assigned" is part of that. Each hour of a schedule states its own
+index rather than relying on its position, so deleting a line by hand does not shift every hour after it.
+
+Applying one leaves alone anything it cannot set, and says what it left:
 
 - A work type the pawn is **incapable** of is left at 0. `SetPriority` logs an error for those, and a
   template made from a capable pawn should not fail on an incapable one.
 - A work type the template has **never heard of** — added by a mod installed after it was saved — is
   left alone rather than zeroed.
+- An hour the template has **no opinion** about keeps whatever the pawn had, and draws as an empty cell rather
+  than as any assignment's color.
+- A **policy or time assignment it names that cannot be found** is reported by name and skipped.
+
+None of those is an error and none is silent either: a template that quietly did four fifths of its job looks
+like it worked, and the missing fifth gets found much later.
+
+The schedule in the manager is **editable**, painted with the same brush and the same strip a pawn's row uses —
+`ScheduleStrip` is shared rather than copied, so a drag paints the same way in both. Policies are **shown but not
+editable**: they are referenced by a name the player typed, so editing would mean either a free text field where a
+typo becomes a policy that cannot be found, or a picker listing the policies of whichever colony happens to be
+loaded, which is not the colony the template is for. Re-capturing from a pawn who already has the right ones is
+simpler and harder to get wrong.
 
 ## Architect tab
 

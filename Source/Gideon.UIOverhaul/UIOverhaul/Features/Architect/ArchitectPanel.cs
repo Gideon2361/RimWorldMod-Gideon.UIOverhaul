@@ -9,6 +9,7 @@ using RimWorld;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.Architect
 {
@@ -1060,7 +1061,7 @@ namespace Gideon.UIOverhaul.Features.Architect
             }
             catch (Exception ex)
             {
-                Log.ErrorOnce("[Gideon.UIOverhaul] Designator " + designator.GetType().Name
+                Log.ErrorOnce(UILogTag.Prefix + "Designator " + designator.GetType().Name
                               + " failed to draw its architect readout.\n" + ex,
                     0x17C0_10C0 ^ designator.GetType().GetHashCode());
             }

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The global controls tab: every play settings toggle, in a panel instead of a row of icons across
+    the bottom of the map.
+
+    order 499 puts it immediately before the pause menu, which is vanilla's Menu button at order 500.
+    Everything else in the game sits at 90 or below, so 499 keeps this last-but-one however many tabs
+    other mods add. A number just under 500 rather than, say, 100, precisely because a mod that adds a
+    tab at 200 should still end up to the left of this one.
+
+    That is the default position only. The button bar organizer moves it anywhere the player wants,
+    and their arrangement wins over this ordering.
+
+    minimized is true, so it shows as an icon rather than an icon and a label. This is a utility tab
+    reached occasionally, and the toggles it holds already live one click away in the corner; giving
+    it a full-width label would spend more of the bar than it earns.
+
+    validWithoutMap is false: these are the map's toggles. DoPlaySettingsGlobalControls is called with
+    worldView false, which is the set that acts on a map, so from the planet view the panel would
+    offer buttons that do nothing.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_GlobalControls</defName>
+    <label>controls</label>
+    <description>Every display and play setting toggle in one panel: zones, roof overlay, colonist bar, beauty and the rest, including toggles added by other mods. The same controls that sit in the bottom right corner of the screen, which can be switched off there in this mod's settings.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Panel.MainTabWindow_GlobalControls</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+
+    <!--
+      No file extension and no Textures prefix: RimWorld's ContentFinder takes a path relative to
+      Textures and appends the extension itself. The icon is 128 square in the same flat grayscale
+      with a diagonal light to dark gradient as the rest of this mod's main button icons, so it tints
+      with the palette the way the others do.
+    -->
+    <iconPath>UI/MainButtonIcons/GlobalControls</iconPath>
+
+    <minimized>true</minimized>
+    <order>499</order>
+  </MainButtonDef>
+
+</Defs>

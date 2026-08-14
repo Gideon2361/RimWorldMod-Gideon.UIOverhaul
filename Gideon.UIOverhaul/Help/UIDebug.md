@@ -10,9 +10,13 @@ UIDebug.Log("cache rebuilt, " + count + " entries");
 UIDebug.Warning("Focus diagnostics: CONFIRMED. id 213 -> 264");
 ```
 
-Messages are prefixed and frame-stamped: `[Gideon.UIFramework] [debug f2944] ...`. The frame number is there
+Messages are prefixed and frame-stamped: `[UI Overhaul] [debug f2944] ...`. The frame number is there
 because most of what gets instrumented is about *when* something changed relative to something else, and two
 lines from the same frame mean something different from two lines a frame apart.
+
+The prefix comes from `UILogTag`, which every line this mod logs goes through. The mod name inside the brackets is
+wrapped in the active palette's accent color, so this mod's lines can be picked out of a wall of startup text — the
+raw `Player.log` on disk has no renderer, so the color tag shows there as text.
 
 ## Members
 

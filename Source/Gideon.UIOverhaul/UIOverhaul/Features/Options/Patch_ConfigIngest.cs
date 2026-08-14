@@ -1,5 +1,7 @@
+using Gideon.UIFramework.Caching;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
+using UnityEngine;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Options
@@ -30,8 +32,37 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public static void Postfix()
         {
+            // Before the config is read, because every def instance the caches could be holding has just been
+            // rebuilt from XML: a cached value keyed by a def from the previous load describes an object that no
+            // longer exists.
+            UIGuard.Try("Cache.ClearOnReload", UICacheController.ClearAll);
+
             UIGuard.Try("Options.Ingest", UIConfigWatcher.Ingest);
             UIGuard.Try("Options.StartWatching", UIConfigWatcher.Start);
+        }
+    }
+
+    /// <summary>
+    /// Drops every cached value when a game becomes playable, which covers loading a save, starting a new colony
+    /// and returning to the menu and back.
+    ///
+    /// <b>The class doc on <see cref="UICacheController"/> has always said the caches are cleared when the world
+    /// changes underneath them. Until now only a def reload actually did it</b> -- and the gap is a real one rather
+    /// than tidiness. Entries are keyed by the object they describe, so a colonist from the previous save is a
+    /// different key and cannot show wrong data; what it does instead is hold that object alive. A
+    /// <c>Zone_Growing</c> from an abandoned map still answers a Map when asked, so it survives pruning
+    /// indefinitely, and a growing zone pins the map it belongs to.
+    ///
+    /// <c>FinalizeInit</c> rather than <c>LoadGame</c> or <c>InitNewGame</c>, because it is the one seam both paths
+    /// pass through, and it runs at the point the world is fully assembled -- which is the moment a cache read is
+    /// safe again.
+    /// </summary>
+    [HarmonyPatch(typeof(Game), nameof(Game.FinalizeInit))]
+    public static class Patch_Game_FinalizeInit_Cache
+    {
+        public static void Postfix()
+        {
+            UIGuard.Try("Cache.ClearOnGameLoad", UICacheController.ClearAll);
         }
     }
 
@@ -55,6 +86,10 @@ namespace Gideon.UIOverhaul.Features.Options
         public static void Postfix()
         {
             UIGuard.Try("Options.WatcherTick", UIConfigWatcher.Tick);
+
+            // Housekeeping only: this drops cache entries whose subject has gone away, at most once a minute, and
+            // returns immediately the rest of the time. It does not refresh anything -- caches rebuild on read.
+            UIGuard.Try("Cache.Tick", () => UICacheController.Tick(Time.realtimeSinceStartup));
         }
     }
 
@@ -65,6 +100,10 @@ namespace Gideon.UIOverhaul.Features.Options
         public static void Postfix()
         {
             UIGuard.Try("Options.WatcherTick", UIConfigWatcher.Tick);
+
+            // Housekeeping only: this drops cache entries whose subject has gone away, at most once a minute, and
+            // returns immediately the rest of the time. It does not refresh anything -- caches rebuild on read.
+            UIGuard.Try("Cache.Tick", () => UICacheController.Tick(Time.realtimeSinceStartup));
         }
     }
 }

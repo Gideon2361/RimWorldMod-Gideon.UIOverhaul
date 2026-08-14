@@ -9,6 +9,7 @@ using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using UnityEngine;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIFramework.Stages
 {
@@ -135,7 +136,7 @@ namespace Gideon.UIFramework.Stages
                 if (type == null || !typeof(UILoadingScreenControl).IsAssignableFrom(type))
                 {
                     Log.ErrorOnce(
-                        $"[Gideon.UIFramework] Loading screen '{name}': drawerClass '{drawerClass}' "
+                        UILogTag.Prefix + $"Loading screen '{name}': drawerClass '{drawerClass}' "
                         + "is not a UILoadingScreenControl. Using the stock drawer.", 0x17C0_10AC);
                     return drawerInstance = new UILoadingScreenControl();
                 }
@@ -147,7 +148,7 @@ namespace Gideon.UIFramework.Stages
                 catch (Exception ex)
                 {
                     Log.ErrorOnce(
-                        $"[Gideon.UIFramework] Loading screen '{name}': could not create "
+                        UILogTag.Prefix + $"Loading screen '{name}': could not create "
                         + $"drawerClass '{drawerClass}'. Using the stock drawer.\n" + ex, 0x17C0_10AE);
                     drawerInstance = new UILoadingScreenControl();
                 }
@@ -204,7 +205,7 @@ namespace Gideon.UIFramework.Stages
                         }
                         else
                         {
-                            Log.ErrorOnce($"[Gideon.UIFramework] Loading screen '{name}' overlay: {error}",
+                            Log.ErrorOnce(UILogTag.Prefix + $"Loading screen '{name}' overlay: {error}",
                                 0x17C0_10AF);
                         }
                     }
@@ -231,7 +232,7 @@ namespace Gideon.UIFramework.Stages
                     if (UIColorParser.TryParse(panelColor, out Color parsed, out string error))
                         panelColorValue = parsed;
                     else
-                        Log.ErrorOnce($"[Gideon.UIFramework] Loading screen '{name}' panelColor: {error}",
+                        Log.ErrorOnce(UILogTag.Prefix + $"Loading screen '{name}' panelColor: {error}",
                             0x17C0_10B0);
                 }
             }
@@ -380,7 +381,7 @@ namespace Gideon.UIFramework.Stages
                 catch (Exception ex)
                 {
                     // One malformed file must not cost every other mod its loading screen.
-                    Log.Error($"[Gideon.UIFramework] Could not read {path}\n{ex}");
+                    Log.Error(UILogTag.Prefix + $"Could not read {path}\n{ex}");
                 }
             }
 
@@ -406,7 +407,7 @@ namespace Gideon.UIFramework.Stages
 
                 if (config.name.NullOrEmpty())
                 {
-                    Log.Error($"[Gideon.UIFramework] {path}: a loading screen has no <name>; skipped.");
+                    Log.Error(UILogTag.Prefix + $"{path}: a loading screen has no <name>; skipped.");
                     continue;
                 }
 
@@ -416,7 +417,7 @@ namespace Gideon.UIFramework.Stages
 
                 if (existing >= 0)
                 {
-                    Log.Warning($"[Gideon.UIFramework] Loading screen '{config.name}' from {mod.Name} "
+                    Log.Warning(UILogTag.Prefix + $"Loading screen '{config.name}' from {mod.Name} "
                                 + $"replaces the one from {into[existing].sourceMod}.");
                     into[existing] = config;
                 }
@@ -459,11 +460,11 @@ namespace Gideon.UIFramework.Stages
                         if (bool.TryParse(value, out bool flip))
                             config.backgroundFlipVertical = flip;
                         else
-                            Log.Warning($"[Gideon.UIFramework] '{value}' is not a bool for "
+                            Log.Warning(UILogTag.Prefix + $"'{value}' is not a bool for "
                                         + "<backgroundFlipVertical>; leaving it automatic.");
                         break;
                     default:
-                        Log.Warning($"[Gideon.UIFramework] Unknown loading screen field <{field.Name}>; ignored.");
+                        Log.Warning(UILogTag.Prefix + $"Unknown loading screen field <{field.Name}>; ignored.");
                         break;
                 }
             }
@@ -494,7 +495,7 @@ namespace Gideon.UIFramework.Stages
             }
             catch
             {
-                Log.Warning($"[Gideon.UIFramework] '{value}' is not a backgroundFit; using {fallback}.");
+                Log.Warning(UILogTag.Prefix + $"'{value}' is not a backgroundFit; using {fallback}.");
                 return fallback;
             }
         }

@@ -71,20 +71,41 @@ namespace Gideon.UIFramework.Helpers
             Texture2D thumb = Solid(Fade(palette.TextSecondary, 0.45f));
             Texture2D thumbHover = Solid(Fade(palette.TextSecondary, 0.7f));
 
-            StripTextFieldBorders();
+            RestyleTextFields(palette);
             RestyleScrollbars(track, thumb, thumbHover);
         }
 
         /// <summary>
-        /// Clears the background from RimWorld's text field styles, so the only border a field has is the
-        /// one the caller draws.
+        /// Every RimWorld text field style, so the chrome can be put on and taken off them together.
         ///
         /// The styles are private statics on Verse.Text, built once in its static constructor as clones of
-        /// GUI.skin.textField. Being clones is what makes this safe: nulling their backgrounds cannot
-        /// affect the skin every other Unity control draws from.
+        /// GUI.skin.textField. Being clones is what makes this safe: changing their backgrounds cannot affect
+        /// the skin every other Unity control draws from.
         /// </summary>
-        private static void StripTextFieldBorders()
+        private static readonly List<GUIStyle> FieldStyles = new List<GUIStyle>();
+
+        private static Texture2D fieldNormal;
+        private static Texture2D fieldFocused;
+
+        /// <summary>
+        /// Gives RimWorld's text fields a themed fill and a one pixel border.
+        ///
+        /// <b>This used to strip the backgrounds instead, and that was a mistake with a long reach.</b> The
+        /// reasoning was that a field's border should come from whoever draws the field -- which is true of this
+        /// mod's own boxes, and false of every text field in the rest of the game. Vanilla's fields have no
+        /// caller drawing chrome for them; their border <i>is</i> the style background. Clearing it left every
+        /// search box, name field and number entry in RimWorld as text floating on the panel behind it.
+        ///
+        /// The background is a three by one texture with a one pixel border inset, so Unity's nine-slice keeps
+        /// the edge exactly one pixel at any field size instead of scaling it.
+        /// </summary>
+        private static void RestyleTextFields(UIColorPaletteDef palette)
         {
+            fieldNormal = Framed(palette.SurfaceSunken, palette.Border);
+            fieldFocused = Framed(palette.SurfaceSunken, palette.BorderFocused);
+
+            FieldStyles.Clear();
+
             foreach (string fieldName in new[] { "textFieldStyles", "textAreaStyles", "textAreaReadOnlyStyles" })
             {
                 GUIStyle[] styles = AccessTools.StaticFieldRefAccess<GUIStyle[]>(typeof(Text), fieldName);
@@ -96,16 +117,61 @@ namespace Gideon.UIFramework.Helpers
                     if (style == null)
                         continue;
 
-                    style.normal.background = null;
-                    style.focused.background = null;
-                    style.hover.background = null;
-                    style.active.background = null;
-                    style.onNormal.background = null;
-                    style.onFocused.background = null;
-                    style.onHover.background = null;
-                    style.onActive.background = null;
+                    // One pixel from each edge is the border; the middle stretches. Without this the whole
+                    // texture is scaled and the border thickens with the field.
+                    style.border = new RectOffset(1, 1, 1, 1);
+
+                    FieldStyles.Add(style);
                 }
             }
+
+            SetFieldChrome(true);
+        }
+
+        /// <summary>
+        /// Turns the field chrome on or off for every style at once.
+        ///
+        /// <b>Off is for this mod's own text box,</b> which draws its own frame around a rect wider than the
+        /// field itself -- the frame has to enclose the search icon and the clear button, which are outside the
+        /// editable area. Letting the style draw as well would put a second border inside the first.
+        /// </summary>
+        internal static void SetFieldChrome(bool shown)
+        {
+            foreach (GUIStyle style in FieldStyles)
+            {
+                style.normal.background = shown ? fieldNormal : null;
+                style.hover.background = shown ? fieldNormal : null;
+                style.active.background = shown ? fieldNormal : null;
+                style.onNormal.background = shown ? fieldNormal : null;
+                style.onHover.background = shown ? fieldNormal : null;
+                style.onActive.background = shown ? fieldNormal : null;
+
+                // The focused pair takes the brighter edge the palette names for exactly this.
+                style.focused.background = shown ? fieldFocused : null;
+                style.onFocused.background = shown ? fieldFocused : null;
+            }
+        }
+
+        /// <summary>
+        /// A three by three texture: a one pixel ring of <paramref name="border"/> around a single
+        /// <paramref name="fill"/> pixel, for nine-slicing.
+        /// </summary>
+        private static Texture2D Framed(Color fill, Color border)
+        {
+            Texture2D texture = new Texture2D(3, 3, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Point
+            };
+
+            for (int x = 0; x < 3; x++)
+            for (int y = 0; y < 3; y++)
+                texture.SetPixel(x, y, x == 1 && y == 1 ? fill : border);
+
+            texture.Apply(false, true);
+            Owned.Add(texture);
+
+            return texture;
         }
 
         /// <summary>

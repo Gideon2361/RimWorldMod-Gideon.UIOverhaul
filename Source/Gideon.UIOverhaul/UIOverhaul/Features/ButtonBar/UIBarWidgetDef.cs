@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.ButtonBar
 {
@@ -80,7 +81,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 catch (Exception ex)
                 {
                     workerFailed = true;
-                    Log.Error($"[Gideon.UIOverhaul] Could not create the worker for bar widget "
+                    Log.Error(UILogTag.Prefix + $"Could not create the worker for bar widget "
                               + $"'{defName}' ({workerClass.FullName}). It will not be drawn.\n{ex}");
                 }
 

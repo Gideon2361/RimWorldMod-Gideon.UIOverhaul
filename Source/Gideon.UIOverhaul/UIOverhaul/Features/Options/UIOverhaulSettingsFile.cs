@@ -58,6 +58,122 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public UITimeFormat timeFormat = UITimeFormat.TwentyFourHour;
 
+        // ---------------------------------------------------------------------------------------
+        // Desktop widgets
+        //
+        // The readouts this mod draws in the corner of the screen. Each is independently switchable because they
+        // are independently useful: somebody who wants the season but not the weather is not an odd case, they are
+        // someone whose colony is in a biome where the weather never changes.
+        //
+        // Every one defaults to on. A widget nobody can see is a widget nobody knows to turn on, and the whole set
+        // is one checkbox away from gone for anyone who wants their corner back.
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// This mod's own speed control glyphs, rather than vanilla's.
+        ///
+        /// The one desktop widget of this mod's own that exists so far. The rest of this mod's corner arrives with
+        /// the rebuilt panel, and each piece of it gets a switch beside this one.
+        /// </summary>
+        public bool showSpeedGlyphs = true;
+
+        /// <summary>
+        /// The real time clock: vanilla's HH:mm line, drawn by <c>DoRealtimeClock</c>.
+        ///
+        /// <b>This switch governs, in both directions.</b> Ticked shows the clock even when vanilla's own
+        /// preference is off; cleared hides it even when that preference is on. An earlier version only ever
+        /// added, and that was wrong for the obvious reason: a cleared box with a clock sitting above it reads as
+        /// a broken setting, whatever the reasoning behind it was.
+        ///
+        /// <b>Seeded from the vanilla preference rather than from a constant,</b> which is what makes governing
+        /// safe to do. A fixed default is wrong whichever way it points -- true forces a clock onto every colony
+        /// that installs this mod, false takes it away from everyone who had asked vanilla for one. Reading
+        /// <c>Prefs.ShowRealtimeClock</c> when this mod first writes its config means installing changes nothing,
+        /// and the switch takes over from there.
+        ///
+        /// In the field initializer so it covers every path into <see cref="Load"/> at once: no config file, a
+        /// config file predating this setting, and an unreadable one all construct the object and then overwrite
+        /// only what they actually read.
+        ///
+        /// This is deliberately not what the performance meter does, and the difference is the flag rather than
+        /// the feature. <c>Prefs.ShowRealtimeClock</c> is a saved player preference, so there is something
+        /// meaningful to inherit. <c>DebugViewSettings</c> is session state that resets every launch, so there
+        /// would be nothing to seed from and nothing a player had deliberately kept -- which is why that one only
+        /// ever adds.
+        /// </summary>
+        public bool showTimeWidget = InheritedRealtimeClock();
+
+        /// <summary>
+        /// Vanilla's real time clock preference, or false if it cannot be read.
+        ///
+        /// Guarded because this runs from a field initializer, which is as early as this type can be touched.
+        /// <c>Prefs.ShowRealtimeClock</c> reads through <c>Prefs.data</c>, and a null there would throw out of a
+        /// constructor -- taking the whole settings object with it, over a clock.
+        /// </summary>
+        private static bool InheritedRealtimeClock()
+        {
+            try
+            {
+                return Prefs.ShowRealtimeClock;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool showSpeedControlsWidget = true;
+
+        /// <summary>
+        /// Vanilla's date block, which is one switch because it is one call.
+        ///
+        /// <c>DoDate</c> hands the whole thing to <c>DateReadout.DateOnGUI</c>, which draws the hour, the date and
+        /// the season together and reports one height for all three. Separate switches for the date and the season
+        /// would mean reimplementing that readout, and a readout that shows the wrong day is worse than one that
+        /// shows a line somebody did not ask for.
+        /// </summary>
+        public bool showDateWidget = true;
+
+        // Kept, with no switch in front of them yet, because the rows they name are drawn inside
+        // GlobalControlsOnGUI itself rather than through a call of their own -- the temperature is an inline
+        // Widgets.Label, and the weather and the conditions have their layout cursor moved by the caller rather
+        // than by the method being called, so skipping either leaves a hole where it was. Both become reachable
+        // when that method is replaced, and the choices a player makes now should still be here when it is.
+        public bool showTemperatureWidget = true;
+
+        public bool showWeatherWidget = true;
+
+        public bool showConditionsWidget = true;
+
+        /// <summary>
+        /// Whether vanilla's own row of play settings toggles is drawn in the corner.
+        ///
+        /// The one switch here that hides something the base game draws rather than something this mod adds, because
+        /// the Global Controls tab holds the same toggles and a player who uses the tab has no reason to keep the row
+        /// over their map.
+        ///
+        /// <b>Hiding this and removing the tab from the bar at the same time is allowed.</b> It looks like it strands
+        /// the toggles, and does not: this mod's settings are always reachable from the bar's options button, which
+        /// deliberately cannot be hidden, so either can be restored from there. No combination of these settings
+        /// produces a state a player cannot get out of.
+        /// </summary>
+        public bool showGlobalControlsWidget = true;
+
+        /// <summary>
+        /// Whether the performance meter is drawn: frames per second and ticks per second.
+        ///
+        /// <b>The one widget here that defaults to off</b>, unlike the six above. A readout of the game's own frame
+        /// rate is a diagnostic rather than something a colony is played with, and a permanent number in the corner
+        /// invites watching it. Someone chasing late game slowdown will go looking for this; nobody else needs it
+        /// sitting there.
+        /// </summary>
+        public bool showPerformanceWidget;
+
+        // There was a master switch here, and a ShowsWidget helper that folded it into every read. Both are gone:
+        // one box that clears the rest is a different control from a box per widget, and having both meant a
+        // player who cleared one thing and a player who cleared everything left the settings in states that read
+        // the same. Each widget answers for itself now.
+
         // There is deliberately no option to hide the bar's UI options button. It used to exist, back when
         // these settings were also reachable from the vanilla Options window; that route turned out to be
         // impossible -- Dialog_Options ignores any OptionCategoryDef from a mod -- which leaves the bar
@@ -106,7 +222,7 @@ namespace Gideon.UIOverhaul.Features.Options
 
             if (UIColorPaletteDef.ActiveIsMissing)
             {
-                Log.Warning($"[Gideon.UIOverhaul] Palette '{activePalette}' is not loaded -- the mod that "
+                Log.Warning(UILogTag.Prefix + $"Palette '{activePalette}' is not loaded -- the mod that "
                             + "supplied it may be disabled. Falling back to the default theme.");
                 UIColorPaletteDef.ActiveDefName = null;
             }
@@ -157,13 +273,76 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.timeFormat = UIClock.Parse(value);
                             break;
 
+                        // The widget switches. Absent means on, which is what makes a config file written before
+                        // these existed read as "show everything" rather than silently hiding the lot.
+                        // showDesktopWidgets, the old master switch, is retired rather than read; it is listed
+                        // with the other retired names below. A file written before it was removed loads with
+                        // each widget's own choice intact -- which is the right answer even for someone who had
+                        // the master off, because the control they used to turn everything off no longer exists
+                        // to turn it back on.
+                        case "showSpeedGlyphs":
+                            settings.showSpeedGlyphs = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showConditionsWidget":
+                            settings.showConditionsWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // Reads the opposite way round to the widgets below it, because this one defaults to off:
+                        // absent means off here.
+                        case "showTimeWidget":
+                            settings.showTimeWidget = value.EqualsIgnoreCase("true");
+                            break;
+
+                        case "showTemperatureWidget":
+                            settings.showTemperatureWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showSpeedControlsWidget":
+                            settings.showSpeedControlsWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showDateWidget":
+                            settings.showDateWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showWeatherWidget":
+                            settings.showWeatherWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // showSeasonWidget is retired, and listed with the other retired names below. The season
+                        // is drawn by DateReadout as part of the date block, so it is the date switch that
+                        // governs it.
+
+                        case "showGlobalControlsWidget":
+                            settings.showGlobalControlsWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // Reads the opposite way round to the others, because this one defaults to off: absent
+                        // means off here, where absent means on for every widget above.
+                        case "showPerformanceWidget":
+                            settings.showPerformanceWidget = value.EqualsIgnoreCase("true");
+                            break;
+
+                        // Retired settings. Accepted silently so an older config file does not raise a warning
+                        // about something the player never chose to write -- these were written by a previous
+                        // version of this mod, not typed by anyone, so there is nothing for them to act on.
+                        //
+                        // A name has to be listed here rather than merely dropped from the switch above: falling
+                        // through to default is what produces the warning, and a setting this mod removed is not
+                        // an unknown one. The warning is worth keeping for names that really are unrecognized,
+                        // which is what a typo or a config from a newer version looks like.
+                        //
+                        // They stay listed permanently. The file is only rewritten when something is saved, so a
+                        // player who never changes a setting keeps the old element indefinitely, and a list that
+                        // was pruned after a release or two would start warning about it again.
                         case "showBarButton":
-                            // Retired setting. Accepted silently so an older config file does not raise a
-                            // warning about something the player never chose to write.
+                        case "showDesktopWidgets":
+                        case "showSeasonWidget":
                             break;
 
                         default:
-                            Log.Warning($"[Gideon.UIOverhaul] Unknown setting <{field.Name}>; ignored.");
+                            Log.Warning(UILogTag.Prefix + $"Unknown setting <{field.Name}>; ignored.");
                             break;
                     }
                 }
@@ -212,13 +391,27 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("fullscreenOnStartup",
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
+
+                    writer.WriteElementString("showSpeedGlyphs", showSpeedGlyphs ? "true" : "false");
+                    writer.WriteElementString("showTimeWidget", showTimeWidget ? "true" : "false");
+                    writer.WriteElementString("showTemperatureWidget", showTemperatureWidget ? "true" : "false");
+                    writer.WriteElementString("showSpeedControlsWidget",
+                        showSpeedControlsWidget ? "true" : "false");
+                    writer.WriteElementString("showDateWidget", showDateWidget ? "true" : "false");
+                    writer.WriteElementString("showWeatherWidget", showWeatherWidget ? "true" : "false");
+                    writer.WriteElementString("showConditionsWidget",
+                        showConditionsWidget ? "true" : "false");
+                    writer.WriteElementString("showGlobalControlsWidget",
+                        showGlobalControlsWidget ? "true" : "false");
+                    writer.WriteElementString("showPerformanceWidget",
+                        showPerformanceWidget ? "true" : "false");
                     writer.WriteEndElement();
                     writer.WriteEndDocument();
                 }
             }
             catch (Exception ex)
             {
-                Log.Error($"[Gideon.UIOverhaul] Could not write {path}.\n{ex}");
+                Log.Error(UILogTag.Prefix + $"Could not write {path}.\n{ex}");
             }
         }
     }

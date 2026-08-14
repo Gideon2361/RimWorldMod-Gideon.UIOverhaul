@@ -21,8 +21,9 @@ Four widgets ship with this mod. Any mod can add more.
 
 ## Putting one on the bar
 
-The bar button at the far right of the bar opens **UI Options**. Under **Button bar**, press
-**Arrange the bar**. The right-hand column lists everything not currently on the bar: tabs first,
+The bar button at the far right of the bar opens **UI Options**. Choose **Manage Tabs** from the
+category list down the left, then press **Open Manager**. The right-hand column lists everything not
+currently on the bar: tabs first,
 then a **Widgets** heading with the widgets, each showing what it displays. Press `+` on one to put
 it on the bar, then drag its row to where you want it and press **Save**.
 

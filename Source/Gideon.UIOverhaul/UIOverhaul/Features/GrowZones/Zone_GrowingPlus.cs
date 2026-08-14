@@ -131,7 +131,7 @@ public class Zone_GrowingPlus : Zone_Growing, IBillGiver
 
         if (migrated > billStack.Count)
         {
-            Log.Warning($"[Gideon.UIOverhaul] Zone '{label}' had {migrated} saved bills but only "
+            Log.Warning(UILogTag.Prefix + $"Zone '{label}' had {migrated} saved bills but only "
                         + $"{billStack.Count} fit; BillStack.MaxCount is {BillStack.MaxCount}.");
         }
 

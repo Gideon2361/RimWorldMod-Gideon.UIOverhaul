@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Xml;
 using Verse;
+using Gideon.UIFramework.Helpers;
 
 namespace Gideon.UIOverhaul.Features.Architect
 {
@@ -139,7 +140,7 @@ namespace Gideon.UIOverhaul.Features.Architect
                 // An abstract def, which has a Name and no defName. Worth saying out loud: the author wrote
                 // something that looks like it should work and silently will not, for the inheritance reason in
                 // the class comment.
-                Log.Warning($"[Gideon.UIOverhaul] <{FieldName}> was set on a {DefElementName} with no defName, "
+                Log.Warning(UILogTag.Prefix + $"<{FieldName}> was set on a {DefElementName} with no defName, "
                             + "which is an abstract def, and abstract defs are resolved after this is read. Set "
                             + $"<{FieldName}> on the concrete def instead.");
                 return;
@@ -147,7 +148,7 @@ namespace Gideon.UIOverhaul.Features.Architect
 
             if (!bool.TryParse(raw, out bool value))
             {
-                Log.Warning($"[Gideon.UIOverhaul] <{FieldName}> on {DefElementName} '{defName}' is '{raw}', "
+                Log.Warning(UILogTag.Prefix + $"<{FieldName}> on {DefElementName} '{defName}' is '{raw}', "
                             + "which is not true or false. The category is left visible.");
                 return;
             }
