@@ -49,7 +49,7 @@ namespace Gideon.UIFramework.Helpers
         public static void Log(string message)
         {
             if (Enabled)
-                Verse.Log.Message(Prefix(message));
+                Verse.Log.Message(LogPrefix(message));
         }
 
         /// <summary>
@@ -61,15 +61,23 @@ namespace Gideon.UIFramework.Helpers
         public static void Warning(string message)
         {
             if (Enabled)
-                Verse.Log.Warning(Prefix(message));
+                Verse.Log.Warning(LogPrefix(message));
         }
 
         /// <summary>
         /// Frame-stamped, because most of what gets instrumented here is about *when* something changed
         /// relative to something else, and two lines from the same frame mean something different from two
         /// lines a frame apart.
+        ///
+        /// <b>Named <c>LogPrefix</c> rather than <c>Prefix</c>, and not for style.</b> Harmony identifies patch
+        /// methods by name, so a method called <c>Prefix</c> anywhere in a type it processes is taken for a patch
+        /// and fails with "undefined target method" when it has nothing to patch. This one builds a log line and
+        /// never had anything to do with Harmony, and it still cost a reported failure on every launch until the
+        /// patch loop learned to skip unannotated types. The same applies to <c>Postfix</c>, <c>Transpiler</c>,
+        /// <c>Finalizer</c>, <c>Prepare</c>, <c>Cleanup</c>, <c>TargetMethod</c> and <c>TargetMethods</c>: all of
+        /// them are effectively reserved in an assembly Harmony scans, whatever the type is actually for.
         /// </summary>
-        private static string Prefix(string message)
+        private static string LogPrefix(string message)
         {
             return UILogTag.Prefix + $"[debug f{Time.frameCount}] {message}";
         }

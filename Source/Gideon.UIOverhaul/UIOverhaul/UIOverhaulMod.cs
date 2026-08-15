@@ -1,3 +1,5 @@
+using System;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones;
 using HarmonyLib;
 using UnityEngine;
@@ -28,12 +30,14 @@ namespace Gideon.UIOverhaul
         public UIOverhaulMod(ModContentPack content)
             : base(content)
         {
-            // One call covers every patch in the assembly. PatchAll resolves the calling assembly
-            // rather than a namespace, so the framework's patches, the UI element patches and the
-            // growing-zone feature's patches are all picked up here.
-            new Harmony(HarmonyId).PatchAll();
+            ApplyPatches();
 
-            GrowZonesFeature.Settings = GetSettings<GzpSettings>();
+            // Guarded like everything else reachable from here. A throw in the settings loader would escape this
+            // constructor, and RimWorld's response to that is to report the mod as failing to instantiate and
+            // apply none of it -- the same total loss the patch loop above was split up to prevent. Leaving the
+            // settings null is survivable: the only two places that read them tolerate it.
+            UIGuard.Try("Mod.LoadSettings", () => GrowZonesFeature.Settings = GetSettings<GzpSettings>(),
+                "The growing zone settings could not be read, so that feature uses its defaults.");
 
             // Nothing to configure for the loading screen here. It is described by LoadingScreen.xml
             // at this mod's root, which UILoadingScreenConfig reads off disk on first use -- early
@@ -42,19 +46,92 @@ namespace Gideon.UIOverhaul
             // load, long after the screen has started drawing.
         }
 
-        public override string SettingsCategory() => "Gideon's UI Overhaul";
-
-        public override void DoSettingsWindowContents(Rect inRect)
+        /// <summary>
+        /// Applies every patch in the assembly, one class at a time, so a failure costs its own feature.
+        ///
+        /// <b>This replaces a single <c>PatchAll()</c>, and the reason is a real incident rather than a
+        /// precaution.</b> A <c>HarmonyPatch</c> attribute that named an overloaded method without its argument
+        /// types threw <c>AmbiguousMatchException</c> out of <c>PatchAll</c>. That exception escapes the mod's
+        /// constructor, RimWorld reports the mod as failing to instantiate, and <i>none</i> of the patches are
+        /// applied -- so one wrong attribute on a slider turned the entire mod off. Nothing in the framework's
+        /// guarding could see it, because it happened before any of our code ran.
+        ///
+        /// <c>PatchAll</c> is a loop over the assembly's types calling <c>CreateClassProcessor(type).Patch()</c>,
+        /// so doing that loop here and guarding each turn of it changes nothing about what gets patched and
+        /// everything about what one failure costs. A class that cannot be applied is reported by name, and the
+        /// rest of the mod loads.
+        ///
+        /// <b>Only annotated types are offered, and skipping that filter was a mistake worth recording.</b> The
+        /// first version of this handed every type in the assembly to <c>PatchClassProcessor</c>, on the
+        /// assumption that one with no Harmony attributes would be ignored. It is not: the processor looks for
+        /// methods <i>named</i> <c>Prefix</c>, <c>Postfix</c> and so on, and throws "undefined target method" when
+        /// it finds one with nothing to patch. <c>UIDebug.Prefix(string)</c> builds this mod's log prefix and has
+        /// never had anything to do with Harmony, and it produced a reported failure on every launch.
+        /// <c>PatchAll</c> avoids this by testing each type for a Harmony attribute first, which is the test
+        /// reproduced below.
+        ///
+        /// <b>Not <c>UIGuard.TryOnce</c>.</b> This runs once per launch already, and each class is a separate
+        /// site, so there is nothing to retire.
+        /// </summary>
+        private static void ApplyPatches()
         {
-            // Only inRect is ours -- the window frame, title and close button belong to
-            // Dialog_ModSettings and would need a patch of their own to restyle.
-            GrowZonesFeature.DoSettingsContents(inRect);
+            Harmony harmony = new Harmony(HarmonyId);
+            int failed = 0;
+
+            // The assembly this type lives in, which is what PatchAll resolves too: the framework's patches, the
+            // UI element patches and the growing-zone feature's patches are all in here.
+            foreach (Type type in AccessTools.GetTypesFromAssembly(typeof(UIOverhaulMod).Assembly))
+            {
+                Type patchClass = type;
+
+                // HarmonyAttribute is the base of HarmonyPatch, HarmonyPatchAll and the rest, so this catches
+                // every form of annotation including the bare [HarmonyPatch] used with TargetMethods.
+                if (!UIGuard.Try("Framework.PatchAttributes." + patchClass.Name,
+                        () => patchClass.GetCustomAttributes(typeof(HarmonyAttribute), true).Length > 0,
+                        false, "That patch class is skipped."))
+                    continue;
+
+                if (!UIGuard.Try("Framework.ApplyPatch." + patchClass.Name,
+                        () => harmony.CreateClassProcessor(patchClass).Patch(),
+                        "That patch is not applied. The feature it belongs to is missing or drawn RimWorld's own "
+                        + "way; everything else in this mod still works."))
+                    failed++;
+            }
+
+            if (failed > 0)
+                Log.Warning(UILogTag.Prefix + failed + " patch class(es) could not be applied. Each was reported "
+                            + "above with its own name. The rest of the mod loaded normally.");
         }
 
+        public override string SettingsCategory() => "Gideon's UI Overhaul";
+
+        /// <summary>
+        /// Only inRect is ours: the window frame, title and close button belong to <c>Dialog_ModSettings</c> and
+        /// would need a patch of their own to restyle.
+        ///
+        /// Guarded because RimWorld calls this every frame the settings window is open, and a throw here would
+        /// otherwise reach <c>Dialog_ModSettings</c> mid-draw.
+        /// </summary>
+        public override void DoSettingsWindowContents(Rect inRect)
+        {
+            UIGuard.Try("Mod.SettingsWindow", () => GrowZonesFeature.DoSettingsContents(inRect),
+                "This mod's page in RimWorld's own settings window is blank. Its own options window is "
+                + "unaffected.");
+        }
+
+        /// <summary>
+        /// <b>Only our own write is guarded; <c>base.WriteSettings</c> deliberately is not.</b> That call goes
+        /// through Scribe, and Scribe tracks node depth across the whole document -- swallowing a failure part
+        /// way through and carrying on would keep writing at the wrong depth and produce a file that looks
+        /// complete and is not. Letting that reach RimWorld's own handler is the safe behavior there, which is
+        /// the same exception <c>UIGuard</c> documents for <c>ExposeData</c>.
+        /// </summary>
         public override void WriteSettings()
         {
             base.WriteSettings();
-            GrowZonesFeature.Settings?.Write();
+
+            UIGuard.Try("Mod.WriteGrowZoneSettings", () => GrowZonesFeature.Settings?.Write(),
+                "The growing zone settings were not saved. They are unchanged on disk.");
         }
     }
 }

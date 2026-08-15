@@ -16,9 +16,30 @@ namespace Gideon.UIOverhaul.Features.GrowZones
     [StaticConstructorOnStartup]
     public static class PlantNoticeStartup
     {
+        /// <summary>
+        /// <b>Guarded, and written out rather than through <c>UIGuard.Try</c>,</b> because a static constructor
+        /// cannot pass a lambda that assigns its own static readonly fields, and because the CLR marks a type
+        /// whose static constructor threw as failed for the rest of the session -- every later read then raises
+        /// <c>TypeInitializationException</c> instead of returning anything.
+        ///
+        /// This one reads XML off disk, so it can genuinely fail on a malformed file from any contributing mod.
+        /// <c>EnsureTables</c> assigns its dictionaries before it loads into them, so a throw part way through
+        /// leaves them non-null and half filled -- and its own early-return then treats that as done, which means
+        /// the failure would show up later as plants quietly missing their notices rather than as an error. The
+        /// report is what makes it findable.
+        /// </summary>
         static PlantNoticeStartup()
         {
-            PlantNotices.EnsureTables();
+            try
+            {
+                PlantNotices.EnsureTables();
+            }
+            catch (Exception ex)
+            {
+                UIGuard.Report("GrowZones.LoadPlantNotices", ex,
+                    "Some plants may not show their growing notices. Whatever loaded before the failure is still "
+                    + "used.");
+            }
         }
     }
 

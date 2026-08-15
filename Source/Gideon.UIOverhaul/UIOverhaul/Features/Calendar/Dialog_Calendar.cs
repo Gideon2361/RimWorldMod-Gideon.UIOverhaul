@@ -48,8 +48,6 @@ namespace Gideon.UIOverhaul.Features.Calendar
 
         private const float IconSize = 12f;
 
-        private Vector2 scroll;
-
         public Dialog_Calendar()
         {
             doCloseX = true;
