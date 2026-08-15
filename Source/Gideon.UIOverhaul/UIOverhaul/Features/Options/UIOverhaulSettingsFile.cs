@@ -42,6 +42,19 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool debugLogging;
 
         /// <summary>
+        /// Whether the main menu shows what the loading screen said, as a scrollable panel down the left.
+        ///
+        /// Off by default: it is a diagnostic, and a wall of profiler labels across the title screen is not
+        /// something to give anybody who did not ask for it.
+        ///
+        /// <b>This governs the panel, not the recording.</b> The log is kept whether or not this is set, so
+        /// switching it on shows the load that already happened rather than requiring a restart and a
+        /// reproduction. See <c>UIFramework.Stages.UILoadingLog</c>, which also explains why the framework could
+        /// not read this setting even if that were wanted.
+        /// </summary>
+        public bool showLoadingConsole;
+
+        /// <summary>
         /// Whether to force fullscreen at the display's native resolution on every launch.
         ///
         /// Off by default, and it has to be: this overrides a display preference the player set, and someone who
@@ -350,6 +363,11 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.debugLogging = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Reads "absent means off", like the other diagnostics.
+                        case "showLoadingConsole":
+                            settings.showLoadingConsole = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "fullscreenOnStartup":
                             settings.fullscreenOnStartup = value.EqualsIgnoreCase("true");
                             break;
@@ -524,6 +542,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteStartElement("UIOverhaulSettings");
                     writer.WriteElementString("activePalette", activePalette ?? "");
                     writer.WriteElementString("debugLogging", debugLogging ? "true" : "false");
+                    writer.WriteElementString("showLoadingConsole", showLoadingConsole ? "true" : "false");
                     writer.WriteElementString("fullscreenOnStartup",
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());

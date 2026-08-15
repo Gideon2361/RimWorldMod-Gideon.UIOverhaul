@@ -1282,6 +1282,29 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "problem; some of it only starts collecting after a restart.");
             y += 60f;
             GUI.color = palette.TextPrimary;
+
+            bool console = settings.showLoadingConsole;
+
+            if (UICheckboxControl.Draw(new Rect(0f, y, view.width, RowHeight), ref console, palette,
+                    "Show loading console on main menu",
+                    "Everything the loading screen said, with a timestamp on each line and the slow phases "
+                    + "marked, as a scrollable panel down the left of the main menu.\n\nThe log is kept whether "
+                    + "or not this is ticked, so switching it on now shows the load that already happened. There "
+                    + "is nothing to reproduce and no restart needed."))
+            {
+                settings.showLoadingConsole = console;
+                settings.Save();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 56f),
+                "A loading screen normally throws away everything it shows. This keeps it, which is how you "
+                + "find out which phase of a long load is the slow one. The panel has a button to copy the "
+                + "whole thing for pasting into a bug report.");
+            y += 60f;
+            GUI.color = palette.TextPrimary;
         }
 
         private static void SectionHeader(Rect view, ref float y, string title, UIColorPaletteDef palette)

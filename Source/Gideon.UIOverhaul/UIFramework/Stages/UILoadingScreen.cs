@@ -165,12 +165,24 @@ namespace Gideon.UIFramework.Stages
                 if (fractionOrNegative >= 0f)
                     Advance(fractionOrNegative);
                 hasProgress = true;
+
+                // A caller driving the screen itself is reporting something no profiler label covers, so it is
+                // logged as a stage when it named one and as a step otherwise.
+                if (!stageText.NullOrEmpty())
+                    UILoadingLog.Record(UILoadingLogKind.Stage, stageText);
+                else if (!stepText.NullOrEmpty())
+                    UILoadingLog.Record(UILoadingLogKind.Step, stepText);
             }
         }
 
         /// <summary>Clears everything, ready for another load.</summary>
         public static void Reset()
         {
+            // The log is deliberately not cleared with the rest. It is read at the main menu, by which time
+            // several loads may have run, and clearing here would leave only the last one reviewable. It gets a
+            // separator instead. See UILoadingLog.BeginSection.
+            UILoadingLog.BeginSection("A new load began");
+
             lock (Lock)
             {
                 stack.Clear();
@@ -208,6 +220,9 @@ namespace Gideon.UIFramework.Stages
                 step = string.Empty;
                 hasProgress = true;
                 fraction = 0f;
+
+                UILoadingLog.Record(UILoadingLogKind.Stage,
+                    stepCount > 0 ? "Generating the map (" + stepCount + " steps)" : "Generating the map");
             }
         }
 
@@ -250,6 +265,8 @@ namespace Gideon.UIFramework.Stages
                         Advance(Mathf.Clamp01(genStepsSeen / (float) genStepsTotal));
                     }
 
+                    UILoadingLog.Record(UILoadingLogKind.Step, step);
+
                     return;
                 }
 
@@ -265,10 +282,17 @@ namespace Gideon.UIFramework.Stages
                     defsTotal = 0;
                     defsBase = Milestones[index].Fraction;
                     defsCeiling = index + 1 < Milestones.Length ? Milestones[index + 1].Fraction : 1f;
+
+                    UILoadingLog.Record(UILoadingLogKind.Stage, stage);
                 }
                 else
                 {
                     step = label;
+
+                    // The unrecognized labels are the interesting half of the log: this is where the mod names,
+                    // the node counts and anything a future RimWorld adds come through. The bar cannot use them
+                    // and a reader can.
+                    UILoadingLog.Record(UILoadingLogKind.Step, label);
                 }
             }
         }
@@ -309,6 +333,11 @@ namespace Gideon.UIFramework.Stages
 
                 if (!defName.NullOrEmpty())
                     step = defName;
+
+                // Deliberately not logged here. This runs from ModContentPack.AddDef, which knows the definition
+                // and not the file it was read from, and the file is most of what makes a per-definition line
+                // worth having. The logging is done where both are in hand, by the def source patch, which sits
+                // on the method that builds a def from its XML node. This one only drives the bar.
 
                 if (defsTotal <= 0 || defsCeiling <= defsBase)
                     return;
