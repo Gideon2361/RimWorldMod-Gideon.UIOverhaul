@@ -52,9 +52,14 @@ namespace Gideon.UIOverhaul.Features.Tabs
 
         /// <summary>
         /// The gap vanilla leaves between the bottom of a tab and the bottom of the screen, which is the main
-        /// button bar. Taken from <c>MainTabWindow.SetInitialSizeAndPosition</c>, where it is written as 35.
+        /// button bar.
+        ///
+        /// <c>MainTabWindow.SetInitialSizeAndPosition</c> writes this as a literal 35, but the same number is
+        /// declared as <c>MainButtonDef.ButtonHeight</c>, so it is taken from there rather than copied. Every
+        /// anchored edge in this file measures from it, and a bar that changed height while this said 35 would
+        /// put every resized tab either over the buttons or floating above them.
         /// </summary>
-        private const float BarHeight = 35f;
+        private const float BarHeight = MainButtonDef.ButtonHeight;
 
         /// <summary>
         /// The tab being dragged, or null. One at a time is enough: <c>MainTabsRoot</c> keeps a single tab open,
@@ -115,12 +120,17 @@ namespace Gideon.UIOverhaul.Features.Tabs
 
             float bottom = UI.screenHeight - BarHeight;
 
-            float width = Mathf.Clamp(stored.x, MinWidthFor(tab), UI.screenWidth);
-            float height = Mathf.Clamp(stored.y, MinHeightFor(tab), bottom);
+            // Rounded here as well as in Resized, and for the same reason: a size that arrives fractional from a
+            // hand-edited file would otherwise put the window on a half pixel, and Rounded() truncates the
+            // position and the size separately, which is what lets an anchored edge slip.
+            float width = Mathf.Round(Mathf.Clamp(stored.x, MinWidthFor(tab), UI.screenWidth));
+            float height = Mathf.Round(Mathf.Clamp(stored.y, MinHeightFor(tab), bottom));
 
             float x = tab.Anchor == MainTabWindowAnchor.Left ? 0f : UI.screenWidth - width;
 
-            tab.windowRect = new Rect(x, bottom - height, width, height).Rounded();
+            // No Rounded() call: every value above is already whole, and applying it would only reintroduce the
+            // truncation this is avoiding.
+            tab.windowRect = new Rect(x, bottom - height, width, height);
         }
 
         /// <summary>
@@ -190,30 +200,54 @@ namespace Gideon.UIOverhaul.Features.Tabs
                 return windowRect;
             }
 
-            return Resized(tab, windowRect, UI.MousePositionOnUIInverted + grabOffset, left);
+            // The current rect is deliberately not passed. Everything the new one needs comes from the screen and
+            // the cursor; feeding it its own last answer is what made it drift. See Resized.
+            return Resized(tab, UI.MousePositionOnUIInverted + grabOffset, left);
         }
 
         /// <summary>
         /// The new rect for a corner dragged to <paramref name="corner"/>, keeping the two anchored edges where
         /// they are.
+        ///
+        /// <b>The anchored edges are measured from the screen, never from the rect being resized.</b> That
+        /// distinction is the whole of a bug worth recording, because the obvious version reads better and
+        /// silently destroys itself.
+        ///
+        /// It used to take the fixed bottom as <c>rect.yMax</c> and return
+        /// <c>new Rect(x, bottom - height, (int) width, (int) height)</c>. Truncating the height while deriving
+        /// the top from the untruncated one moves the bottom edge up by the fractional part, and
+        /// <c>Window.WindowOnGUI</c> then applies <c>Rounded()</c> -- which is <c>(int)</c>, a truncation rather
+        /// than a rounding -- to the position and the size independently, biasing it up again. The next frame
+        /// read that lowered <c>yMax</c> back as the anchor and did it once more. The result was a tab that
+        /// climbed the screen about a pixel a frame while its top followed the cursor, so it shrank as it rose:
+        /// a resize that made the window smaller the longer it was dragged.
+        ///
+        /// Pinning to <c>UI.screenHeight - BarHeight</c> and to the screen edges instead makes every frame
+        /// recompute from a fixed point rather than from its own last answer, so nothing can accumulate. It also
+        /// makes the drag self-correcting: if another mod nudges the rect between frames, the next frame puts it
+        /// back where it belongs instead of building on the displacement.
+        ///
+        /// Every value here is whole, and deliberately. The anchors are integers, the size is rounded once, and
+        /// the position is derived from the rounded size, so <c>Rounded()</c> has nothing left to change and the
+        /// rect is a fixed point when the mouse stops moving.
         /// </summary>
-        private static Rect Resized(MainTabWindow tab, Rect rect, Vector2 corner, bool left)
+        private static Rect Resized(MainTabWindow tab, Vector2 corner, bool left)
         {
-            float bottom = rect.yMax;
+            // The same anchor Apply uses, and the same one vanilla positions tabs against. The two disagreeing
+            // was what made this wrong.
+            float bottom = UI.screenHeight - BarHeight;
 
             // The ceiling is the top of the screen, which is what bottom measures down from. A tab cannot be
             // taller than the space above the button bar because that space is all there is.
-            float height = Mathf.Clamp(bottom - corner.y, MinHeightFor(tab), bottom);
+            float height = Mathf.Round(Mathf.Clamp(bottom - corner.y, MinHeightFor(tab), bottom));
 
-            float width = left
-                ? Mathf.Clamp(corner.x - rect.x, MinWidthFor(tab), UI.screenWidth - rect.x)
-                : Mathf.Clamp(rect.xMax - corner.x, MinWidthFor(tab), rect.xMax);
+            float width = Mathf.Round(left
+                ? Mathf.Clamp(corner.x, MinWidthFor(tab), UI.screenWidth)
+                : Mathf.Clamp(UI.screenWidth - corner.x, MinWidthFor(tab), UI.screenWidth));
 
-            float x = left ? rect.x : rect.xMax - width;
+            float x = left ? 0f : UI.screenWidth - width;
 
-            // Integral, as Window does to its own rect. A fractional window rect puts every control inside it on
-            // a half pixel, which is what makes text look soft for no apparent reason.
-            return new Rect(x, bottom - height, (int) width, (int) height);
+            return new Rect(x, bottom - height, width, height);
         }
 
         /// <summary>
