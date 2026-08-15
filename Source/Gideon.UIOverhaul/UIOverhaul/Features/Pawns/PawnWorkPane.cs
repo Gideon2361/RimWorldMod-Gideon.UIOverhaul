@@ -278,7 +278,19 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Text.Font = GameFont.Tiny;
             GUI.color = disabled ? palette.Warning : skillColor;
 
-            Widgets.Label(new Rect(textX, card.y + card.height * 0.55f, textWidth, card.height * 0.42f),
+            // Height taken from the top of the line to the bottom of the card, rather than as a fraction of it.
+            //
+            // The fraction was 0.42 of a 38 pixel card, or about 16 -- which fits Tiny and clips Small, and this
+            // draw gets Small whenever TinyFontSupported is false: a language with no tiny font, the disable
+            // tiny text preference, the Steam Deck, or a frame drawn during a long event. Measuring down to the
+            // card's edge gives the line whatever the card has left, and the floor covers a card ever being
+            // shorter than one line. Overflowing a couple of pixels past the card is invisible; clipped
+            // ascenders are not.
+            float subtitleTop = card.y + card.height * 0.55f;
+
+            Widgets.Label(
+                new Rect(textX, subtitleTop, textWidth,
+                    Mathf.Max(UIFonts.LineHeightOf(GameFont.Tiny), card.yMax - subtitleTop)),
                 disabled ? "incapable" : skill);
 
             GUI.color = previousColor;

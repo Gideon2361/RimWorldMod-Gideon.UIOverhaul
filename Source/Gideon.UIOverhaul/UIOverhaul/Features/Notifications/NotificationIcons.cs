@@ -44,6 +44,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
         internal static readonly Texture2D Toxic;
         internal static readonly Texture2D SolarFlare;
         internal static readonly Texture2D Skull;
+        internal static readonly Texture2D CalendarOut;
 
         /// <summary>
         /// <b>Guarded, and written out rather than through <c>UIGuard.Try</c>.</b> These are <c>static readonly</c>,
@@ -73,6 +74,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 Toxic = BuildToxic();
                 SolarFlare = BuildSolarFlare();
                 Skull = BuildSkull();
+                CalendarOut = BuildCalendarOut();
             }
             catch (Exception ex)
             {
@@ -111,6 +113,27 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 .CutRect(13.5f, 22.5f, 1.3f, 4.5f)
                 .CutRect(17.2f, 22.5f, 1.3f, 4.5f)
                 .ToTexture("Gideon.Icon.Skull");
+        }
+
+        /// <summary>
+        /// A calendar with an arrow leaving it: the mark for "this opens into something larger".
+        ///
+        /// <b>The calendar sits low and left so the arrow has somewhere to go.</b> A centered calendar with an
+        /// arrow crossing it reads as a scribble at 16 pixels; moving the body down and giving the arrow its own
+        /// clear diagonal keeps two recognizable shapes instead of one muddle. The page interior is cut rather
+        /// than drawn, which leaves the header band and the frame as the only strokes, and the two binding
+        /// notches on top are what stop it reading as a plain box.
+        /// </summary>
+        private static Texture2D BuildCalendarOut()
+        {
+            return new UIIconCanvas(Size)
+                .Rect(3f, 9f, 20f, 19f)
+                .CutRect(5f, 14f, 16f, 12f)
+                .Rect(7f, 6f, 3f, 5f)
+                .Rect(16f, 6f, 3f, 5f)
+                .Line(19f, 13f, 27.5f, 4.5f, 2.6f)
+                .Triangle(30f, 2f, 23f, 3.5f, 28.5f, 10f)
+                .ToTexture("Gideon.Icon.CalendarOut");
         }
 
         /// <summary>A body with the flap cut out of it, rather than a body with a V drawn on top.</summary>

@@ -36,7 +36,15 @@ namespace Gideon.UIOverhaul.Features.Notifications
         private const float CardGap = 2f;
 
         /// <summary>Height of the strip that says something is snoozed.</summary>
-        private const float SnoozeStripHeight = 16f;
+        /// <summary>
+        /// The snoozed-count strip, tall enough for the line it holds.
+        ///
+        /// Was a flat 16, which fits <c>GameFont.Tiny</c> and clips whatever is substituted for it when
+        /// <c>Text.TinyFontSupported</c> is false -- a language with no tiny font, the disable-tiny-text
+        /// preference, the Steam Deck, or any frame drawn during a long event. The floor keeps the strip from
+        /// shrinking below its original size where Tiny is available. See <see cref="UIFonts"/>.
+        /// </summary>
+        private static float SnoozeStripHeight => Mathf.Max(16f, UIFonts.LineHeightOf(GameFont.Tiny));
 
         private static readonly UINotificationCard Card = new UINotificationCard { IconSize = 0f };
 

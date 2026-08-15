@@ -927,11 +927,19 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GroupLabel(view, ref y, palette, "This mod's widgets");
 
-            GUI.color = palette.TextSecondary;
-            Widgets.Label(new Rect(indent, y, view.width - indent, 36f),
-                "None yet. Widgets this mod adds to the corner get their switches here.");
-            y += 40f;
-            GUI.color = palette.TextPrimary;
+            WidgetToggle(view, ref y, palette, settings, indent, "Calendar",
+                settings.showCalendarWidget, value => settings.showCalendarWidget = value,
+                "A bar of the whole year showing the growing season for this tile, where today falls in it, and "
+                + "the current quadrum.\n\nThe icon on it opens a fifteen day calendar: what happened either "
+                + "side of today, and what is already scheduled.");
+
+            WidgetToggle(view, ref y, palette, settings, indent * 2f, "Show explicit story events",
+                settings.showExplicitStoryEvents, value => settings.showExplicitStoryEvents = value,
+                "The storyteller settles when an incident happens well before it settles which incident it is, "
+                + "so the calendar can say a major threat is coming without being able to say what it will "
+                + "be.\n\nSwitching this on adds whatever more is actually known: the exact incident where the "
+                + "storyteller only ever fires one, and the category otherwise. Some players will consider that "
+                + "a spoiler, which is why it is off.");
 
             GroupLabel(view, ref y, palette, "RimWorld's corner");
 

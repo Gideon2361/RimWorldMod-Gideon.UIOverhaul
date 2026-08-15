@@ -75,6 +75,28 @@ namespace Gideon.UIOverhaul.Features.Options
         // player has to read past to reach the ones that matter.
 
         /// <summary>
+        /// The year bar in the corner: the growing season, today's place in the year, and the door to the
+        /// calendar window.
+        ///
+        /// The first widget in the corner that is this mod's own rather than a restyling of RimWorld's.
+        /// </summary>
+        public bool showCalendarWidget = true;
+
+        /// <summary>
+        /// Whether the calendar names what the storyteller has scheduled, rather than only its kind.
+        ///
+        /// <b>Off by default because the honest default is vague.</b> The storyteller settles an incident's
+        /// timing well before it fires and settles which incident only at the last moment, so the calendar can
+        /// say "major threat on day 43" as a fact and cannot say "raid on day 43" at all. Switching this on adds
+        /// the most specific true thing available: the exact incident where a component fires only one, and the
+        /// category and component where it picks from a pool.
+        ///
+        /// Some players will read a spoiler into knowing a threat is coming. That is the point of the switch,
+        /// and it is why the default is the coarse view rather than this one.
+        /// </summary>
+        public bool showExplicitStoryEvents;
+
+        /// <summary>
         /// The real time clock: vanilla's HH:mm line, drawn by <c>DoRealtimeClock</c>.
         ///
         /// <b>This switch governs, in both directions.</b> Ticked shows the clock even when vanilla's own
@@ -329,6 +351,14 @@ namespace Gideon.UIOverhaul.Features.Options
                         // They stay listed permanently. The file is only rewritten when something is saved, so a
                         // player who never changes a setting keeps the old element indefinitely, and a list that
                         // was pruned after a release or two would start warning about it again.
+                        case "showCalendarWidget":
+                            settings.showCalendarWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showExplicitStoryEvents":
+                            settings.showExplicitStoryEvents = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "showBarButton":
                         case "showDesktopWidgets":
                         case "showSeasonWidget":
@@ -386,6 +416,9 @@ namespace Gideon.UIOverhaul.Features.Options
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
 
+                    writer.WriteElementString("showCalendarWidget", showCalendarWidget ? "true" : "false");
+                    writer.WriteElementString("showExplicitStoryEvents",
+                        showExplicitStoryEvents ? "true" : "false");
                     writer.WriteElementString("showTimeWidget", showTimeWidget ? "true" : "false");
                     writer.WriteElementString("showTemperatureWidget", showTemperatureWidget ? "true" : "false");
                     writer.WriteElementString("showSpeedControlsWidget",

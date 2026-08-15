@@ -4,6 +4,7 @@ using System.Text;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Calendar;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Options;
 using HarmonyLib;
@@ -233,6 +234,7 @@ namespace Gideon.UIOverhaul.Features.Panel
             bool showWeather = (settings == null || settings.showWeatherWidget) && !map.IsPocketMap;
             bool showTemperature = settings == null || settings.showTemperatureWidget;
             bool showVitals = showWeather || showTemperature;
+            bool showCalendar = settings == null || settings.showCalendarWidget;
 
             // The speed controls have to run even when hidden, because DoTimeControlsGUI handles the pause key
             // and the three speed shortcuts after it finishes drawing. This is the same mistake that cost the
@@ -248,13 +250,16 @@ namespace Gideon.UIOverhaul.Features.Panel
             float dateHeight = showDate ? DateHeight : 0f;
             float speedHeight = showSpeed ? TimeControls.TimeButSize.y : 0f;
             float vitalsHeight = showVitals ? VitalsHeight : 0f;
+            float calendarHeight = showCalendar ? CalendarWidget.Height : 0f;
 
-            int rows = (showDate ? 1 : 0) + (showSpeed ? 1 : 0) + (showVitals ? 1 : 0);
+            int rows = (showDate ? 1 : 0) + (showSpeed ? 1 : 0) + (showVitals ? 1 : 0)
+                       + (showCalendar ? 1 : 0);
 
             if (rows == 0)
                 return y;
 
-            float height = Pad * 2f + dateHeight + speedHeight + vitalsHeight + RowGap * (rows - 1);
+            float height = Pad * 2f + dateHeight + speedHeight + vitalsHeight + calendarHeight
+                           + RowGap * (rows - 1);
             Rect block = new Rect(x, y - height, Width, height);
 
             PaintBlock(block, palette);
@@ -293,6 +298,18 @@ namespace Gideon.UIOverhaul.Features.Panel
                 cursor -= vitalsHeight;
                 DrawVitals(new Rect(block.x + Pad, cursor, block.width - Pad * 2f, vitalsHeight), map, palette,
                     showWeather, showTemperature);
+
+                cursor -= RowGap;
+            }
+
+            if (showCalendar)
+            {
+                cursor -= calendarHeight;
+
+                UIGuard.Try("Panel.Calendar",
+                    () => CalendarWidget.Draw(
+                        new Rect(block.x + Pad, cursor, block.width - Pad * 2f, calendarHeight), map, palette),
+                    "The calendar bar is missing from the corner.");
             }
 
             return block.y - BlockGap;
