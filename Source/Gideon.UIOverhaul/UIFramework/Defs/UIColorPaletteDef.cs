@@ -58,6 +58,8 @@ namespace Gideon.UIFramework.Defs
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
+        public string controlBackgroundFaded;
+        public string hudBackground;
 
         /// <summary>
         /// Colors outside the fixed roles, for mods that need their own without a framework change.
@@ -239,6 +241,18 @@ namespace Gideon.UIFramework.Defs
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
 
+        /// <summary>
+        /// The body of a control holding no value. See <see cref="UIColorRole.ControlBackgroundFaded"/> for why
+        /// this is not one of the surface roles.
+        /// </summary>
+        public Color ControlBackgroundFaded => Get(UIColorRole.ControlBackgroundFaded);
+
+        /// <summary>
+        /// Fill for chrome drawn over the map. Carries its own alpha; see
+        /// <see cref="UIColorRole.HudBackground"/>.
+        /// </summary>
+        public Color HudBackground => Get(UIColorRole.HudBackground);
+
         // ---------------------------------------------------------------------------------------
         // Resolution
         // ---------------------------------------------------------------------------------------
@@ -387,6 +401,8 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
+                UIColorRole.ControlBackgroundFaded => controlBackgroundFaded,
+                UIColorRole.HudBackground => hudBackground,
                 _ => null
             };
         }
@@ -431,6 +447,18 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,
+
+                // Deliberately not derived from SurfaceRaised. See the role's own notes: a control body and a
+                // card surface want opposite things, and this ramp's raised surface is only twenty levels off
+                // the panel -- close enough that a switch drawn in it has no visible extent.
+                UIColorRole.ControlBackgroundFaded => 0x434A53FF,
+
+                // WindowBackground at 0xCC, which is 80 percent. The darkest of the chrome fills rather than the
+                // panel one: this is drawn over terrain rather than over another surface, so it has to carry its
+                // own contrast for the text on it instead of borrowing a window's. Only the alpha marks it out as
+                // over-the-map chrome. See the role's notes on why it is not lower.
+                UIColorRole.HudBackground => 0x15191DCC,
+
                 _ => 0xFF00FFFF
             };
 

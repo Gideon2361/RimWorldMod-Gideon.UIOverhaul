@@ -7,6 +7,23 @@ using Verse;
 
 namespace Gideon.UIOverhaul.Features.Panel
 {
+    // ---------------------------------------------------------------------------------------------------
+    // These are the fallback path, not the live one.
+    //
+    // GlobalControlsPanel replaced GlobalControlsOnGUI and calls TimeControls.DoTimeControlsGUI and
+    // DateReadout.DateOnGUI directly, so the two GlobalControlsUtility methods those patches guard are no
+    // longer reached while the panel is drawing -- their prefixes never fire. They are kept, and kept
+    // correct, for the case where the panel stands down: Patch_GlobalControls_GlobalControlsOnGUI retires
+    // its site on a first failure and hands the corner back to vanilla, and on that path these are what
+    // keeps the speed controls, the date and the clock answering to their settings.
+    //
+    // DoRealtimeClock is the exception and does fire on both paths, because the panel draws the clock by
+    // calling it. Its prefix reads the same setting the panel already checked, so the two agree.
+    //
+    // A patch removed from here does not simplify anything; it takes a setting away from anyone whose
+    // panel has failed.
+    // ---------------------------------------------------------------------------------------------------
+
     /// <summary>
     /// Hides the speed controls in the corner.
     ///

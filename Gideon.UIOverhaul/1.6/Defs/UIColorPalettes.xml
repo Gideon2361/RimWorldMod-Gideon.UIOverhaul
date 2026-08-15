@@ -49,6 +49,20 @@
 
     <accentMuted>#274157</accentMuted>
 
+    <!-- The body of a control holding no value: an off toggle, an unselected radio button. Set well clear
+         of panelBackground above it, or the control has no visible extent; note that surfaceRaised is
+         darker than the panel in this theme, which is right for a card and wrong for a control. Keep it
+         well clear of textSecondary too, since that is the toggle knob sitting on top of it. -->
+    <controlBackgroundFaded>#434A53</controlBackgroundFaded>
+
+    <!-- Chrome drawn over the map: the corner readouts, docked messages. windowBackground with an alpha,
+         because this sits on ground the player is still playing on. Darker than panelBackground on
+         purpose: nothing sits behind it but terrain, so it carries the contrast for its own text rather
+         than borrowing a window's. The last two digits are the whole point of the role; CC is 80
+         percent. Going much lower fails at midday, when the terrain underneath is at its brightest.
+         Keep border opaque so the edge holds the panel together. -->
+    <hudBackground>#15191DCC</hudBackground>
+
     <hoverOverlay>#FFFFFF0C</hoverOverlay>
     <pressedOverlay>#FFFFFF1F</pressedOverlay>
     <selectionOverlay>#73BFFF24</selectionOverlay>
@@ -75,6 +89,13 @@
 
     <accent>#2F7FD0</accent>
     <accentMuted>#BBD4EE</accentMuted>
+
+    <!-- Darker than the panel here rather than lighter. The rule is distance from the surface behind it,
+         not a direction. -->
+    <controlBackgroundFaded>#C9CED6</controlBackgroundFaded>
+
+    <!-- Same 80 percent, over this theme's own window color. -->
+    <hudBackground>#E8EAEDCC</hudBackground>
 
     <hoverOverlay>#0000000C</hoverOverlay>
     <pressedOverlay>#0000001F</pressedOverlay>

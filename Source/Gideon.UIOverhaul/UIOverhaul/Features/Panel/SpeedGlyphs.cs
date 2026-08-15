@@ -1,6 +1,5 @@
 using System;
 using Gideon.UIFramework.Helpers;
-using Gideon.UIOverhaul.Features.Options;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -22,9 +21,12 @@ namespace Gideon.UIOverhaul.Features.Panel
     /// <c>TimeAssignmentColors</c> uses to recolor the schedule by rewriting the defs rather than patching each
     /// widget that draws them.
     ///
-    /// <b>Vanilla's originals are kept.</b> Not for a revert this mod offers -- there is no such setting yet -- but
-    /// because a swap that cannot be undone is a swap that cannot be tested against, and because holding them means
-    /// a later per-surface setting is a loop rather than a restart.
+    /// <b>Vanilla's originals are kept, although nothing offers to switch back to them.</b> There was a setting
+    /// once and it was removed: the choice it presented was between these glyphs and the ones they were drawn to
+    /// replace. They are kept anyway, because a swap that cannot be undone is a swap that cannot be tested
+    /// against, because the failure path below needs them to put a half-applied row back, and because a later
+    /// per-surface setting -- vanilla's icons in one place and ours in another -- would be a loop over this array
+    /// rather than a restart.
     /// </summary>
     [StaticConstructorOnStartup]
     internal static class SpeedGlyphs
@@ -52,49 +54,22 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// so a partial application is the case worth defending against. If it fails halfway, some speed buttons are
         /// ours and some are vanilla's, which looks broken rather than unstyled; restoring what was swapped puts the
         /// whole row back to a consistent state.
-        /// </summary>
-        /// <summary>
-        /// Switches between this mod's glyphs and vanilla's, for the setting.
         ///
-        /// Safe to call with the value it already has: <see cref="Apply"/> re-clones from whatever is in the array,
-        /// so calling it twice would capture this mod's own glyphs as the originals and make <see cref="Restore"/>
-        /// a no-op. The guard against that is here rather than in Apply, because the static constructor genuinely
-        /// does want the first capture.
+        /// <b>Applied unconditionally.</b> There was a setting in front of this, and it was removed rather than
+        /// defaulted on: the choice it offered was between these glyphs and the ones they were drawn to replace,
+        /// which is not a decision worth a line in a settings window. <see cref="Restore"/> is kept even so, for
+        /// the failure path below and because a swap that cannot be undone cannot be tested against.
         /// </summary>
-        internal static void Set(bool ours)
-        {
-            if (ours == applied)
-                return;
-
-            if (ours)
-                Apply();
-            else
-                Restore();
-
-            applied = ours;
-        }
-
-        private static bool applied;
-
         static SpeedGlyphs()
         {
             try
             {
-                // Read here rather than applying unconditionally and correcting later, or someone who turned
-                // these off would watch them appear at launch and change back the first time they opened the
-                // settings window.
-                if (!UIOverhaulSettingsFile.Current.showSpeedGlyphs)
-                    return;
-
                 Apply();
-                applied = true;
             }
             catch (Exception ex)
             {
                 UIGuard.Report("Panel.SpeedGlyphs", ex,
                     "The speed controls keep their vanilla icons.");
-
-                applied = false;
 
                 try
                 {

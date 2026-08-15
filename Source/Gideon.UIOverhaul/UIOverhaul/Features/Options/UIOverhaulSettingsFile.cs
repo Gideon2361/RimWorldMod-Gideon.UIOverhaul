@@ -69,13 +69,10 @@ namespace Gideon.UIOverhaul.Features.Options
         // is one checkbox away from gone for anyone who wants their corner back.
         // ---------------------------------------------------------------------------------------
 
-        /// <summary>
-        /// This mod's own speed control glyphs, rather than vanilla's.
-        ///
-        /// The one desktop widget of this mod's own that exists so far. The rest of this mod's corner arrives with
-        /// the rebuilt panel, and each piece of it gets a switch beside this one.
-        /// </summary>
-        public bool showSpeedGlyphs = true;
+        // showSpeedGlyphs was here, and is retired rather than defaulted: the drawn speed glyphs are simply how
+        // this mod looks now. It was never a real choice -- the two options were this mod's icons and the ones
+        // they were drawn to replace -- and a switch that nobody has a reason to move is a line of settings a
+        // player has to read past to reach the ones that matter.
 
         /// <summary>
         /// The real time clock: vanilla's HH:mm line, drawn by <c>DoRealtimeClock</c>.
@@ -280,10 +277,6 @@ namespace Gideon.UIOverhaul.Features.Options
                         // each widget's own choice intact -- which is the right answer even for someone who had
                         // the master off, because the control they used to turn everything off no longer exists
                         // to turn it back on.
-                        case "showSpeedGlyphs":
-                            settings.showSpeedGlyphs = !value.EqualsIgnoreCase("false");
-                            break;
-
                         case "showConditionsWidget":
                             settings.showConditionsWidget = !value.EqualsIgnoreCase("false");
                             break;
@@ -339,6 +332,7 @@ namespace Gideon.UIOverhaul.Features.Options
                         case "showBarButton":
                         case "showDesktopWidgets":
                         case "showSeasonWidget":
+                        case "showSpeedGlyphs":
                             break;
 
                         default:
@@ -392,7 +386,6 @@ namespace Gideon.UIOverhaul.Features.Options
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
 
-                    writer.WriteElementString("showSpeedGlyphs", showSpeedGlyphs ? "true" : "false");
                     writer.WriteElementString("showTimeWidget", showTimeWidget ? "true" : "false");
                     writer.WriteElementString("showTemperatureWidget", showTemperatureWidget ? "true" : "false");
                     writer.WriteElementString("showSpeedControlsWidget",

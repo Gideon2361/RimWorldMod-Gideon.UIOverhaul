@@ -54,13 +54,14 @@ namespace Gideon.UIFramework.Patches.UIElements
 
         private const float SlotWidth = UICheckboxControl.BoxWidth;
 
+
         /// <summary>
         /// Space between the box and its label.
         ///
         /// The same 10 vanilla adds in its <c>placeCheckboxNearText</c> measurement, so a rect sized by that
         /// path fits the text exactly rather than by luck.
         /// </summary>
-        private const float Gap = 10f;
+        internal const float Gap = 10f;
 
         public static bool Prefix(Rect rect, string label, ref bool checkOn, bool disabled,
             Texture2D texChecked, Texture2D texUnchecked, bool placeCheckboxNearText, bool paintable)
@@ -72,15 +73,34 @@ namespace Gideon.UIFramework.Patches.UIElements
             {
                 Text.Anchor = TextAnchor.MiddleLeft;
 
-                // <b>Never more than half the row.</b> Vanilla reserved 24 for a square box; a switch wants 40,
-                // and on a narrow row -- the dev-mode checkboxes are around 80 wide -- taking 50 of it left the
-                // label two words' worth of space. PaintCheckbox fits the largest correctly proportioned switch
-                // into whatever slot it is given, so a narrow row gets a smaller switch rather than a squashed
-                // one or a crushed label.
-                float slot = Mathf.Min(SlotWidth, rect.width * 0.5f);
+                // <b>The switch is one size everywhere and does not negotiate.</b>
+                //
+                // Two earlier attempts traded its width away to win room for the label -- first a flat cap at
+                // half the row, then measuring the text and shrinking to fit. Both produced switches of
+                // different sizes on different rows, which is worse than a shortened label: a control that
+                // changes size between one row and the next reads as a rendering fault, while a label ending
+                // in an ellipsis reads as a label too long for its row, which is what it is.
+                //
+                // Clamped to the row only so nothing is ever drawn outside the rect the caller owns. A row that
+                // cannot hold 40px was not going to hold a checkbox and a label either way.
+                float slot = Mathf.Min(SlotWidth, rect.width);
 
                 if (placeCheckboxNearText)
-                    rect.width = Mathf.Min(rect.width, Text.CalcSize(label).x + slot + Gap);
+                {
+                    // <b>A gap's worth of slack past the text, and the reason is arithmetic rather than taste.</b>
+                    //
+                    // Vanilla shrinks to text + box + gap here and then lays its label out subtracting only the
+                    // box, so the gap survives as the label's breathing room. Subtracting the gap as well --
+                    // which is what this did, because the switch sits where the gap used to be -- handed the
+                    // label a rect exactly as wide as its own text, and LabelEllipses trims at that boundary.
+                    // That is the whole of why "Show messages" became "Show mess..." on the History tab: the row
+                    // was 200 wide and had room for all of it.
+                    //
+                    // Measured with wrapping off because that is how it is about to be drawn; CalcSize answers
+                    // differently when wrapping is on.
+                    Text.WordWrap = false;
+                    rect.width = Mathf.Min(rect.width, Text.CalcSize(label).x + slot + Gap * 2f);
+                }
 
                 // <b>Wrapping only where two lines actually fit.</b> Some of vanilla's rects are deliberately
                 // tall enough for a wrapped label, so this does not forbid wrapping outright -- it forbids it
@@ -89,12 +109,32 @@ namespace Gideon.UIFramework.Patches.UIElements
                 // in a one-line rect loses half of itself at each end.
                 Text.WordWrap = rect.height >= Text.LineHeight * 1.8f;
 
-                Rect labelRect = rect;
-                labelRect.xMin += slot + Gap;
+                // The gap closes up when the label is short of room. It is the only thing here that can be given:
+                // the row is the caller's and the switch is a fixed size, so see UICheckboxControl.FitLabel for
+                // what that leaves. Only for single-line rows -- a row tall enough to wrap has a second line to
+                // use instead, which is a better answer than a tighter gap.
+                float gap = Text.WordWrap
+                    ? Gap
+                    : UICheckboxControl.FitLabel(label, Mathf.Max(0f, rect.width - slot), Gap);
 
-                // Ellipsized rather than clipped when it cannot wrap, so a label too long for its row ends in a
-                // mark that says so instead of stopping mid-letter.
-                if (Text.WordWrap)
+                Rect labelRect = rect;
+                labelRect.xMin += slot + gap;
+
+                // <b>Ellipsized only when the text genuinely does not fit, and that condition is the fix.</b>
+                //
+                // Widgets.LabelEllipses defers to Text.ClampTextWithEllipsis, which keeps the text only while it
+                // fits in width *minus 13* -- room reserved for the "..." it may be about to add. So it shortens
+                // any label that comes within 13px of its rect, and once it starts it strips characters until the
+                // text plus an ellipsis fits, which costs several more. That is the whole of why "Show messages"
+                // arrived as "Show mess...": the row was 200 wide, the label had been given its own width plus 10,
+                // and 10 is less than 13.
+                //
+                // Two earlier attempts widened that slack, first to 0 and then to 10, both chasing a threshold
+                // neither of them knew the value of. Asking whether the text fits removes the guess: vanilla
+                // reaches for a plain Label here and never reserves anything, so a label with room draws in full
+                // and only one that is really too long pays for the ellipsis. It also repairs every fixed-width
+                // caller, not just the ones that size themselves to their text.
+                if (Text.WordWrap || Text.CalcSize(label).x <= labelRect.width)
                     Widgets.Label(labelRect, label);
                 else
                     Widgets.LabelEllipses(labelRect, label);
@@ -151,11 +191,9 @@ namespace Gideon.UIFramework.Patches.UIElements
     /// nothing overlaps a neighbour. It is visibly smaller than the switch on a labelled row, which is the
     /// price of not overflowing a slot whose surroundings we cannot see.
     ///
-    /// <b>What this deliberately does not cover:</b> <c>Widgets.CheckboxMulti</c>, the tri-state control behind
-    /// thing-filter trees. It draws through <c>ButtonImageDraggable</c>, which draws and takes the click in one
-    /// call, and its paint-dragging runs through private statics on <c>Widgets</c>. Replacing it means owning
-    /// that logic -- the same shape of mistake as the pause key, where skipping a call to change a picture took
-    /// the keyboard with it. Those trees keep vanilla's boxes until it is done properly.
+    /// <b>What this does not cover:</b> <c>Widgets.CheckboxMulti</c>, the tri-state control. It draws and takes
+    /// its click in the same call, so it could not be restyled by replacing a draw method and needed a patch of
+    /// its own -- see <see cref="Patch_Widgets_CheckboxMulti"/> below.
     /// </summary>
     [HarmonyPatch(typeof(Widgets), nameof(Widgets.CheckboxDraw))]
     public static class Patch_Widgets_CheckboxDraw

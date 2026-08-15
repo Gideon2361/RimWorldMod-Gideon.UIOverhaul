@@ -92,6 +92,46 @@ namespace Gideon.UIFramework.Components.Colors
         PressedOverlay,
 
         /// <summary>Translucent wash marking the selected row or card.</summary>
-        SelectionOverlay
+        SelectionOverlay,
+
+        /// <summary>
+        /// The body of an interactive control holding no value: a toggle switch that is off, an unselected
+        /// radio button, the unfilled part of a slider or progress bar.
+        ///
+        /// <b>Not a surface, which is why it is not one of the <see cref="SurfaceRaised"/> pair.</b> A surface is
+        /// chrome the eye is meant to pass over -- a card, a header strip, a row -- so it sits close to the panel
+        /// on purpose. A control has to be found before it can be read, and the two jobs pull in opposite
+        /// directions. Using one color for both is what made an off switch invisible: this mod's own dark theme
+        /// sets <see cref="SurfaceRaised"/> <i>darker</i> than <see cref="PanelBackground"/>, which is right for a
+        /// card and leaves a switch with no visible extent at all.
+        ///
+        /// <b>Set it clearly apart from the panel behind it.</b> That is the whole job. It also has to stay well
+        /// clear of <see cref="TextSecondary"/>, which is the knob sitting on top of it -- the knob's position is
+        /// the entire signal a switch carries, so if the two converge the control stops saying anything. Roughly
+        /// midway between the panel and the dimmest text is a safe place to land in either direction: a dark theme
+        /// lifts, a light theme drops.
+        /// </summary>
+        ControlBackgroundFaded,
+
+        /// <summary>
+        /// Fill for chrome drawn over the map rather than inside a window: the corner readouts, docked messages,
+        /// the colonist bar.
+        ///
+        /// <b>The alpha is the point of this role.</b> A window is a thing the player looks at, so it is opaque.
+        /// This is chrome the player looks <i>past</i> -- it sits on playable ground, permanently -- and a solid
+        /// block there is map the player has lost for as long as the game is running. Vanilla avoids the problem
+        /// by drawing no panel at all, and pays for it with bare text that becomes unreadable over pale terrain.
+        /// A translucent fill is how a surface can be legible and still be looked through.
+        ///
+        /// <b>Do not go far below the shipped value.</b> What is underneath is not a static backdrop: it scrolls,
+        /// pawns move across it, and RimWorld's day and night lighting swings its brightness a long way. An alpha
+        /// chosen because it looked right at dusk is one that fails at midday, and the failure is text that
+        /// disappears rather than a panel that looks wrong.
+        ///
+        /// Pair it with an opaque <see cref="Border"/>, which is what lets the fill stay faint: a defined edge
+        /// keeps the panel readable as a panel even where the fill nearly vanishes. That is the same rule as
+        /// <see cref="ControlBackgroundFaded"/>, for the same reason.
+        /// </summary>
+        HudBackground
     }
 }

@@ -182,14 +182,9 @@ namespace Gideon.UIFramework.Helpers
 
             Widgets.DrawBoxSolid(frame, track * ambient);
 
-            // The border is the track darkened rather than a color of its own. The reference art is an exact
-            // multiply on both states, and deriving it means a palette that changes the accent gets a matching
-            // edge without having to name a second color for it.
-            //
             // DrawBox honors GUI.color, unlike DrawBoxSolid which resets it to white -- hence the assignment
             // here and the restore after, rather than one color set up front.
-            GUI.color = new Color(track.r * SwitchBorderFactor, track.g * SwitchBorderFactor,
-                track.b * SwitchBorderFactor, track.a) * ambient;
+            GUI.color = BorderColor(state, track, palette, disabled) * ambient;
             Widgets.DrawBox(frame, 1);
             GUI.color = previous;
 
@@ -224,12 +219,49 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
-        /// How much darker a track's border is than the track itself.
+        /// How much darker a lit track's border is than the track itself.
         ///
-        /// Measured off the reference art, where it is an exact multiply in both states: the checked track
-        /// #73BFFF carries a #4B7CA6 edge and the unchecked #2F3337 carries #1F2124. Both are the fill at 0.65.
+        /// Measured off the reference art, where the checked track #73BFFF carries a #4B7CA6 edge: the fill at
+        /// 0.65. Deriving it rather than naming it means a palette that changes the accent gets a matching edge
+        /// for free. Applies to the lit states only -- see <see cref="BorderColor"/> for why the unlit one cannot
+        /// use it.
         /// </summary>
         private const float SwitchBorderFactor = 0.65f;
+
+        /// <summary>How much of the border is left on a switch that cannot be changed.</summary>
+        private const float DisabledBorderAlpha = 0.45f;
+
+        /// <summary>
+        /// The rim around the track.
+        ///
+        /// <b>An unlit switch takes <c>Border</c> instead of a multiple of its own fill,</b> and that is a fix
+        /// rather than a preference. The reference art multiplies both states -- the unchecked track #2F3337
+        /// carries #1F2124 -- but the art was drawn against a mid-grey mockup background, and #1F2124 is darker
+        /// than <c>PanelBackground</c> #1B1F23 is light. On a real panel the edge vanished, the track sat barely
+        /// twenty levels above the surface behind it, and an off switch read as a pale knob floating in a smudge
+        /// with no control around it. Nobody could see it was a switch, let alone which end the knob was parked at.
+        ///
+        /// <c>Border</c> is the existing role for exactly this -- the edge of a control -- so the unlit switch now
+        /// reads as an empty slot with a defined outline, and no new palette entry was needed to say it. The lit
+        /// states keep the derived rim: a bright track has all the contrast it needs, and <c>Border</c>'s blue
+        /// would fight the amber of Partial.
+        /// </summary>
+        private static Color BorderColor(MultiCheckboxState state, Color track, UIColorPaletteDef palette,
+            bool disabled)
+        {
+            if (!disabled && state != MultiCheckboxState.Off)
+                return new Color(track.r * SwitchBorderFactor, track.g * SwitchBorderFactor,
+                    track.b * SwitchBorderFactor, track.a);
+
+            Color edge = palette.Border;
+
+            // Dimmed rather than dropped. A disabled switch still has to look like a switch, or it becomes the
+            // same unreadable smudge for a different reason.
+            if (disabled)
+                edge.a *= DisabledBorderAlpha;
+
+            return edge;
+        }
 
         /// <summary>
         /// The switch's proportions, taken from the reference art: 40 wide by 20 tall.
@@ -256,13 +288,20 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>
         /// The track color for a state.
         ///
-        /// <b>Every one is an existing palette role, and deliberately so.</b> The reference art was authored
-        /// from the palette: its checked track is <c>Accent</c> to the byte, its unchecked track is
-        /// <c>SurfaceRaised</c>, and its knobs are <c>SurfaceSunken</c> and <c>TextSecondary</c>. Naming new
-        /// roles for colors the palette already carries would give every palette author two places to keep in
-        /// step, and a theme where the switch quietly disagreed with everything around it.
+        /// The lit states are existing palette roles and were taken straight from the reference art, which was
+        /// authored from the palette: the checked track is <c>Accent</c> to the byte, the knobs are
+        /// <c>SurfaceSunken</c> and <c>TextSecondary</c>, and Partial takes the amber of <c>Warning</c>.
         ///
-        /// Partial takes <c>Warning</c>, which is the amber the art uses for it.
+        /// <b>The unlit track is the one place the art could not be followed.</b> It was authored as
+        /// <c>SurfaceRaised</c>, on the assumption that a raised surface sits above the panel. In this mod's own
+        /// dark theme it does not: that palette sets <c>surfaceRaised</c> to #15191D against a #1B1F23 panel, so
+        /// the switch was drawn <i>darker</i> than the surface behind it and had no visible extent at all. The
+        /// mistake was reusing a chrome color for a control body -- see
+        /// <see cref="UIColorRole.ControlBackgroundFaded"/>, which is the role that now means this and which a
+        /// theme can tune without disturbing its cards and headers.
+        ///
+        /// Disabled deliberately keeps the raised surface, so a switch that cannot be changed stays quieter than
+        /// one that is merely off.
         /// </summary>
         private static Color TrackColor(MultiCheckboxState state, UIColorPaletteDef palette, bool disabled)
         {
@@ -273,7 +312,7 @@ namespace Gideon.UIFramework.Helpers
             {
                 case MultiCheckboxState.On: return palette.Accent;
                 case MultiCheckboxState.Partial: return palette.Warning;
-                default: return palette.SurfaceRaised;
+                default: return palette.ControlBackgroundFaded;
             }
         }
 
@@ -330,11 +369,17 @@ namespace Gideon.UIFramework.Helpers
             // that distinction is worth more than shape consistency -- but nothing else about it needs to
             // differ, and everything else about it used to. It was drawn from Border, AccentMuted and
             // WindowBackground, none of which the switch uses, so the two read as parts of different themes.
-            Color fill = selected && !disabled ? palette.Accent : palette.SurfaceRaised;
+            // Unselected takes ControlBackgroundFaded, the same role as an off switch, and for the same reason:
+            // this used to be SurfaceRaised, which in this mod's own dark theme is darker than the panel behind
+            // it, leaving an unselected radio button as invisible as an off toggle was. The two controls are
+            // deliberately kept on one role so a theme cannot fix one and leave the other unreadable.
+            Color fill = selected && !disabled ? palette.Accent : palette.ControlBackgroundFaded;
 
-            // Derived from the fill exactly as the switch's border is, including the same 0.65.
-            Color rim = new Color(fill.r * SwitchBorderFactor, fill.g * SwitchBorderFactor,
-                fill.b * SwitchBorderFactor, fill.a);
+            // The switch's own rim rule rather than a copy of it, so the unselected radio button picks up the
+            // Border edge an off switch gets and the two cannot drift apart again. Selected still derives from
+            // the accent fill, which is what the reference art does.
+            Color rim = BorderColor(selected ? MultiCheckboxState.On : MultiCheckboxState.Off, fill, palette,
+                disabled);
 
             // Hover lifts the rim toward the accent rather than recoloring the whole control. Selection
             // outranks it: a button that is already selected has nothing to promise, and the pointer being

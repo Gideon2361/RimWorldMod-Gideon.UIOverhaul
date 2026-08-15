@@ -52,6 +52,53 @@ namespace Gideon.UIFramework.Controls
         private const float EdgePad = 4f;
 
         /// <summary>
+        /// The smallest gap between the switch and its label before they read as one object.
+        ///
+        /// The gap is ours to spend, unlike the switch and unlike the caller's rect, so it is the first thing
+        /// given up when a label is short of room.
+        /// </summary>
+        private const float TightGap = 4f;
+
+        /// <summary>
+        /// Narrows the gap between a switch and its label when the label is short of room.
+        ///
+        /// <b>Why anything is needed at all.</b> Vanilla draws a 24 pixel box after its label, so the label gets
+        /// the row less 24. A switch is 40 and sits before the label with a gap after it, so the label gets the
+        /// row less 50 -- twenty-six pixels less than the caller allowed for when it chose the width. Callers
+        /// with generous rows never notice; callers that sized a row to vanilla's box exactly now truncate.
+        ///
+        /// <b>The gap is the only thing there is to give.</b> The row cannot be widened: that rect belongs to the
+        /// caller's layout, and drawing past it lands on whatever is beside it -- the next row of a listing, the
+        /// next cell of a grid -- which is not visible from here. The switch is not resized either, because a
+        /// control that changes size between rows reads as a rendering fault.
+        ///
+        /// <b>And the type size is deliberately not touched.</b> Stepping down to <c>GameFont.Tiny</c> was tried
+        /// and removed: RimWorld offers a setting to switch tiny text off, which means a player can have decided
+        /// it is unreadable for them, and at a high UI scale it is a poor trade even for those who leave it on.
+        /// <c>Text.Font</c>'s setter does quietly coerce Tiny to Small when it is unsupported, so it would have
+        /// degraded safely rather than overriding the preference -- but "safely" is not the same as "well", and a
+        /// label that shrinks is a worse answer than one that ends in an ellipsis. An ellipsis at least says that
+        /// something was cut.
+        /// </summary>
+        /// <param name="available">Width left for the label once the switch's slot is taken out, gap included.</param>
+        /// <param name="preferredGap">
+        /// The gap this caller uses when there is room. Passed in rather than taken from <see cref="LabelGap"/>,
+        /// because the patched vanilla checkboxes space themselves slightly wider than this control does and
+        /// answering with the wrong one would quietly restyle every checkbox in the game.
+        /// </param>
+        internal static float FitLabel(string label, float available, float preferredGap)
+        {
+            if (label.NullOrEmpty())
+                return preferredGap;
+
+            // Measured unwrapped, since this only runs where the label is drawn on one line.
+            if (Text.CalcSize(label).x <= available - preferredGap)
+                return preferredGap;
+
+            return Mathf.Min(TightGap, preferredGap);
+        }
+
+        /// <summary>
         /// Draws a checkbox and reports whether it was just changed.
         ///
         /// The whole row is the hit target, as it is in vanilla, so a label is as clickable as its box.

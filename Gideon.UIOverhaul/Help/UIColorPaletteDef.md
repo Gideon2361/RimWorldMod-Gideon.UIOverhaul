@@ -82,6 +82,45 @@ Alpha matters on the three overlay roles: they are drawn *on top of* what is alr
 | `hoverOverlay` | `HoverOverlay` | Wash over a hovered control | `#FFFFFF0C` |
 | `pressedOverlay` | `PressedOverlay` | Wash over a pressed control | `#FFFFFF1F` |
 | `selectionOverlay` | `SelectionOverlay` | Wash marking a selected row or card | `#73BFFF24` |
+| `controlBackgroundFaded` | `ControlBackgroundFaded` | Body of a control holding no value: an off toggle, an unselected radio button, the unfilled part of a slider | `#434A53` |
+| `hudBackground` | `HudBackground` | Fill for chrome drawn over the map: corner readouts, docked messages, the colonist bar. Carries alpha | `#15191DCC` |
+
+### A note on `controlBackgroundFaded`
+
+This is the one role most likely to be wrong in a new theme, so it is worth a paragraph.
+
+It is not a surface. `surfaceRaised` and `surfaceSunken` are chrome the eye is meant to pass over -- a card, a
+header strip, a row -- so they sit close to the panel on purpose. A control has to be *found* before it can be
+read, and the two jobs pull in opposite directions. The shipped dark theme makes the point: its `surfaceRaised`
+is `#15191D` against a `#1B1F23` panel, which is darker than the panel. That is right for a card and it left
+every off toggle and unselected radio button with no visible extent at all, until this role existed.
+
+Two rules when setting it:
+
+- **Set it clearly apart from the `panelBackground` it will be drawn on.** Distance is what matters, not
+  direction; the dark theme lifts to `#434A53` and the light theme drops to `#C9CED6`.
+- **Keep it well clear of `textSecondary`,** which is the color of the knob that sits on top of it. The knob's
+  position is the entire signal a toggle carries, so if the two converge the control stops saying anything.
+
+### A note on `hudBackground`
+
+The only role that is expected to carry an alpha in its own value rather than as an overlay.
+
+Everything else this framework draws sits inside a window, and a window is a thing the player is looking at, so
+it is opaque. `hudBackground` is for chrome drawn over the map -- the corner readouts, docked messages, the
+colonist bar -- which the player is looking *past*. It occupies playable ground for as long as the game is
+running, so a solid fill is map they have lost. Vanilla sidesteps this by drawing no panel at all in the corner,
+and pays for it with bare text that becomes unreadable over snow or sand.
+
+- **Keep the alpha high, around the shipped `CC` (80%).** What is underneath moves: the map scrolls, pawns walk
+  through it, and day-night lighting swings its brightness a long way. An alpha picked because it looked right at
+  dusk is one that fails at midday.
+- **Pair it with an opaque `border`.** A defined edge is what lets the fill stay faint; without one, a
+  translucent panel over bright terrain dissolves rather than fading.
+- **Build it from the theme's `windowBackground`, not `panelBackground`.** A panel sits on a window and can
+  borrow that window's contrast; this sits on terrain and has nothing behind it, so it has to carry the contrast
+  for its own text. The darker of the two fills is the one that does that, and it keeps the transparency as the
+  only thing marking the surface out as over-the-map chrome.
 
 A light theme must override the overlays — white washes do nothing useful on a pale surface.
 

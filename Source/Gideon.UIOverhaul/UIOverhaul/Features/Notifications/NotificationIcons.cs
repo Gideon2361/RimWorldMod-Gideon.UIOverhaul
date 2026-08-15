@@ -43,6 +43,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
         internal static readonly Texture2D Wind;
         internal static readonly Texture2D Toxic;
         internal static readonly Texture2D SolarFlare;
+        internal static readonly Texture2D Skull;
 
         /// <summary>
         /// <b>Guarded, and written out rather than through <c>UIGuard.Try</c>.</b> These are <c>static readonly</c>,
@@ -71,6 +72,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 Wind = BuildWind();
                 Toxic = BuildToxic();
                 SolarFlare = BuildSolarFlare();
+                Skull = BuildSkull();
             }
             catch (Exception ex)
             {
@@ -86,6 +88,30 @@ namespace Gideon.UIOverhaul.Features.Notifications
         // pixels, where roughly five strokes survive, so an icon that needs more detail than this to be recognized
         // is an icon that will not be recognized.
         // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// A skull: cranium, jaw, and the features cut out of them rather than drawn on top.
+        ///
+        /// <b>Everything is a cut, which is what keeps it readable when it shrinks.</b> Drawing dark eye sockets
+        /// over a light cranium would need a second color and would turn to mud at 16 pixels; removing them means
+        /// the sockets are whatever is behind the icon, so the contrast is the panel's rather than the glyph's.
+        /// Same trick as the hazard badge above.
+        ///
+        /// Two teeth gaps, not four. At the size this is read a third gap closes up into a grey smear and the jaw
+        /// stops reading as a jaw.
+        /// </summary>
+        private static Texture2D BuildSkull()
+        {
+            return new UIIconCanvas(Size)
+                .Disc(16f, 14f, 10f)
+                .Rect(11f, 21f, 10f, 6f)
+                .CutDisc(11.5f, 14f, 3.6f)
+                .CutDisc(20.5f, 14f, 3.6f)
+                .CutTriangle(16f, 17f, 13.8f, 21f, 18.2f, 21f)
+                .CutRect(13.5f, 22.5f, 1.3f, 4.5f)
+                .CutRect(17.2f, 22.5f, 1.3f, 4.5f)
+                .ToTexture("Gideon.Icon.Skull");
+        }
 
         /// <summary>A body with the flap cut out of it, rather than a body with a V drawn on top.</summary>
         private static Texture2D BuildEnvelope()

@@ -904,16 +904,17 @@ namespace Gideon.UIOverhaul.Features.Options
         }
 
         /// <summary>
-        /// The desktop widgets section: which of this mod's corner readouts are drawn.
+        /// The desktop widgets section: which readouts are drawn in the bottom right corner.
         ///
-        /// <b>A master switch above six individual ones, rather than six alone.</b> "I want my corner back" is a
-        /// different request from "I want the season but not the weather", and answering the first by asking someone
-        /// to clear six boxes -- and to remember which six they had cleared if they change their mind -- is a worse
-        /// answer than one box.
+        /// <b>Two groups, and the split is by whose widget it is rather than by what it does.</b> The lower group
+        /// is RimWorld's own corner -- the readouts the base game puts there, each with a switch this mod adds.
+        /// The upper group is for widgets this mod contributes itself, and it is deliberately empty until there
+        /// are some.
         ///
-        /// The six stay enabled and readable while the master switch is off rather than being greyed out. Their
-        /// values are still what they were and are still what comes back when it is switched on again, so showing
-        /// them as unavailable would misrepresent what turning it back on will do.
+        /// <b>What does not belong in the upper group:</b> anything that only restyles a vanilla readout. The
+        /// speed control glyphs were listed there once and were wrong, because drawn icons on RimWorld's buttons
+        /// do not make the speed controls ours -- they are still vanilla's widget, wearing our artwork. That
+        /// toggle now sits under the readout it restyles, where its scope is obvious.
         ///
         /// <b>Everything defaults to on.</b> A readout nobody can see is a readout nobody learns to want.
         /// </summary>
@@ -926,23 +927,9 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GroupLabel(view, ref y, palette, "This mod's widgets");
 
-            WidgetToggle(view, ref y, palette, settings, indent, "Speed control icons",
-                settings.showSpeedGlyphs, value =>
-                {
-                    settings.showSpeedGlyphs = value;
-
-                    // Swapped now rather than at the next launch, so the row under the cursor changes while the
-                    // box is still being looked at.
-                    SpeedGlyphs.Set(value);
-                },
-                "This mod's drawn pause and speed glyphs, in place of RimWorld's. The buttons themselves, and "
-                + "the keyboard shortcuts, are unchanged either way.");
-
-            y += 6f;
-
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(indent, y, view.width - indent, 36f),
-                "The rest of this mod's corner is still to come, and each piece of it gets a switch here.");
+                "None yet. Widgets this mod adds to the corner get their switches here.");
             y += 40f;
             GUI.color = palette.TextPrimary;
 
@@ -956,7 +943,12 @@ namespace Gideon.UIOverhaul.Features.Options
 
             WidgetToggle(view, ref y, palette, settings, indent, "Speed controls",
                 settings.showSpeedControlsWidget, value => settings.showSpeedControlsWidget = value,
-                "Hides the buttons. Space and the speed number keys keep working.");
+                "The pause and speed buttons in the corner. Hiding them leaves space and the speed number keys "
+                + "working.");
+
+            // There was a switch here for the drawn speed glyphs. It is gone rather than moved: the two options
+            // were this mod's icons and the ones they exist to replace, which is not a choice anybody needs to
+            // be offered. The glyphs are simply part of the theme now.
 
             WidgetToggle(view, ref y, palette, settings, indent, "Date, season and hour",
                 settings.showDateWidget, value => settings.showDateWidget = value,
@@ -975,25 +967,21 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "turning developer mode on.\n\nSwitching it off gives the developer settings the last word "
                 + "again rather than hiding a counter you turned on there.");
 
-            // Shown but not yet operable, rather than left out. Leaving them out would read as this mod having
-            // no opinion about them; showing them greyed says the row exists, this is where its switch will be,
-            // and it is not ready. The tooltip says why, because "greyed out" on its own is just a dead end.
-            const string pending =
-                "Not yet. RimWorld draws this one inside the method that lays the whole corner out, rather than "
-                + "through a call of its own, so hiding it leaves a gap where it was. It becomes a real switch "
-                + "when this mod takes over that panel.";
-
+            // These three were greyed out for a long time, and the tooltip said why: RimWorld drew them inside the
+            // method that lays the whole corner out rather than through a call of their own, so there was no seam
+            // to hide them at. GlobalControlsPanel replaced that method, which is what made them switches.
             WidgetToggle(view, ref y, palette, settings, indent, "Temperature",
                 settings.showTemperatureWidget, value => settings.showTemperatureWidget = value,
-                pending, disabled: true);
+                "The reading for whatever the cursor is over: the room it is in, or outdoors.");
 
             WidgetToggle(view, ref y, palette, settings, indent, "Weather",
                 settings.showWeatherWidget, value => settings.showWeatherWidget = value,
-                pending, disabled: true);
+                "The current weather, shown beside the temperature. Pocket maps have no weather and never show "
+                + "this one.");
 
             WidgetToggle(view, ref y, palette, settings, indent, "Game conditions",
                 settings.showConditionsWidget, value => settings.showConditionsWidget = value,
-                pending, disabled: true);
+                "Toxic fallout, eclipses, solar flares and the rest, with how long each has left to run.");
 
             y += 12f;
         }

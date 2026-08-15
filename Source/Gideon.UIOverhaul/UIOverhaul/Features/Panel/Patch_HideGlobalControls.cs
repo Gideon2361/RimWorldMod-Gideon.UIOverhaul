@@ -23,6 +23,13 @@ namespace Gideon.UIOverhaul.Features.Panel
     ///
     /// <b>No stand-down against another mod here.</b> This suppresses a call rather than replacing a drawing, so a
     /// mod that restyles the same row still gets to decide how the row looks; it just is not asked to draw one.
+    ///
+    /// <b>This is the fallback path now.</b> <see cref="GlobalControlsPanel"/> replaced
+    /// <c>GlobalControlsOnGUI</c> and calls <c>DoPlaySettingsGlobalControls</c> itself, so
+    /// <c>GlobalControlsUtility.DoPlaySettings</c> is not reached while the panel is drawing and this prefix does
+    /// not fire. It is kept for the case where the panel stands down and vanilla's corner comes back, which is
+    /// the one path where this setting would otherwise stop working. The panel applies the same rule, including
+    /// running the row off screen so the three keyboard shortcuts survive being hidden.
     /// </summary>
     [HarmonyPatch(typeof(GlobalControlsUtility), nameof(GlobalControlsUtility.DoPlaySettings))]
     public static class Patch_GlobalControlsUtility_DoPlaySettings
