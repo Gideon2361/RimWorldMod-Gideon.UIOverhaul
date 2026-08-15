@@ -7,6 +7,7 @@ using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Integrations;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
 using Gideon.UIOverhaul.Features.Tabs;
@@ -596,6 +597,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Clock", "How the time reads", DrawClockSection),
                 MakeCategory("Desktop Widgets", "Readouts in the corners", DrawWidgetSection),
                 MakeCategory("Notifications", "Messages, letters and alerts", DrawNotificationSection),
+                MakeCategory("Mod Integrations", "Extras for other mods you have", DrawIntegrationSection),
                 MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
                 MakeModSettingsCategory()
@@ -1102,6 +1104,57 @@ namespace Gideon.UIOverhaul.Features.Options
 
         /// <summary>How far the notification controls sit in from the group heading above them.</summary>
         private const float Indent = 18f;
+
+        /// <summary>
+        /// The mod integrations section: things this mod adds alongside another mod, shown only when that mod is
+        /// actually installed.
+        ///
+        /// <b>The category is always listed, and its contents are not.</b> A section that appeared and vanished
+        /// with the mod list would be one nobody knows exists until they happen to have the right mod, and a
+        /// player wondering whether this mod does anything with theirs would have nowhere to look for the answer.
+        /// So the heading is permanent and says plainly when there is nothing to show.
+        ///
+        /// <b>Nothing here changes what the other mod does.</b> Each of these adds something that mod chose not
+        /// to do, through whatever it made public, and is silent when it is absent. See <see cref="ModIntegrations"/>.
+        /// </summary>
+        private void DrawIntegrationSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Mod Integrations", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "Extras this mod adds when another mod is installed. Each one appears here only while that mod "
+                + "is loaded, and none of them changes how that mod behaves on its own.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            bool anything = false;
+
+            if (ModIntegrations.Loaded(ModIntegrations.PhinixPackageId))
+            {
+                anything = true;
+
+                GroupLabel(view, ref y, palette, "Phinix");
+
+                WidgetToggle(view, ref y, palette, settings, Indent, "Notify incoming chat messages",
+                    settings.notifyPhinixChat, value => settings.notifyPhinixChat = value,
+                    "Shows a message card when somebody sends a chat message.\n\nPhinix plays a small sound for "
+                    + "an incoming message and shows nothing, so one that arrives while you are looking at the "
+                    + "map is easy to miss entirely. This is the visible half, and it stays silent because the "
+                    + "sound is already theirs.\n\nMessages from you, from anyone you have blocked, and any that "
+                    + "arrive while the chat tab is open are left alone.");
+            }
+
+            if (anything)
+                return;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 40f),
+                "None of the mods this one integrates with are loaded, so there is nothing to configure here.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+        }
 
         /// <summary>
         /// Three corners on one row, as radio buttons.

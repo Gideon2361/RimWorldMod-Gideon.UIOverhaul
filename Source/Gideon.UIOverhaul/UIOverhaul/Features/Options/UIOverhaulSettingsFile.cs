@@ -74,6 +74,17 @@ namespace Gideon.UIOverhaul.Features.Options
         public UITimeFormat timeFormat = UITimeFormat.TwentyFourHour;
 
         /// <summary>
+        /// Whether an incoming Phinix chat message raises a notification.
+        ///
+        /// On by default, and only ever read when Phinix is loaded. Phinix plays a small tick when a message
+        /// arrives and shows nothing, so a message that lands while you are looking at the map is a sound you may
+        /// not have caught; this is the visible half. Silent, since the tick is already theirs.
+        ///
+        /// See <c>Features.Integrations.PhinixIntegration</c>.
+        /// </summary>
+        public bool notifyPhinixChat = true;
+
+        /// <summary>
         /// Whether an open main tab can be dragged to a different size.
         ///
         /// On by default. RimWorld gives every tab one fixed size chosen by whoever wrote it, and the one that
@@ -394,6 +405,10 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.resizableTabs = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "notifyPhinixChat":
+                            settings.notifyPhinixChat = !value.EqualsIgnoreCase("false");
+                            break;
+
                         // The notification settings. The three restyle switches read "absent means on", so a
                         // config written before they existed keeps the drawing the player already had.
                         case "restyleMessages":
@@ -548,6 +563,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
 
                     writer.WriteElementString("resizableTabs", resizableTabs ? "true" : "false");
+                    writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
 
                     writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");
                     writer.WriteElementString("restyleLetters", restyleLetters ? "true" : "false");
