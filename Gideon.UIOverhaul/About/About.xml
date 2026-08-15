@@ -3,7 +3,7 @@
   <name>Gideon's UI Overhaul</name>
   <author>Gideon</author>
   <packageId>gideon.uioverhaul</packageId>
-  <modVersion>1.6.4871.14092</modVersion>
+  <modVersion>1.6.4871.14093</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
@@ -23,6 +23,7 @@
   </modDependencies>
   <incompatibleWith>
     <li>ferny.betterarchitect</li>
+    <li>dubwise.dubsmintmenus</li>
     <li>Gideon.CleanArchitect</li>
   </incompatibleWith>
   <loadAfter>

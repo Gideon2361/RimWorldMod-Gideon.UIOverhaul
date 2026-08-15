@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Patch>
 
   <!-- ===========================================================================================
@@ -7,10 +7,10 @@
        Every storage mod adds a category holding its shelves, so running three of them means three
        nearly identical tabs. This collects them.
 
-       <b>Each mod gets its own conditional block, and every block is optional.</b> A player with none
-       of these installed gets a UnifiedStorage category with nothing in it, which RimWorld does not
-       draw. A player with one gets one tab instead of two. Adding support for another storage mod
-       means another block on the same pattern plus its packageId in About.xml's loadAfter.
+       <b>Each mod gets its own block, and every block is optional.</b> A player with none of these
+       installed gets a UnifiedStorage category with nothing in it, which RimWorld does not draw. A
+       player with one gets one tab instead of two. Adding support for another storage mod means
+       another block on the same pattern plus its packageId in About.xml's loadAfter.
 
        <b>Emptied categories are hidden, never removed.</b> Both of these used to be removed once their
        contents had been repointed, on the reasoning that nothing was left naming them. That reasoning
@@ -26,6 +26,26 @@
 
        That older mechanism is still shipped, as ArchitectTabHider, for anything that referenced it.
        Nothing here uses it any more.
+
+       ===========================================================================================
+       <b>Each operation is guarded by exactly what it needs, and that is the point of the shape below.</b>
+
+       This file used to test "does the category exist" once and then run both the repoint and the hide
+       inside that one branch. It reported a failed patch operation on load, and the reason is worth
+       recording because the obvious reading of it is wrong: it was not the case of the storage mod being
+       absent. An absent category makes PatchOperationConditional return true, since with no match and no
+       nomatch branch it falls through to success.
+
+       What actually happened is that the category existed with nothing left in it. Two separate mods do
+       this same fold, and RimWorld applies patches in load order, so whichever runs second finds every
+       ThingDef already repointed while the now empty category def is still sitting there. Adaptive
+       Storage Framework does it to itself as well: its own patch moves every ASFstorage building to
+       LWM_DS_Storage when LWM's Deep Storage is installed. Either way the outer test passed, the inner
+       Replace matched nothing, and a Replace that matches nothing fails.
+
+       So the existence of a category no longer implies anything is in it. The repoint is guarded on
+       finding a ThingDef to repoint, the hide is guarded on finding a category to hide, and neither
+       assumes the other found anything. Nothing here can fail on a load order this mod does not control.
        =========================================================================================== -->
 
   <Operation Class="PatchOperationSequence">
@@ -33,45 +53,65 @@
     <operations>
 
       <!-- Adaptive Storage Framework -->
+
       <li Class="PatchOperationConditional">
-        <xpath>Defs[DesignationCategoryDef/defName="ASFstorage"]</xpath>
+        <xpath>Defs/ThingDef/designationCategory[text()="ASFstorage"]</xpath>
+        <match Class="PatchOperationReplace">
+          <xpath>Defs/ThingDef/designationCategory[text()="ASFstorage"]/text()</xpath>
+          <value>UnifiedStorage</value>
+        </match>
+      </li>
 
-        <match Class="PatchOperationSequence">
-          <success>Normal</success>
-          <operations>
-            <li Class="PatchOperationReplace">
-              <xpath>Defs/ThingDef/designationCategory[text()="ASFstorage"]/text()</xpath>
-              <value>UnifiedStorage</value>
-            </li>
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]</xpath>
 
-            <li Class="PatchOperationAdd">
-              <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]</xpath>
-              <value>
-                <hidden>true</hidden>
-              </value>
-            </li>
-          </operations>
+        <!-- Replace or add, rather than always adding. A second hidden element on the same def is not
+             an error RimWorld reports; it just parses one of them and drops the other, which is the
+             kind of thing that works until it does not. -->
+        <match Class="PatchOperationConditional">
+          <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]/hidden</xpath>
+          <match Class="PatchOperationReplace">
+            <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]/hidden</xpath>
+            <value>
+              <hidden>true</hidden>
+            </value>
+          </match>
+          <nomatch Class="PatchOperationAdd">
+            <xpath>Defs/DesignationCategoryDef[defName="ASFstorage"]</xpath>
+            <value>
+              <hidden>true</hidden>
+            </value>
+          </nomatch>
         </match>
       </li>
 
       <!-- LWM's Deep Storage -->
+
       <li Class="PatchOperationConditional">
-        <xpath>Defs[DesignationCategoryDef/defName="LWM_DS_Storage"]</xpath>
+        <xpath>Defs/ThingDef/designationCategory[text()="LWM_DS_Storage"]</xpath>
+        <match Class="PatchOperationReplace">
+          <xpath>Defs/ThingDef/designationCategory[text()="LWM_DS_Storage"]/text()</xpath>
+          <value>UnifiedStorage</value>
+        </match>
+      </li>
 
-        <match Class="PatchOperationSequence">
-          <operations>
-            <li Class="PatchOperationReplace">
-              <xpath>Defs/ThingDef/designationCategory[text()="LWM_DS_Storage"]/text()</xpath>
-              <value>UnifiedStorage</value>
-            </li>
+      <li Class="PatchOperationConditional">
+        <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]</xpath>
 
-            <li Class="PatchOperationAdd">
-              <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]</xpath>
-              <value>
-                <hidden>true</hidden>
-              </value>
-            </li>
-          </operations>
+        <match Class="PatchOperationConditional">
+          <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]/hidden</xpath>
+          <match Class="PatchOperationReplace">
+            <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]/hidden</xpath>
+            <value>
+              <hidden>true</hidden>
+            </value>
+          </match>
+          <nomatch Class="PatchOperationAdd">
+            <xpath>Defs/DesignationCategoryDef[defName="LWM_DS_Storage"]</xpath>
+            <value>
+              <hidden>true</hidden>
+            </value>
+          </nomatch>
         </match>
       </li>
 

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Patch>
 
   <!-- ===========================================================================================
@@ -30,6 +30,22 @@
 
        Order still matters within the sequence. Repoint first, hide second, so the repointing operations
        are matching on categories that are still exactly as their authors wrote them.
+
+       ===========================================================================================
+       <b>Every operation is guarded by exactly what it needs.</b> This is the same shape the storage tab
+       patch was rewritten into, and for the same reason, so the reasoning is recorded once here as well
+       rather than only in that file.
+
+       An operation like Replace fails when its xpath matches nothing, and a failure anywhere in a
+       sequence fails the sequence and prints a patch error naming this mod. Being inside a conditional
+       that tested for the <i>category</i> does not protect an operation that needs a <i>member of</i>
+       that category: the two are different questions, and another mod that repoints those members first
+       makes the answers differ. RimWorld applies patches in load order, so which mod gets there first is
+       not something this mod controls or can predict.
+
+       The terrain operation below is the clearest case. It asks for TerrainDefs in the Odyssey category,
+       and there is no rule saying that category has to contain terrain. If a future Odyssey update, or
+       any mod, leaves it with none, an unguarded Replace there would fail on a completely healthy game.
        =========================================================================================== -->
 
   <Operation Class="PatchOperationSequence">
@@ -42,52 +58,98 @@
         <match Class="PatchOperationSequence">
           <operations>
 
-            <li Class="PatchOperationReplace">
-              <xpath>Defs/ThingDef/designationCategory[text()="Odyssey"]/text()</xpath>
-              <value>Space</value>
+            <li Class="PatchOperationConditional">
+              <xpath>Defs/ThingDef/designationCategory[text()="Odyssey"]</xpath>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/ThingDef/designationCategory[text()="Odyssey"]/text()</xpath>
+                <value>Space</value>
+              </match>
             </li>
 
             <!-- TerrainDef as well as ThingDef: gravship platforms and hull flooring are terrain, and
                  leaving them behind would keep the old category populated and therefore visible. -->
-            <li Class="PatchOperationReplace">
-              <xpath>Defs/TerrainDef[designationCategory[text()="Odyssey"]]/designationCategory/text()</xpath>
-              <value>Space</value>
+            <li Class="PatchOperationConditional">
+              <xpath>Defs/TerrainDef[designationCategory[text()="Odyssey"]]</xpath>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/TerrainDef[designationCategory[text()="Odyssey"]]/designationCategory/text()</xpath>
+                <value>Space</value>
+              </match>
             </li>
 
-            <li Class="PatchOperationReplace">
-              <xpath>Defs/ThingDef/designationCategory[text()="Ship"]/text()</xpath>
-              <value>Space</value>
+            <li Class="PatchOperationConditional">
+              <xpath>Defs/ThingDef/designationCategory[text()="Ship"]</xpath>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/ThingDef/designationCategory[text()="Ship"]/text()</xpath>
+                <value>Space</value>
+              </match>
             </li>
 
             <!-- These two replace the whole element rather than its text, because vanilla files them
                  under Misc and the element has to change value, not just content. Both belong here:
-                 an orbital trade beacon and a comms console are how a colony talks to orbit. -->
-            <li Class="PatchOperationReplace">
+                 an orbital trade beacon and a comms console are how a colony talks to orbit.
+
+                 Guarded on the element rather than on the def. A mod that removes a building's
+                 designationCategory outright has taken it off the architect panel deliberately, and
+                 putting it back under Space would be this patch overruling that decision. -->
+            <li Class="PatchOperationConditional">
               <xpath>Defs/ThingDef[defName="OrbitalTradeBeacon"]/designationCategory</xpath>
-              <value>
-                <designationCategory>Space</designationCategory>
-              </value>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/ThingDef[defName="OrbitalTradeBeacon"]/designationCategory</xpath>
+                <value>
+                  <designationCategory>Space</designationCategory>
+                </value>
+              </match>
             </li>
 
-            <li Class="PatchOperationReplace">
+            <li Class="PatchOperationConditional">
               <xpath>Defs/ThingDef[defName="CommsConsole"]/designationCategory</xpath>
-              <value>
-                <designationCategory>Space</designationCategory>
-              </value>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/ThingDef[defName="CommsConsole"]/designationCategory</xpath>
+                <value>
+                  <designationCategory>Space</designationCategory>
+                </value>
+              </match>
             </li>
 
-            <li Class="PatchOperationAdd">
-              <xpath>Defs/DesignationCategoryDef[defName="Odyssey"]</xpath>
-              <value>
-                <hidden>true</hidden>
-              </value>
+            <!-- Replace or add, rather than always adding. A second hidden element on the same def is
+                 not an error RimWorld reports; it just parses one of them and drops the other. -->
+            <li Class="PatchOperationConditional">
+              <xpath>Defs/DesignationCategoryDef[defName="Odyssey"]/hidden</xpath>
+              <match Class="PatchOperationReplace">
+                <xpath>Defs/DesignationCategoryDef[defName="Odyssey"]/hidden</xpath>
+                <value>
+                  <hidden>true</hidden>
+                </value>
+              </match>
+              <nomatch Class="PatchOperationAdd">
+                <xpath>Defs/DesignationCategoryDef[defName="Odyssey"]</xpath>
+                <value>
+                  <hidden>true</hidden>
+                </value>
+              </nomatch>
             </li>
 
-            <li Class="PatchOperationAdd">
+            <!-- Ship gets its own existence test, unlike Odyssey, which the block above already
+                 established. It is a Core category today and this patch has no say in whether it stays
+                 one. -->
+            <li Class="PatchOperationConditional">
               <xpath>Defs/DesignationCategoryDef[defName="Ship"]</xpath>
-              <value>
-                <hidden>true</hidden>
-              </value>
+
+              <match Class="PatchOperationConditional">
+                <xpath>Defs/DesignationCategoryDef[defName="Ship"]/hidden</xpath>
+                <match Class="PatchOperationReplace">
+                  <xpath>Defs/DesignationCategoryDef[defName="Ship"]/hidden</xpath>
+                  <value>
+                    <hidden>true</hidden>
+                  </value>
+                </match>
+                <nomatch Class="PatchOperationAdd">
+                  <xpath>Defs/DesignationCategoryDef[defName="Ship"]</xpath>
+                  <value>
+                    <hidden>true</hidden>
+                  </value>
+                </nomatch>
+              </match>
             </li>
 
           </operations>
