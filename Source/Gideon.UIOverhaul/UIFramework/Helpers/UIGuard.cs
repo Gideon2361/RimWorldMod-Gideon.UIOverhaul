@@ -219,51 +219,10 @@ namespace Gideon.UIFramework.Helpers
             // into an escaping one, which is the single outcome this whole class exists to prevent.
             try
             {
-                string signature = SignatureOf(ex);
                 int failures;
-                bool report;
                 bool novel;
 
-                lock (bookkeeping)
-                {
-                    Site record;
-
-                    if (!sites.TryGetValue(site, out record))
-                    {
-                        record = new Site { ReportAt = 10, Signature = signature };
-                        sites[site] = record;
-                    }
-
-                    record.Failures++;
-                    failures = record.Failures;
-
-                    // A different exception at a site that already failed is not a repeat. Reporting it in full
-                    // is the point: the second fault is often the one that explains the first, and treating it as
-                    // another tick of the same counter is how it stays invisible.
-                    novel = record.Signature != signature;
-
-                    if (novel)
-                    {
-                        record.Signature = signature;
-                        record.ReportAt = failures * 10;
-                        report = true;
-                    }
-                    else if (failures == 1 || failures >= record.ReportAt)
-                    {
-                        // Decade by decade: 1, 10, 100, 1000. A fault that recurs every frame for an hour costs
-                        // six lines, and each one still says how many times it has happened.
-                        if (failures >= record.ReportAt)
-                            record.ReportAt = failures * 10;
-
-                        report = true;
-                    }
-                    else
-                    {
-                        report = false;
-                    }
-                }
-
-                if (report)
+                if (ShouldReport(site, ex, out failures, out novel))
                     Log.Error(Describe(site, ex, failures, novel, consequence));
             }
             catch
@@ -280,6 +239,64 @@ namespace Gideon.UIFramework.Helpers
                     // Even logging is gone. Returning quietly is the only remaining way to keep our promise that
                     // this method does not throw.
                 }
+            }
+        }
+
+        /// <summary>
+        /// Counts a failure at a site and answers whether this one is worth a line in the log.
+        ///
+        /// <b>Public because flood control is the part nobody should reimplement.</b> Not every failure this mod
+        /// notices is one it contained -- <c>UIExceptionAttribution</c> watches exceptions on their way <i>out</i>
+        /// of RimWorld's UI root and adds who they passed through, without catching them. That is a different
+        /// report with a different severity, and it is written by its caller; what it must not have is a second
+        /// copy of the counting, because two schemes that drift apart is how one of them starts flooding.
+        ///
+        /// <paramref name="failures"/> is how many times this site has now failed, and <paramref name="novel"/>
+        /// says the exception differs from the last one seen here, which is why it is being reported out of turn.
+        ///
+        /// Registers the site, so <see cref="HasFailed"/> answers true for it afterwards.
+        /// </summary>
+        public static bool ShouldReport(string site, Exception ex, out int failures, out bool novel)
+        {
+            string signature = SignatureOf(ex);
+
+            lock (bookkeeping)
+            {
+                Site record;
+
+                if (!sites.TryGetValue(site, out record))
+                {
+                    record = new Site { ReportAt = 10, Signature = signature };
+                    sites[site] = record;
+                }
+
+                record.Failures++;
+                failures = record.Failures;
+
+                // A different exception at a site that already failed is not a repeat. Reporting it in full is
+                // the point: the second fault is often the one that explains the first, and treating it as
+                // another tick of the same counter is how it stays invisible.
+                novel = record.Signature != signature;
+
+                if (novel)
+                {
+                    record.Signature = signature;
+                    record.ReportAt = failures * 10;
+
+                    return true;
+                }
+
+                if (failures == 1 || failures >= record.ReportAt)
+                {
+                    // Decade by decade: 1, 10, 100, 1000. A fault that recurs every frame for an hour costs six
+                    // lines, and each one still says how many times it has happened.
+                    if (failures >= record.ReportAt)
+                        record.ReportAt = failures * 10;
+
+                    return true;
+                }
+
+                return false;
             }
         }
 

@@ -90,7 +90,15 @@ namespace Gideon.UIOverhaul.Features.Notifications
             List<Alert> alerts = ActiveAlerts(readout);
 
             if (alerts == null || alerts.Count == 0)
+            {
+                // Reported as zero rather than simply skipped. A stale reservation expires on its own after a
+                // frame, but saying so now is what lets the letters below reclaim the space on this one instead
+                // of the next.
+                NotificationLayout.Report(NotificationSurface.Alerts,
+                    NotificationLayout.DockOf(NotificationSurface.Alerts), 0f);
+
                 return;
+            }
 
             AlertState.Prune(alerts);
 
@@ -118,11 +126,14 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 }
             }
 
-            float width = WidthFor(shown);
-            float x = UI.screenWidth - width;
+            NotificationDock dock = NotificationLayout.DockOf(NotificationSurface.Alerts);
 
-            // Measured before drawing so the stack can be bottom-anchored against the letters, the way vanilla
-            // anchors its own: alerts grow upward from the letter stack rather than downward from the top.
+            float width = WidthFor(shown);
+            float x = NotificationLayout.ColumnX(dock, width);
+
+            // Measured before drawing, because the column is anchored at one end and drawn from the other.
+            // Alerts are always laid out worst first downward, so a dock that grows upward needs the total height
+            // to know where the top of the block goes.
             float total = 0f;
 
             foreach (Alert alert in shown)
@@ -131,7 +142,13 @@ namespace Gideon.UIOverhaul.Features.Notifications
             if (snoozed > 0)
                 total += SnoozeStripHeight + CardGap;
 
-            float y = Mathf.Max(0f, Find.LetterStack.LastTopY - total);
+            // <b>No longer Find.LetterStack.LastTopY, and that is the point of the layout.</b> Vanilla anchors
+            // this column to wherever the letter stack stopped, which is a direct dependency between two surfaces
+            // and the reason neither could be moved: alerts docked at the top right would still have been
+            // positioned by a number describing the bottom right corner. Both surfaces ask NotificationLayout
+            // now, and it keeps them from overlapping when they do share a corner.
+            float anchor = NotificationLayout.Anchor(NotificationSurface.Alerts, dock);
+            float y = NotificationLayout.GrowsUp(dock) ? Mathf.Max(0f, anchor - total) : anchor;
 
             for (int i = 0; i < shown.Count; i++)
             {
@@ -144,6 +161,8 @@ namespace Gideon.UIOverhaul.Features.Notifications
 
             if (snoozed > 0)
                 DrawSnoozeStrip(new Rect(x, y, width, SnoozeStripHeight), alerts, snoozed, palette);
+
+            NotificationLayout.Report(NotificationSurface.Alerts, dock, Mathf.Max(0f, total - CardGap));
         }
 
         private static float WidthFor(List<Alert> shown)
@@ -193,11 +212,11 @@ namespace Gideon.UIOverhaul.Features.Notifications
         /// color that says "here is something to know" rather than "here is a smaller version of that red thing", so
         /// the column read as two unrelated scales.
         ///
-        /// <b>Orange is derived rather than added to the palette.</b> There is no orange role, and adding one would
-        /// mean a new field on <see cref="UIColorPaletteDef"/>, an entry in both shipped palettes, and a missing
-        /// value in every palette a player has already written. Halfway between warning and danger is what orange
-        /// <i>is</i>, so blending the two roles gives the right color on any theme, including one whose warning is
-        /// not yellow -- the step stays proportionate to whatever the theme chose.
+        /// <b>The orange comes from <see cref="NotificationColors"/> rather than from here.</b> It used to be
+        /// derived in this method, and the derivation has moved because the letter stack needs the same color: a
+        /// small threat's letter and a high priority alert about the same event sit inches apart on the same edge
+        /// of the screen, and two independently mixed oranges would read as two different severities. The
+        /// reasoning for deriving it at all rather than adding an orange palette role is recorded there.
         /// </summary>
         private static Color EdgeFor(AlertPriority priority, UIColorPaletteDef palette)
         {
@@ -205,7 +224,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 return palette.Danger;
 
             if (priority == AlertPriority.High)
-                return Color.Lerp(palette.Warning, palette.Danger, 0.5f);
+                return NotificationColors.Orange(palette);
 
             return palette.Warning;
         }
@@ -372,6 +391,11 @@ namespace Gideon.UIOverhaul.Features.Notifications
     ///
     /// Vanilla's own early-out is reproduced rather than left to the original: it skips layout and drag events, and
     /// drawing on a layout event would allocate a control id per alert and shift every id after it.
+    ///
+    /// <b>The postfix is the mirror of the one on the letter stack.</b> A player can hand the alerts back to
+    /// vanilla and keep this mod's messages docked in the same corner, and vanilla's readout reports nothing to
+    /// <see cref="NotificationLayout"/> -- so the messages would stack over it. <c>AlertsHeight</c> is what vanilla
+    /// itself uses to place the column, so reporting that on its behalf places anything above it correctly.
     /// </summary>
     [HarmonyPatch(typeof(AlertsReadout), nameof(AlertsReadout.AlertsReadoutOnGUI))]
     public static class Patch_AlertsReadout_OnGUI
@@ -379,16 +403,35 @@ namespace Gideon.UIOverhaul.Features.Notifications
         /// <summary>Not applied at all when another mod already owns this surface.</summary>
         public static bool Prepare() => NotificationCompatibility.ShouldPatch();
 
-        public static bool Prefix(AlertsReadout __instance)
+        public static bool Prefix(AlertsReadout __instance, out bool __state)
         {
-            if (!AlertCards.Available)
+            __state = false;
+
+            if (!AlertCards.Available || !NotificationSettings.Restyle(NotificationSurface.Alerts))
+            {
+                __state = true;
+
                 return true;
+            }
 
             if (Event.current.type == EventType.Layout || Event.current.type == EventType.MouseDrag)
                 return false;
 
-            return UIGuard.Replaced("Notifications.Alerts", () => AlertCards.Draw(__instance),
+            __state = UIGuard.Replaced("Notifications.Alerts", () => AlertCards.Draw(__instance),
                 "Alerts are drawn in the vanilla style for the rest of the session.");
+
+            return __state;
+        }
+
+        public static void Postfix(bool __state)
+        {
+            if (!__state)
+                return;
+
+            UIGuard.Try("Notifications.MeasureVanillaAlerts", () =>
+                    NotificationLayout.Report(NotificationSurface.Alerts, NotificationDock.BottomRight,
+                        Find.Alerts?.AlertsHeight ?? 0f),
+                "This mod's messages may overlap RimWorld's own alerts readout.");
         }
     }
 }

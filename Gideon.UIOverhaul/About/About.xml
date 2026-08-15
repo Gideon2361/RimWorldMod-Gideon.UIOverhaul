@@ -3,7 +3,7 @@
   <name>Gideon's UI Overhaul</name>
   <author>Gideon</author>
   <packageId>gideon.uioverhaul</packageId>
-  <modVersion>1.6.4871.14091</modVersion>
+  <modVersion>1.6.4871.14092</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
@@ -22,12 +22,7 @@
     </li>
   </modDependencies>
   <incompatibleWith>
-    <!-- Clean Architect Tabs has been merged into this mod. Both define the Research, Space and
-         UnifiedStorage categories plus the ArchitectTabHider research, so loading both means four
-         duplicate defName errors and an architect panel built from whichever won.
-
-         Declared rather than left to chance so RimWorld says so in the mod list, at the moment the
-         player can still act on it, rather than leaving them to work it out from the log. -->
+    <li>ferny.betterarchitect</li>
     <li>Gideon.CleanArchitect</li>
   </incompatibleWith>
   <loadAfter>

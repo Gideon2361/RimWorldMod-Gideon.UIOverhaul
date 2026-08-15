@@ -65,6 +65,7 @@ namespace Gideon.UIOverhaul.Features.Options
             // this it would report a reload and then keep serving the old templates.
             Features.Pawns.Templates.PawnTemplateStore.Reload();
             Features.Notifications.AlertState.Reload();
+            Features.Tabs.TabSizes.Reload();
 
             // Touching Current forces the read now rather than on some later first use, so a bad file is
             // reported at a predictable moment.

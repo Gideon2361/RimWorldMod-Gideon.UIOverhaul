@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Xml;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Notifications;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Options
@@ -57,6 +59,52 @@ namespace Gideon.UIOverhaul.Features.Options
         /// The vanilla form is still on offer for anyone who prefers it.
         /// </summary>
         public UITimeFormat timeFormat = UITimeFormat.TwentyFourHour;
+
+        /// <summary>
+        /// Whether an open main tab can be dragged to a different size.
+        ///
+        /// On by default. RimWorld gives every tab one fixed size chosen by whoever wrote it, and the one that
+        /// suits a three colonist camp is not the one that suits a colony of twenty -- the work grid and the
+        /// pawn tables are the obvious cases, but every list tab has the same problem at some colony size.
+        ///
+        /// Sizes themselves live in their own file rather than here; see <c>Features.Tabs.TabSizes</c> for why.
+        /// </summary>
+        public bool resizableTabs = true;
+
+        // ---------------------------------------------------------------------------------------
+        // Notifications
+        //
+        // The three surfaces RimWorld raises things on: transient messages, the letter stack, and the alerts
+        // readout. Each has two settings -- whether this mod draws it at all, and which corner it lives in.
+        //
+        // The defaults reproduce where the base game puts all three, deliberately. Installing this mod changes
+        // how they look; where they are is the player's decision to make afterwards.
+        // ---------------------------------------------------------------------------------------
+
+        public bool restyleMessages = true;
+
+        public bool restyleLetters = true;
+
+        public bool restyleAlerts = true;
+
+        /// <summary>Messages start where vanilla puts them: top left, clear of the resource readout.</summary>
+        public NotificationDock messageDock = NotificationDock.TopLeft;
+
+        public NotificationDock letterDock = NotificationDock.BottomRight;
+
+        public NotificationDock alertDock = NotificationDock.BottomRight;
+
+        /// <summary>
+        /// How wide a letter row is drawn.
+        ///
+        /// <b>A setting because the trade is the player's.</b> These rows sit over the map, so width is bought
+        /// with playable screen, and how much that costs depends on the display and on how somebody plays.
+        /// 250 matches the corner panel underneath, which lines the two columns up and fits most letter labels.
+        ///
+        /// Clamped where it is read rather than where it is written, so a hand-edited file with a silly number
+        /// gives an odd looking stack instead of an unusable screen.
+        /// </summary>
+        public float letterRowWidth = 250f;
 
         // ---------------------------------------------------------------------------------------
         // Desktop widgets
@@ -247,6 +295,27 @@ namespace Gideon.UIOverhaul.Features.Options
             }
         }
 
+        /// <summary>
+        /// A dock name from the file, falling back rather than complaining.
+        ///
+        /// Same reasoning as the clock format above: this is a hand-editable file, and a misspelled corner is not
+        /// worth a warning popup on the way into the game. The fallback is the surface's own default, which is
+        /// where RimWorld would have put it.
+        /// </summary>
+        private static NotificationDock ParseDock(string value, NotificationDock fallback)
+        {
+            if (value.NullOrEmpty())
+                return fallback;
+
+            foreach (NotificationDock dock in (NotificationDock[]) Enum.GetValues(typeof(NotificationDock)))
+            {
+                if (dock.ToString().EqualsIgnoreCase(value))
+                    return dock;
+            }
+
+            return fallback;
+        }
+
         private static UIOverhaulSettingsFile Load()
         {
             string path = FilePath;
@@ -301,6 +370,49 @@ namespace Gideon.UIOverhaul.Features.Options
                         // to turn it back on.
                         case "showConditionsWidget":
                             settings.showConditionsWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "resizableTabs":
+                            settings.resizableTabs = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // The notification settings. The three restyle switches read "absent means on", so a
+                        // config written before they existed keeps the drawing the player already had.
+                        case "restyleMessages":
+                            settings.restyleMessages = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "restyleLetters":
+                            settings.restyleLetters = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "restyleAlerts":
+                            settings.restyleAlerts = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "messageDock":
+                            settings.messageDock = ParseDock(value, NotificationDock.TopLeft);
+                            break;
+
+                        case "letterDock":
+                            settings.letterDock = ParseDock(value, NotificationDock.BottomRight);
+                            break;
+
+                        case "alertDock":
+                            settings.alertDock = ParseDock(value, NotificationDock.BottomRight);
+                            break;
+
+                        case "letterRowWidth":
+                            float width;
+
+                            // Invariant, not the machine's locale. A settings file is shared and hand-edited, and
+                            // a number written with a decimal point should not stop parsing because the game is
+                            // running in a language that writes it with a comma.
+                            settings.letterRowWidth = float.TryParse(value, NumberStyles.Float,
+                                CultureInfo.InvariantCulture, out width)
+                                ? width
+                                : 250f;
+
                             break;
 
                         // Reads the opposite way round to the widgets below it, because this one defaults to off:
@@ -415,6 +527,21 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("fullscreenOnStartup",
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
+
+                    writer.WriteElementString("resizableTabs", resizableTabs ? "true" : "false");
+
+                    writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");
+                    writer.WriteElementString("restyleLetters", restyleLetters ? "true" : "false");
+                    writer.WriteElementString("restyleAlerts", restyleAlerts ? "true" : "false");
+                    writer.WriteElementString("messageDock", messageDock.ToString());
+                    writer.WriteElementString("letterDock", letterDock.ToString());
+                    writer.WriteElementString("alertDock", alertDock.ToString());
+
+                    // Invariant, matching how it is read. A width written with the machine's decimal separator
+                    // would fail to parse on a machine that writes it differently, which is a settings file that
+                    // silently resets when it is shared.
+                    writer.WriteElementString("letterRowWidth",
+                        letterRowWidth.ToString(CultureInfo.InvariantCulture));
 
                     writer.WriteElementString("showCalendarWidget", showCalendarWidget ? "true" : "false");
                     writer.WriteElementString("showExplicitStoryEvents",

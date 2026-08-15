@@ -41,7 +41,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 { "Wildlife", Folder + "Wildlife" },
                 { "Research", Folder + "Research" },
                 { "Quests", Folder + "Quests" },
-                { "World", Folder + "World" },
+
+                // A folded map rather than the globe, which is still in the folder and still offered by
+                // the icon picker. A globe says "the planet"; the tab is the planet surface you travel
+                // and settle, and at the size a bar button is drawn a sphere with continents on it turns
+                // into a grey circle while a map keeps its shape.
+                { "World", Folder + "Map" },
+
                 { "Mechs", Folder + "Mechanoids" },
 
                 // This mod's own tabs. The rule above is about not guessing at *other* mods' defNames --

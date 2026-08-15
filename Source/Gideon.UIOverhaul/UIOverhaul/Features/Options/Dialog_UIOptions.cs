@@ -7,7 +7,9 @@ using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
+using Gideon.UIOverhaul.Features.Tabs;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -593,6 +595,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Manage Tabs", "The button bar", DrawBarSection),
                 MakeCategory("Clock", "How the time reads", DrawClockSection),
                 MakeCategory("Desktop Widgets", "Readouts in the corners", DrawWidgetSection),
+                MakeCategory("Notifications", "Messages, letters and alerts", DrawNotificationSection),
                 MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
                 MakeModSettingsCategory()
@@ -823,6 +826,47 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "icons.");
             y += 44f;
             GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Tab size");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Let open tabs be resized",
+                settings.resizableTabs, value => settings.resizableTabs = value,
+                "Adds a grip to the free corner of an open tab, opposite the corner of the screen it is anchored "
+                + "to. Drag it to make the tab bigger or smaller, and the size is remembered for that tab.\n\n"
+                + "How well a tab uses the extra room is up to the tab: most lists and grids fill it, and a few "
+                + "are laid out at a fixed size and will simply have space around them.\n\nThe inspect pane is "
+                + "left alone, because it resizes itself to fit whatever you have selected.");
+
+            int stored = UIGuard.Try("Options.CountTabSizes", () => TabSizes.Count, 0, null);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                stored == 0
+                    ? "No tab has been resized yet."
+                    : stored == 1
+                        ? "1 tab has a remembered size."
+                        : stored + " tabs have remembered sizes.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 2f;
+
+            if (stored > 0
+                && SmallButton(new Rect(Indent, y, 200f, RowHeight), "Forget Tab Sizes", palette))
+            {
+                UIGuard.Try("Options.ResetTabSizes", TabSizes.ResetAll,
+                    "The remembered tab sizes were not cleared.");
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 40f),
+                "Forgetting a size puts that tab back to whatever size it asks for. It takes effect the next "
+                + "time the tab is opened.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
         }
 
         /// <summary>
@@ -993,6 +1037,174 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += 12f;
         }
+
+        /// <summary>
+        /// The notification section: which corner each surface lives in, and whether this mod draws it at all.
+        ///
+        /// <b>The escape is offered first for each surface, not last.</b> A player who came here because one of
+        /// these is misbehaving should find the switch that turns it off before they find the settings that only
+        /// matter while it is on -- and clearing it greys the rest, so the two read as a group rather than as
+        /// settings that stopped working.
+        ///
+        /// <b>Three corners rather than four.</b> The bottom left is where the inspect pane and the architect menu
+        /// live, so a dock there would look fine on an empty map and bury itself the moment anything is selected.
+        /// See <see cref="NotificationDock"/>.
+        /// </summary>
+        private void DrawNotificationSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Notifications", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 56f),
+                "The three ways RimWorld tells you something happened. Each can be moved to a different corner, "
+                + "or handed back to the base game entirely. Two surfaces in the same corner stack rather than "
+                + "overlap.");
+            y += 60f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Messages");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Draw messages as cards",
+                settings.restyleMessages, value => settings.restyleMessages = value,
+                "The short notices that appear for a few seconds and fade. Clearing this gives back RimWorld's "
+                + "own floating text.");
+
+            DockChooser(view, ref y, palette, settings, settings.messageDock,
+                value => settings.messageDock = value, !settings.restyleMessages);
+
+            GroupLabel(view, ref y, palette, "Letters");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Draw letters as labelled rows",
+                settings.restyleLetters, value => settings.restyleLetters = value,
+                "The stack of events waiting to be read. RimWorld draws these as icons and shows the label only "
+                + "when you point at one; rows show it outright.\n\nClearing this gives back the icons, and with "
+                + "them the width setting below stops applying.");
+
+            DockChooser(view, ref y, palette, settings, settings.letterDock,
+                value => settings.letterDock = value, !settings.restyleLetters);
+
+            LetterWidthSlider(view, ref y, palette, settings);
+
+            GroupLabel(view, ref y, palette, "Alerts");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Draw alerts as cards",
+                settings.restyleAlerts, value => settings.restyleAlerts = value,
+                "The standing warnings about the colony. Cards are sized to their label rather than clipped at a "
+                + "fixed width, and add snoozing and hiding.\n\nClearing this gives back RimWorld's own readout "
+                + "and with it anything you have snoozed or hidden, since those are this mod's additions.");
+
+            DockChooser(view, ref y, palette, settings, settings.alertDock,
+                value => settings.alertDock = value, !settings.restyleAlerts);
+
+            y += 12f;
+        }
+
+        /// <summary>How far the notification controls sit in from the group heading above them.</summary>
+        private const float Indent = 18f;
+
+        /// <summary>
+        /// Three corners on one row, as radio buttons.
+        ///
+        /// A row rather than a column because the choice is spatial: the three sit in roughly the arrangement
+        /// they describe, which is quicker to read than three stacked lines of prose.
+        /// </summary>
+        private static void DockChooser(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings, NotificationDock current, System.Action<NotificationDock> apply,
+            bool disabled)
+        {
+            NotificationDock[] options =
+            {
+                NotificationDock.TopLeft, NotificationDock.TopRight, NotificationDock.BottomRight
+            };
+
+            float available = view.width - Indent;
+            float column = available / options.Length;
+
+            // Greyed rather than hidden when the surface is handed back to vanilla. A control that vanishes takes
+            // the explanation with it; a greyed one still says a choice exists and is not currently in use. The
+            // control reports no clicks while disabled, so the guard is in one place rather than at every caller.
+            for (int i = 0; i < options.Length; i++)
+            {
+                Rect cell = new Rect(Indent + i * column, y, column - 6f, RowHeight);
+                bool chosen = current == options[i];
+
+                if (!UIRadioButtonControl.Draw(cell, chosen, palette, DockLabel(options[i]),
+                        disabled: disabled) || chosen)
+                    continue;
+
+                apply(options[i]);
+                settings.Save();
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 6f;
+        }
+
+        private static string DockLabel(NotificationDock dock)
+        {
+            switch (dock)
+            {
+                case NotificationDock.TopLeft:
+                    return "Top left";
+
+                case NotificationDock.TopRight:
+                    return "Top right";
+
+                default:
+                    return "Bottom right";
+            }
+        }
+
+        /// <summary>
+        /// How wide a letter row is drawn.
+        ///
+        /// <b>A slider rather than a number box, because there is no right answer to type.</b> Width here is
+        /// bought with map: these rows sit over the colony, so wider is more readable and costs more of what is
+        /// underneath. The default lines the stack up with the corner panel below it, which is the one value with
+        /// a reason behind it rather than a preference.
+        ///
+        /// Saved on release rather than per pixel of drag, since each save rewrites the settings file.
+        /// </summary>
+        private void LetterWidthSlider(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            Color previous = GUI.color;
+
+            if (!settings.restyleLetters)
+                GUI.color = palette.TextDisabled;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Row width: " + Mathf.RoundToInt(settings.letterRowWidth) + " px");
+
+            y += RowHeight;
+
+            float width = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f),
+                settings.letterRowWidth, 150f, 520f, false, null, null, null, 10f);
+
+            GUI.color = previous;
+
+            y += 30f;
+
+            if (settings.restyleLetters && !Mathf.Approximately(width, settings.letterRowWidth))
+            {
+                // Applied immediately, so the stack behind this window resizes while the bar is being dragged.
+                settings.letterRowWidth = width;
+                letterWidthUnsaved = true;
+            }
+
+            // Written when the drag ends rather than on every frame of it. Each save rewrites the settings file,
+            // and a slider raises a change on every pixel of movement -- so the flag is what separates "the value
+            // changed" from "the player has finished choosing it".
+            if (!letterWidthUnsaved || Input.GetMouseButton(0))
+                return;
+
+            letterWidthUnsaved = false;
+            settings.Save();
+        }
+
+        /// <summary>Whether the row width has been dragged to somewhere that is not on disk yet.</summary>
+        private static bool letterWidthUnsaved;
 
         /// <summary>
         /// A heading inside a section, for the two halves of the widget list.

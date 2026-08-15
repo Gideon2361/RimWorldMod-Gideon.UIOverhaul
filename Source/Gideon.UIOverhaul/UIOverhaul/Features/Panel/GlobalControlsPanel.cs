@@ -166,6 +166,12 @@ namespace Gideon.UIOverhaul.Features.Panel
 
             y -= LetterGap;
 
+            // Where this corner ended, which is the anchor for anything docked at the bottom right. Reported
+            // here as well as from the letter stack's own replacement, because that one does not run when the
+            // player has asked for vanilla letters -- and the alerts column still needs to know where the
+            // readouts stopped.
+            NotificationLayout.Notify_CornerTop(y);
+
             // The corner's last act in vanilla too. Everything above sets where the letters begin, which is why
             // hiding rows moves them down the screen.
             Find.LetterStack.LettersOnGUI(y);

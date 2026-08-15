@@ -86,7 +86,11 @@ namespace Gideon.UIOverhaul.Features.Notifications
         internal static bool Available => StartingTime != null && Live != null;
 
         /// <summary>
-        /// Draws every live message as a card, bottom-up from vanilla's anchor.
+        /// Draws every live message as a card, stacked away from whichever corner it is docked at.
+        ///
+        /// <b>Each card is placed individually rather than in a column of one width,</b> because these are sized
+        /// to their own text. At a left dock that means a ragged right edge, which is what vanilla's bare text
+        /// gives too; at a right dock every card is aligned to the screen edge and the ragged edge is on the left.
         /// </summary>
         internal static void Draw()
         {
@@ -94,13 +98,19 @@ namespace Gideon.UIOverhaul.Features.Notifications
 
             Text.Font = GameFont.Small;
 
-            float x = Messages.MessagesTopLeftStandard.x;
-            float y = Messages.MessagesTopLeftStandard.y;
+            NotificationDock dock = NotificationLayout.DockOf(NotificationSurface.Messages);
+            bool up = NotificationLayout.GrowsUp(dock);
 
-            // The tutorial pushes messages down to keep its own panel clear. Read the same way vanilla reads it, so
-            // a restyled message does not sit under the lesson box.
-            if (Current.Game != null && Find.ActiveLesson.ActiveLessonVisible)
-                y += Find.ActiveLesson.Current.MessagesYOffset;
+            float cursor = NotificationLayout.Anchor(NotificationSurface.Messages, dock);
+
+            // The tutorial pushes messages down to keep its own panel clear. Read the same way vanilla reads it,
+            // so a restyled message does not sit under the lesson box. Only meaningful at a top dock -- the panel
+            // it is avoiding is at the top of the screen, and pushing a bottom docked stack further down would
+            // move it toward the edge it is already anchored to.
+            if (!up && Current.Game != null && Find.ActiveLesson.ActiveLessonVisible)
+                cursor += Find.ActiveLesson.Current.MessagesYOffset;
+
+            float used = 0f;
 
             // Newest first, matching vanilla: it walks the list backwards, so the most recent message is the one
             // nearest the anchor and older ones move away from it.
@@ -112,7 +122,16 @@ namespace Gideon.UIOverhaul.Features.Notifications
                     continue;
 
                 float height = Card.HeightFor(1);
-                Rect card = new Rect(x, y, WidthFor(message), height);
+                float width = WidthFor(message);
+                float x = NotificationLayout.ColumnX(dock, width);
+
+                if (up)
+                    cursor -= height;
+
+                Rect card = new Rect(x, cursor, width, height);
+
+                cursor += up ? -CardGap : height + CardGap;
+                used += height + CardGap;
 
                 // Kept current for CollidesWithAnyMessage, which other UI uses to avoid overlapping the messages.
                 // Assigned before drawing rather than after, so a message that throws while drawing has still
@@ -120,9 +139,9 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 message.lastDrawRect = card;
 
                 DrawOne(message, card);
-
-                y += height + CardGap;
             }
+
+            NotificationLayout.Report(NotificationSurface.Messages, dock, Mathf.Max(0f, used - CardGap));
         }
 
         private static float WidthFor(Message message)
@@ -266,7 +285,7 @@ namespace Gideon.UIOverhaul.Features.Notifications
 
         public static bool Prefix()
         {
-            if (!MessageCards.Available)
+            if (!MessageCards.Available || !NotificationSettings.Restyle(NotificationSurface.Messages))
                 return true;
 
             return UIGuard.Replaced("Notifications.Messages", MessageCards.Draw,
