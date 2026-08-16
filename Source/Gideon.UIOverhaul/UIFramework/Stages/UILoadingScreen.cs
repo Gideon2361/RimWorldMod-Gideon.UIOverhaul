@@ -114,8 +114,22 @@ namespace Gideon.UIFramework.Stages
             new Milestone("Generate implied Defs (post-resolve).", "Generating definitions", 0.95f),
             new Milestone("Other def binding, resetting and global operations (post-resolve).", "Finalizing game data", 0.96f),
             new Milestone("Error check all defs.", "Checking definitions", 0.97f),
-            new Milestone("Load keyboard preferences.", "Loading preferences", 0.99f),
-            new Milestone("Short hash giving.", "Assigning hashes", 0.995f)
+            new Milestone("Load keyboard preferences.", "Loading preferences", 0.925f),
+            new Milestone("Short hash giving.", "Assigning hashes", 0.93f),
+
+            // <b>The tail, which used to be one word.</b> Everything past hash giving had no milestone, so it all
+            // fell through to the "Finishing up" label at 0.998 -- and on a modded install that stretch is a
+            // large share of the whole load, spent entirely under a single unchanging word. These are the steps
+            // PlayDataLoader actually runs after the hashes, in order, each named for what it is doing.
+            //
+            // They are also given real room on the bar. The fractions here are positions in the sequence rather
+            // than shares of the time, and no fixed set could be both, but leaving the slowest part of a modded
+            // load inside half a percent of the bar is what made it look stalled rather than slow.
+            new Milestone("Load all bios", "Loading biographies", 0.94f),
+            new Milestone("Inject selected language data into game data.", "Applying translations", 0.95f),
+            new Milestone("Static constructor calls", "Running mod startup code", 0.96f),
+            new Milestone("Atlas baking.", "Loading textures", 0.99f),
+            new Milestone("Garbage Collection", "Reclaiming memory", 0.997f)
         };
 
         private static Dictionary<string, int> milestoneIndex;
@@ -291,10 +305,29 @@ namespace Gideon.UIFramework.Stages
 
                     // The unrecognized labels are the interesting half of the log: this is where the mod names,
                     // the node counts and anything a future RimWorld adds come through. The bar cannot use them
-                    // and a reader can.
-                    UILoadingLog.Record(UILoadingLogKind.Step, label);
+                    // and a reader can -- with one exception, below.
+                    if (!IsMethodTrace(label))
+                        UILoadingLog.Record(UILoadingLogKind.Step, label);
                 }
             }
+        }
+
+        /// <summary>
+        /// Whether a profiler label is a method signature rather than something a person wrote.
+        ///
+        /// <b>These are the one kind of label worth throwing away.</b> The resolver phases profile per def per
+        /// resolver, and each one reports itself in <c>DeepProfiler</c>'s "declaring type -> method" form -- so a
+        /// modded install produces tens of thousands of lines reading
+        /// <c>Verse.ThingDef -> Void &lt;PostLoad&gt;b__398_0()</c> and nothing else. They name a compiler
+        /// generated lambda, so they do not say which def was being processed or what it did; they are the same
+        /// string repeated until it buries every label around it that means something.
+        ///
+        /// The arrow is what identifies them, and it is safe to key on: it is punctuation <c>DeepProfiler</c>
+        /// inserts between a type and a method, and nothing that names a mod, a count or a phase contains it.
+        /// </summary>
+        private static bool IsMethodTrace(string label)
+        {
+            return label != null && label.IndexOf(" -> ", System.StringComparison.Ordinal) >= 0;
         }
 
         /// <summary>A phase ended. Called from the DeepProfiler.End hook.</summary>

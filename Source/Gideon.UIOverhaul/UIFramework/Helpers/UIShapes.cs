@@ -59,6 +59,32 @@ namespace Gideon.UIFramework.Helpers
         /// </summary>
         internal static readonly Texture2D Stripes;
 
+        /// <summary>
+        /// The corner radius every rounded surface in this mod uses, in pixels at 1x UI scale.
+        ///
+        /// One number rather than a per-control choice. A window at one radius and a button at another do not
+        /// read as two deliberate decisions, they read as a mistake -- and the whole reason this is shared is so
+        /// a change here moves the window frame, the buttons, the dropdowns and the checkboxes together.
+        ///
+        /// <b>Not everything rounds.</b> The main button bar along the bottom stays square: its tabs sit in a
+        /// continuous strip under an accent rule, and a curve there pulls each tab away from the rule above it
+        /// and leaves a visible arc between them. See the rounding switch on
+        /// <see cref="UIElementPainter.PaintButton"/>.
+        /// </summary>
+        internal const int CornerRadius = 4;
+
+        /// <summary>
+        /// A white rounded rectangle, built to be drawn through <c>Widgets.DrawAtlas</c>.
+        ///
+        /// <b>Sized for vanilla's own nine-slice rule, and the size is load bearing.</b> <c>DrawAtlas</c> takes
+        /// the corner as <c>atlas.width * 0.25f</c>, so this texture must be exactly four radii across -- its
+        /// dimensions are the radius. Reusing that method rather than slicing by hand also means the rounding
+        /// lands on the same pixel grid as everything else the game draws, including under UI scaling.
+        ///
+        /// Tint it with <c>GUI.color</c>: the texture is white and carries its shape in the alpha.
+        /// </summary>
+        internal static readonly Texture2D RoundedRect;
+
         /// <summary>Side of the stripe tile in pixels, which is also the distance it repeats over.</summary>
         internal const float StripePitch = 32f;
 
@@ -82,12 +108,80 @@ namespace Gideon.UIFramework.Helpers
                 Disc = BuildDisc(false);
                 DiscCutout = BuildDisc(true);
                 Stripes = BuildStripes();
+                RoundedRect = BuildRoundedRect();
             }
             catch (Exception ex)
             {
                 UIGuard.Report("Framework.BuildShapes", ex,
                     "Rounded corners, circles and the striped fill are drawn as plain rectangles.");
             }
+        }
+
+        /// <summary>
+        /// The rounded rectangle atlas.
+        ///
+        /// <b>Exactly four radii across, and that is not a detail to tune.</b> <c>Widgets.DrawAtlas</c> takes the
+        /// corner size from <c>atlas.width * 0.25f</c> -- the texture's pixel width, with no reference to what
+        /// the author intended. So the texture's size <i>is</i> the radius, and authoring it larger for a
+        /// smoother curve silently multiplies the rounding by the same factor.
+        ///
+        /// That is exactly what went wrong the first time: built at eight times scale for a nicer edge, it drew
+        /// a thirty-two pixel radius instead of four. Every button became a capsule, and worse, the radius then
+        /// clamped to half the control's height -- which collapses the nine-slice's middle band to nothing and
+        /// leaves the top and bottom corner rows meeting in a visible seam across the control.
+        ///
+        /// <b>Smoothness comes from supersampled coverage instead.</b> Each pixel's alpha is the fraction of it
+        /// actually inside the shape, measured over a grid of subsamples, so a four pixel curve is as clean as
+        /// the format allows without the texture being any bigger than the radius it encodes.
+        ///
+        /// Only the corners are shaped: the edges and the middle stay solid, which is what lets the nine-slice
+        /// stretch it to any size without distorting the curve.
+        /// </summary>
+        private static Texture2D BuildRoundedRect()
+        {
+            // DrawAtlas reads the corner as a quarter of the width, so this is the radius and nothing else.
+            const int size = CornerRadius * 4;
+            const float radius = CornerRadius;
+
+            // Subsamples per axis when measuring how much of a pixel is inside the shape.
+            const int samples = 8;
+
+            Texture2D texture = new Texture2D(size, size, TextureFormat.ARGB32, false)
+            {
+                name = "Gideon.Shape.RoundedRect",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp
+            };
+
+            Color[] pixels = new Color[size * size];
+
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                int inside = 0;
+
+                for (int sy = 0; sy < samples; sy++)
+                for (int sx = 0; sx < samples; sx++)
+                {
+                    float px = x + (sx + 0.5f) / samples;
+                    float py = y + (sy + 0.5f) / samples;
+
+                    // How far past the corner's centre this sample sits, on each axis independently. Zero
+                    // anywhere along an edge or in the middle, which is what leaves those regions solid.
+                    float dx = Mathf.Max(0f, Mathf.Max(radius - px, px - (size - radius)));
+                    float dy = Mathf.Max(0f, Mathf.Max(radius - py, py - (size - radius)));
+
+                    if (dx * dx + dy * dy <= radius * radius)
+                        inside++;
+                }
+
+                pixels[y * size + x] = new Color(1f, 1f, 1f, inside / (float) (samples * samples));
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply();
+
+            return texture;
         }
 
         /// <param name="inverted">

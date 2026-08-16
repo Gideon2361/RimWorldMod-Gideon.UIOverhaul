@@ -119,7 +119,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 
             // Borderless, like the bar's tab buttons: four of these abut, and each one's outline would
             // double against its neighbor's into a heavy grid.
-            UIElementPainter.PaintButton(button, palette, over, held, false);
+            UIElementPainter.PaintButton(button, palette, over, held, false, false);
 
             if (isActive)
             {

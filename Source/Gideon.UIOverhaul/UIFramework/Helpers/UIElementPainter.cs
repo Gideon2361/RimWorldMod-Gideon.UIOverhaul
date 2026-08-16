@@ -30,6 +30,107 @@ namespace Gideon.UIFramework.Helpers
         internal static bool Failed { get; private set; }
 
         /// <summary>
+        /// A filled rounded rectangle, at the shared corner radius.
+        ///
+        /// <b>The one place rounding is drawn, so every surface that has it agrees.</b> Windows, buttons,
+        /// checkboxes and the toggle track all call this; a square-cornered checkbox on a rounded window is the
+        /// kind of inconsistency nobody can name but everybody sees.
+        ///
+        /// Falls back to a square fill if the shape could not be built, which is what <see cref="UIShapes"/>
+        /// promises when its static constructor fails. Square corners are a cosmetic loss; drawing nothing would
+        /// be an invisible control.
+        /// </summary>
+        /// <summary>
+        /// Text the player can select and copy from, drawn in a color we choose.
+        ///
+        /// <b><c>GUI.color</c> does not survive a text field, which is what this exists for.</b>
+        /// <c>Widgets.TextArea</c> draws through <c>GUI.TextArea</c> with a <c>GUIStyle</c>, and a style carries
+        /// its own <c>textColor</c> for each state it can be in: normal, hover, active, focused, and the "on"
+        /// variants. Unity paints with the state's color, so the moment the field takes focus -- which is to say
+        /// the moment the player clicks it to select anything -- the text switched to the style's focused color
+        /// and went black on our dark panel.
+        ///
+        /// So the color is set on every state of the style instead, and <c>GUI.color</c> is held at white so the
+        /// two do not multiply into something darker again.
+        ///
+        /// <b>The style is copied from whatever vanilla is currently using rather than built from nothing,</b>
+        /// so it keeps the font, padding and background of the real one, and follows <c>Text.Font</c> changing
+        /// underneath it. It is rebuilt only when the font actually moves, because this draws every frame.
+        /// </summary>
+        internal static void SelectableText(Rect rect, string text, Color color)
+        {
+            GUIStyle basis = Text.CurTextAreaReadOnlyStyle;
+
+            if (selectableText == null
+                || selectableText.font != basis.font
+                || selectableText.fontSize != basis.fontSize)
+            {
+                selectableText = new GUIStyle(basis);
+            }
+
+            Paint(selectableText.normal, color);
+            Paint(selectableText.onNormal, color);
+            Paint(selectableText.hover, color);
+            Paint(selectableText.onHover, color);
+            Paint(selectableText.active, color);
+            Paint(selectableText.onActive, color);
+            Paint(selectableText.focused, color);
+            Paint(selectableText.onFocused, color);
+
+            Color previous = GUI.color;
+            GUI.color = Color.white;
+
+            try
+            {
+                GUI.TextArea(rect, text ?? string.Empty, selectableText);
+            }
+            finally
+            {
+                GUI.color = previous;
+            }
+        }
+
+        private static GUIStyle selectableText;
+
+        private static void Paint(GUIStyleState state, Color color)
+        {
+            if (state != null)
+                state.textColor = color;
+        }
+
+        internal static void FillRounded(Rect rect, Color color)
+        {
+            if (UIShapes.RoundedRect == null)
+            {
+                Widgets.DrawBoxSolid(rect, color);
+
+                return;
+            }
+
+            Color previous = GUI.color;
+            GUI.color = color;
+
+            Widgets.DrawAtlas(rect, UIShapes.RoundedRect);
+
+            GUI.color = previous;
+        }
+
+        /// <summary>
+        /// A rounded outline, drawn as a filled rounded rect with a smaller one punched out of it in the color
+        /// behind.
+        ///
+        /// IMGUI has no rounded stroke and no way to mask, so an outline is two fills -- the same trick
+        /// <see cref="UIShapes.DiscCutout"/> exists for. The caller supplies what is behind because only the
+        /// caller knows: a border around a button sits on the button's own fill, one around a window sits on
+        /// whatever the window is over.
+        /// </summary>
+        internal static void OutlineRounded(Rect rect, Color color, Color inside, float thickness = 1f)
+        {
+            FillRounded(rect, color);
+            FillRounded(rect.ContractedBy(thickness), inside);
+        }
+
+        /// <summary>
         /// Runs <paramref name="paint"/>, reporting once and disabling all of our element painting if it
         /// throws. Returns what a Harmony prefix should return: false when we painted, true to let the
         /// original method run.
@@ -71,8 +172,16 @@ namespace Gideon.UIFramework.Helpers
         /// a grid of boxes instead of as one bar. The main button bar separates its buttons with a gap and
         /// an accent rule instead.
         /// </param>
+        /// <param name="rounded">
+        /// False keeps square corners.
+        ///
+        /// <b>For the main button bar, and it is not a taste preference.</b> Those tabs sit edge to edge in a
+        /// strip with an accent rule drawn along the top of the active one. Rounding a tab pulls its corners away
+        /// from that rule and from its neighbours, leaving a lit arc floating above the tab -- which is exactly
+        /// what it looked like. A strip of abutting controls has no corners to round; only the strip does.
+        /// </param>
         internal static void PaintButton(Rect rect, UIColorPaletteDef palette, bool over, bool held,
-            bool border = true)
+            bool border = true, bool rounded = true)
         {
             Color previous = GUI.color;
 
@@ -92,14 +201,30 @@ namespace Gideon.UIFramework.Helpers
                 return;
             }
 
-            Widgets.DrawBoxSolid(rect, palette.SurfaceRaised);
-            PaintStateWash(rect, palette, over, held);
-
-            if (border)
+            if (!rounded)
             {
-                GUI.color = over ? palette.BorderFocused : palette.Border;
-                Widgets.DrawBox(rect, 1);
+                Widgets.DrawBoxSolid(rect, palette.SurfaceRaised);
+                PaintStateWash(rect, palette, over, held, false);
+
+                if (border)
+                {
+                    GUI.color = over ? palette.BorderFocused : palette.Border;
+                    Widgets.DrawBox(rect, 1);
+                }
+
+                GUI.color = previous;
+
+                return;
             }
+
+            // The border is drawn as a rounded outline rather than with DrawBox, which only knows how to draw
+            // square corners and would leave four hard ticks poking past the curve.
+            if (border)
+                OutlineRounded(rect, over ? palette.BorderFocused : palette.Border, palette.SurfaceRaised);
+            else
+                FillRounded(rect, palette.SurfaceRaised);
+
+            PaintStateWash(rect, palette, over, held);
 
             GUI.color = previous;
         }
@@ -109,12 +234,21 @@ namespace Gideon.UIFramework.Helpers
         /// value: washes over whatever is beneath, not replacements for it. The palette decides how
         /// strong its own feedback is.
         /// </summary>
-        private static void PaintStateWash(Rect rect, UIColorPaletteDef palette, bool over, bool held)
+        private static void PaintStateWash(Rect rect, UIColorPaletteDef palette, bool over, bool held,
+            bool rounded = true)
         {
-            if (held)
-                Widgets.DrawBoxSolid(rect, palette.PressedOverlay);
-            else if (over)
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
+            Color wash = held ? palette.PressedOverlay : over ? palette.HoverOverlay : default(Color);
+
+            if (!held && !over)
+                return;
+
+            // Shaped to match the fill underneath. A square wash over a rounded button paints its own corners
+            // back on, which looks worse than no wash at all; a rounded wash over a square one leaves four
+            // unlit notches, which is the fault that showed up on the tab bar.
+            if (rounded)
+                FillRounded(rect, wash);
+            else
+                Widgets.DrawBoxSolid(rect, wash);
         }
 
         /// <summary>
@@ -180,12 +314,11 @@ namespace Gideon.UIFramework.Helpers
 
             Color track = TrackColor(state, palette, disabled);
 
-            Widgets.DrawBoxSolid(frame, track * ambient);
+            // Rounded, at the shared radius. On a track this short the radius clamps to half its height, so it
+            // comes out very close to a capsule -- which is what a switch should look like anyway, and it means
+            // the switch, the buttons and the window it sits in are all rounded by the same rule.
+            OutlineRounded(frame, BorderColor(state, track, palette, disabled) * ambient, track * ambient);
 
-            // DrawBox honors GUI.color, unlike DrawBoxSolid which resets it to white -- hence the assignment
-            // here and the restore after, rather than one color set up front.
-            GUI.color = BorderColor(state, track, palette, disabled) * ambient;
-            Widgets.DrawBox(frame, 1);
             GUI.color = previous;
 
             // A pixel of track shows all the way around the knob, which is what stops it reading as a block
@@ -213,7 +346,9 @@ namespace Gideon.UIFramework.Helpers
 
             Rect knob = new Rect(knobX, interior.center.y - knobSize * 0.5f, knobSize, knobSize);
 
-            Widgets.DrawBoxSolid(knob, KnobColor(state, palette, disabled) * ambient);
+            // The knob is square, so the shared radius clamps to half its size and it comes out a disc. That is
+            // the right answer for a switch and it costs no special case.
+            FillRounded(knob, KnobColor(state, palette, disabled) * ambient);
 
             GUI.color = previous;
         }
