@@ -54,6 +54,19 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public bool showLoadingConsole;
 
+        /// <summary>
+        /// Whether the developer palette runs irreversible actions without asking first.
+        ///
+        /// <b>Off by default, which means the confirmation is on.</b> Vanilla asks nothing at all: "Destroy all
+        /// things" is one click away from "Set weather" and looks identical. That is a reasonable default for a
+        /// menu only developers see and a poor one for the moment somebody is tired and reading quickly, so the
+        /// confirmation is the default here and this is the way out of it.
+        ///
+        /// Reachable from the confirmation itself, through its "Always allow" button, because the person who
+        /// wants this switched off is by definition looking at a dialog they did not want.
+        /// </summary>
+        public bool skipDevActionConfirm;
+
 
         /// <summary>
         /// Whether to force fullscreen at the display's native resolution on every launch.
@@ -380,6 +393,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showLoadingConsole = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Absent means off, which here means confirmations stay on. A settings file written
+                        // before this existed therefore keeps the safe behavior rather than inheriting vanilla's.
+                        case "skipDevActionConfirm":
+                            settings.skipDevActionConfirm = value.EqualsIgnoreCase("true");
+                            break;
+
 
                         case "fullscreenOnStartup":
                             settings.fullscreenOnStartup = value.EqualsIgnoreCase("true");
@@ -564,6 +583,8 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("activePalette", activePalette ?? "");
                     writer.WriteElementString("debugLogging", debugLogging ? "true" : "false");
                     writer.WriteElementString("showLoadingConsole", showLoadingConsole ? "true" : "false");
+                    writer.WriteElementString("skipDevActionConfirm",
+                        skipDevActionConfirm ? "true" : "false");
                     writer.WriteElementString("fullscreenOnStartup",
                         fullscreenOnStartup ? "true" : "false");
                     writer.WriteElementString("timeFormat", timeFormat.ToString());

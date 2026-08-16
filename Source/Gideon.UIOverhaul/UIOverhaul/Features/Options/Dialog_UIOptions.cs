@@ -7,6 +7,7 @@ using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.DevTools;
 using Gideon.UIOverhaul.Features.Diagnostics;
 using Gideon.UIOverhaul.Features.Integrations;
 using Gideon.UIOverhaul.Features.Notifications;
@@ -1987,6 +1988,36 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "your game; they open a window and show you something.");
             y += 44f;
             GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Developer palette");
+
+            if (SmallButton(new Rect(Indent, y, 200f, RowHeight), "Open developer palette", palette))
+            {
+                UIGuard.Try("Options.OpenDevPalette",
+                    () => Find.WindowStack.Add(new Dialog_DevPalette()),
+                    "The developer palette could not be opened.");
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 72f),
+                "Every developer action in the game, searchable in one place. The game's own menu filters only "
+                + "the tab you are standing in, so finding an action means knowing which of nine tabs owns it "
+                + "first.\n\nThis also replaces that menu when dev mode's own button is used.");
+            y += 76f;
+            GUI.color = palette.TextPrimary;
+
+            WidgetToggle(view, ref y, palette, settings, Indent,
+                "Skip confirmation on irreversible actions", settings.skipDevActionConfirm,
+                value => settings.skipDevActionConfirm = value,
+                "The palette marks actions that read as irreversible, such as destroying everything on the map, "
+                + "and asks before running one.\n\nTurn this on to run them immediately, the way the game's own "
+                + "menu does. The confirmation also offers an Always allow button, which turns this on.");
+
+            y += 6f;
 
             GroupLabel(view, ref y, palette, "XML Workbench");
 

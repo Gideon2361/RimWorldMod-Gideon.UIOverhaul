@@ -60,6 +60,13 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
             if (capturing)
                 return;
 
+            // A postfix still runs when a prefix has skipped the original, so this has to test for a replay
+            // itself rather than rely on the line never being written. Without it, running the bug hunt at the
+            // main menu would file every re-raised parse error into the loading console as though the load had
+            // just produced it. See UILogReplay.
+            if (UILogReplay.Active)
+                return;
+
             try
             {
                 capturing = true;

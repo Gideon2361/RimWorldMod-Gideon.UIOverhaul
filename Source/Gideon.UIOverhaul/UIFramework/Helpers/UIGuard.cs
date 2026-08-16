@@ -316,14 +316,12 @@ namespace Gideon.UIFramework.Helpers
                 text.Append(" This has now happened ").Append(failures).Append(" times; the next report is at ")
                     .Append(failures * 10).Append(".");
 
-            // Deliberately does not claim the fault is ours. The site is where the exception was caught, and a guard
-            // wraps calls into vanilla and into whatever has patched it, so the throw may well have come from another
-            // mod's code reached through ours. Asserting otherwise sent readers looking in the wrong place, and it
-            // also promised that nothing else was affected, which containment does not establish either.
-            text.Append("\nThe site above is where this was caught, which is not necessarily where it came from: the "
-                        + "throw may be in this mod's own code, or in vanilla or another mod's code called from "
-                        + "inside it. Whatever was in progress at that point did not finish.");
-
+            // <b>No standing explanation of what a caught exception means.</b> There used to be a paragraph here
+            // saying the site is where the fault was caught rather than where it came from. It was accurate in
+            // the abstract and useless in practice: it said the same thing on every report, it made a claim
+            // about the unfinished work that is not always true, and it pushed the exception and its stack a
+            // screen further down. What diagnoses a fault is the site, the consequence, the context and the
+            // exception itself, all of which are below.
             if (!consequence.NullOrEmpty())
                 text.Append("\nEffect: ").Append(consequence);
 

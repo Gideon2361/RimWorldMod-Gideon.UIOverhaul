@@ -54,6 +54,18 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
 
         private static long fastMilliseconds;
 
+        /// <summary>
+        /// Every callback in the drain, itemized or not.
+        ///
+        /// Kept so the closing line can state what the whole drain cost, which is the figure that can be checked
+        /// against the phase around it. A subtotal larger than the phase it happened inside is how the
+        /// double-counting from re-entrant wrapping was noticed at all, and that is only visible if the subtotal
+        /// is reported.
+        /// </summary>
+        private static int total;
+
+        private static long totalMilliseconds;
+
         /// <summary>Wraps one callback so it reports itself when it runs.</summary>
         internal static Action Wrap(Action action)
         {
@@ -85,24 +97,28 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
                 {
                     watch.Stop();
 
-                    // <b>Only a mod's callback earns a line.</b> A great many of these belong to RimWorld
-                    // itself and are compiler generated lambdas -- BuildableDef.&lt;PostLoad&gt;b__78_0 and its
-                    // kind -- which name nothing a reader can act on and, being numerous, push the handful of
-                    // mod rows that do matter off the screen. Their time is still counted in the summary below,
-                    // so the total stays honest; it simply is not itemized.
-                    bool worthListing = owner != null && watch.ElapsedMilliseconds >= SlowMs;
-
-                    if (worthListing)
+                    // <b>Anything slow earns a line, whoever owns it.</b> The first version listed only mod
+                    // callbacks, on the grounds that the game's own are numerous and compiler generated. That
+                    // was the wrong cut: it was the flood of fast ones that made them unreadable, and hiding
+                    // the slow ones as well meant a single ten second callback belonging to the base game was
+                    // indistinguishable from a long tail of trivial ones. The threshold sorts that out on its
+                    // own; ownership only decides what the row is called.
+                    if (watch.ElapsedMilliseconds >= SlowMs)
                     {
+                        string label = owner ?? "RimWorld";
+
                         UIGuard.Try("Stages.DeferredWork.Record",
-                            () => UILoadingLog.Record(UILoadingLogKind.Step,
-                                owner + " took " + Duration(watch.ElapsedMilliseconds)), null);
+                            () => UILoadingLog.Record(UILoadingLogKind.Step, label, null,
+                                watch.ElapsedMilliseconds / 1000f), null);
                     }
                     else
                     {
                         fastCount++;
                         fastMilliseconds += watch.ElapsedMilliseconds;
                     }
+
+                    total++;
+                    totalMilliseconds += watch.ElapsedMilliseconds;
                 }
             };
         }
@@ -115,19 +131,35 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         /// </summary>
         internal static void Summarize()
         {
-            if (fastCount <= 0)
+            if (total <= 0)
                 return;
 
-            int count = fastCount;
-            long total = fastMilliseconds;
+            int fast = fastCount;
+            long fastMs = fastMilliseconds;
+            int all = total;
+            long allMs = totalMilliseconds;
 
             fastCount = 0;
             fastMilliseconds = 0;
+            total = 0;
+            totalMilliseconds = 0;
 
-            UIGuard.Try("Stages.DeferredWork.Summarize",
-                () => UILoadingLog.Record(UILoadingLogKind.Step,
-                    count + " further callbacks not itemized (fast ones, and the game's own), totalling "
-                    + Duration(total)), null);
+            // The measured figures are handed over rather than left to the log, which would otherwise time these
+            // lines by how long they stayed on screen -- under a second, beside text describing a minute of work.
+            UIGuard.Try("Stages.DeferredWork.Summarize", () =>
+            {
+                if (fast > 0)
+                {
+                    UILoadingLog.Record(UILoadingLogKind.Step,
+                        fast + " callbacks under " + SlowMs + "ms, not itemized", null, fastMs / 1000f);
+                }
+
+                // Stated even when everything was itemized, because this is the number that can be checked
+                // against the phase it sits in. If it ever exceeds that phase again, something is being counted
+                // twice and the console will show it rather than hide it.
+                UILoadingLog.Record(UILoadingLogKind.Step,
+                    all + " deferred callbacks in total", null, allMs / 1000f);
+            }, null);
         }
 
         private static string Duration(long milliseconds)
@@ -247,6 +279,11 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         // null. The name overload returns a ref, which cannot be checked before it is used.
         private static readonly AccessTools.FieldRef<List<Action>> Queue = BuildAccessor();
 
+        /// <summary>
+        /// Vanilla's own re-entrancy flag, which is the difference between wrapping once and wrapping twice.
+        /// </summary>
+        private static readonly AccessTools.FieldRef<bool> Draining = BuildDrainingAccessor();
+
         private static AccessTools.FieldRef<List<Action>> BuildAccessor()
         {
             FieldInfo field = AccessTools.Field(typeof(LongEventHandler), "toExecuteWhenFinished");
@@ -254,9 +291,28 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
             return field == null ? null : AccessTools.StaticFieldRefAccess<List<Action>>(field);
         }
 
+        private static AccessTools.FieldRef<bool> BuildDrainingAccessor()
+        {
+            FieldInfo field = AccessTools.Field(typeof(LongEventHandler), "executingToExecuteWhenFinished");
+
+            return field == null ? null : AccessTools.StaticFieldRefAccess<bool>(field);
+        }
+
+        /// <summary>Whether a drain is already under way, so this call is a re-entrant one.</summary>
+        internal static bool IsDraining => Draining != null && Draining();
+
         public static void Prefix()
         {
             if (Queue == null || !UILoadingLog.Active)
+                return;
+
+            // <b>Nothing is wrapped during a drain, and this is a correctness fix rather than an optimization.</b>
+            // A callback is free to call ExecuteWhenFinished itself, and that can call straight back into this
+            // method. Vanilla notices the re-entry and returns immediately -- but a prefix runs before that
+            // check, so the earlier version re-wrapped every entry still queued, wrappers included. Those
+            // entries then reported their time once per layer of wrapping, which is how the deferred total came
+            // to exceed the phase it happened inside.
+            if (IsDraining)
                 return;
 
             UIGuard.Try("Stages.DeferredWork.WrapQueue", () =>
@@ -293,6 +349,12 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     {
         public static void Postfix()
         {
+            // Only the outermost drain summarizes. Vanilla clears its flag as the real drain ends, so a flag
+            // still set here means this was a re-entrant call that did no work; summarizing on it would emit a
+            // line mid-drain and zero the counters the outer drain is still filling.
+            if (Patch_ExecuteToExecuteWhenFinished_Wrap.IsDraining)
+                return;
+
             if (UILoadingLog.Active)
                 DeferredWork.Summarize();
         }

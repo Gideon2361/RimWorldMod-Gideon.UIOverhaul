@@ -49,6 +49,17 @@ namespace Gideon.UIFramework.Stages
         /// <summary>How long this line stayed current before the next one replaced it.</summary>
         public float Duration;
 
+        /// <summary>
+        /// Whether <see cref="Duration"/> was given by the caller rather than measured from the next line.
+        ///
+        /// <b>Some lines describe work that did not happen while they were on screen.</b> A line summarizing
+        /// thirty thousand callbacks is written once they have all run, so measuring how long it stayed current
+        /// gives the gap until the next line -- under a second -- while the text beside it says forty-eight.
+        /// The two numbers disagreed because they were measuring different things, and only one of them was the
+        /// one worth reading.
+        /// </summary>
+        public bool DurationFixed;
+
         /// <summary>How many times in a row this same line was reported. One for an ordinary line.</summary>
         public int Repeats;
 
@@ -196,7 +207,12 @@ namespace Gideon.UIFramework.Stages
         /// that reports the same label for every item it handles would otherwise bury everything around it, and
         /// "this happened 900 times" is the more useful reading of that anyway.
         /// </summary>
-        public static void Record(UILoadingLogKind kind, string text, string path = null)
+        /// <param name="measured">
+        /// How long the work this line describes actually took, when the caller knows and the log cannot. Leave
+        /// it out for an ordinary line, whose duration is the time until the next one.
+        /// </param>
+        public static void Record(UILoadingLogKind kind, string text, string path = null,
+            float measured = -1f)
         {
             if (text == null)
                 text = string.Empty;
@@ -218,15 +234,21 @@ namespace Gideon.UIFramework.Stages
                     if (last.Kind == kind && last.Text == text)
                     {
                         last.Repeats++;
-                        last.Duration = now - last.Seconds;
+
+                        if (!last.DurationFixed)
+                            last.Duration = now - last.Seconds;
+
                         entries[entries.Count - 1] = last;
 
                         return;
                     }
 
                     // Closed off now rather than when the load ends, so the last line of an abandoned load still
-                    // carries however long it ran for.
-                    last.Duration = now - last.Seconds;
+                    // carries however long it ran for. A line that came with its own figure keeps it: measuring
+                    // the gap to the next line would overwrite the only number that meant anything.
+                    if (!last.DurationFixed)
+                        last.Duration = now - last.Seconds;
+
                     entries[entries.Count - 1] = last;
                 }
 
@@ -243,7 +265,9 @@ namespace Gideon.UIFramework.Stages
                     Text = text,
                     Path = path,
                     Seconds = now,
-                    Repeats = 1
+                    Repeats = 1,
+                    Duration = measured >= 0f ? measured : 0f,
+                    DurationFixed = measured >= 0f
                 });
             }
         }

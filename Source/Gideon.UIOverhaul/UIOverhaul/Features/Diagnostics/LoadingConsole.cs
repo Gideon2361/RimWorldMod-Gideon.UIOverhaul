@@ -187,7 +187,11 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// <summary>Bumped on every fold, so the cached visible list knows it is stale.</summary>
         private static int collapsedVersion;
 
-        private static bool showTimings;
+        /// <summary>
+        /// On by default: where the time went is the question the console is usually opened to answer, and a
+        /// panel that has to be switched on first is one most readers never find.
+        /// </summary>
+        private static bool showTimings = true;
 
         /// <summary>Whether plain mentions are shown alongside declarations and patches.</summary>
         private static bool showReferences;
@@ -548,9 +552,28 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         {
             List<ConsoleRow> built = new List<ConsoleRow>(groups.Count * 4);
 
+            // <b>Measured on the merged totals, not on single occurrences.</b> The verdict and the bars used to
+            // take their scale from the largest individual run of a phase, while the timings panel showed the
+            // merged total -- so the same phase read 30.04s at the top of the panel and 39.02s down the side.
+            // Both figures were true and the panel was still telling the reader two different things.
+            CategorySpan longest = default(CategorySpan);
+
             foreach (PhaseGroup group in groups)
             {
                 string key = group.Name ?? string.Empty;
+
+                if (group.Duration > longest.Duration)
+                {
+                    longest = new CategorySpan
+                    {
+                        Key = key,
+                        Name = group.Name,
+                        Kind = group.Kind,
+                        Seconds = group.Seconds,
+                        Duration = group.Duration,
+                        Children = group.TotalChildren
+                    };
+                }
 
                 built.Add(new ConsoleRow
                 {
@@ -573,6 +596,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             }
 
             rows = built;
+            slowest = longest;
         }
 
         /// <summary>
@@ -581,9 +605,15 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// The timestamp is in it because a phase name repeats -- a second load runs the same phases -- and
         /// folding one occurrence should not fold the other.
         /// </summary>
+        /// <summary>
+        /// Joins the parts of a key. A control character, so it cannot occur in a phase name and accidentally
+        /// make two different headings share an identity.
+        /// </summary>
+        private const string KeySeparator = "\u0001";
+
         private static string KeyOf(UILoadingLogEntry entry)
         {
-            return (int) entry.Kind + "" + entry.Seconds.ToString("F3") + "" + entry.Text;
+            return (int) entry.Kind + KeySeparator + entry.Seconds.ToString("F3") + KeySeparator + entry.Text;
         }
 
         private static bool IsHeading(UILoadingLogEntry entry)
@@ -634,9 +664,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 });
             }
 
-            // Indexed and ranked in the same pass that closes the last span, so nothing walks this twice.
+            // Indexed here so a row can find its own span while drawing. Ranking happens after merging, in
+            // Flatten, since the figure worth ranking is a phase's total rather than its longest single run.
             Dictionary<string, CategorySpan> index = new Dictionary<string, CategorySpan>(spans.Count);
-            CategorySpan longest = default(CategorySpan);
 
             if (spans.Count > 0)
             {
@@ -651,16 +681,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             }
 
             foreach (CategorySpan span in spans)
-            {
                 index[span.Key] = span;
-
-                if (span.Duration > longest.Duration)
-                    longest = span;
-            }
 
             categories = spans;
             spanByKey = index;
-            slowest = longest;
         }
 
         private static bool PassesFilter(UILoadingLogEntry entry)
@@ -944,11 +968,14 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         {
             bool over = Mouse.IsOver(rect);
 
+            // Unselected sits on the panel surface with a border, not on ControlBackgroundFaded. That colour is
+            // the palette's word for "cannot be used", so a segmented control drawn in it reads as disabled
+            // rather than as the other half of a choice.
             if (chosen)
                 UIElementPainter.FillRounded(rect, palette.Accent);
             else
                 UIElementPainter.OutlineRounded(rect, palette.Border,
-                    over ? palette.SurfaceRaised : palette.ControlBackgroundFaded);
+                    over ? palette.SurfaceRaised : palette.PanelBackground);
 
             Color previousColor = GUI.color;
             GameFont previousFont = Text.Font;
@@ -958,8 +985,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             Text.Anchor = TextAnchor.MiddleCenter;
 
             // Dark text on the accent, because the accent is a light blue and light-on-light is the one
-            // combination this palette cannot carry.
-            GUI.color = chosen ? palette.WindowBackground : palette.TextSecondary;
+            // combination this palette cannot carry. Full strength text when unselected, since dimmed text is
+            // the other half of what makes a control look unavailable.
+            GUI.color = chosen ? palette.WindowBackground : palette.TextPrimary;
 
             // A tab counting something with nothing in it is drawn quiet rather than absent, so "no problems"
             // reads as an answer instead of a missing feature.
@@ -1027,9 +1055,14 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 GUI.color = previousColor;
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
-            }
 
-            Widgets.EndScrollView();
+                // <b>Inside the finally, with the state restoration.</b> A throw between Begin and End leaves
+                // Unity's clip and mouse-position stacks unbalanced, and the game then reports "more calls to
+                // BeginScrollView than EndScrollView" and repairs them -- but the damage lands on everything
+                // drawn afterwards, not only the panel that threw. One bad row must not be able to break the
+                // rest of the frame.
+                Widgets.EndScrollView();
+            }
 
             // Measured after the view, so it reflects wherever the wheel or the bar just left it. The tolerance
             // is a row, so landing a pixel short of the bottom still counts as being at it.
@@ -1094,19 +1127,30 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             if (problem)
             {
-                Rect tag = new Rect(x, rect.y + 2f, 38f, rect.height - 4f);
+                // <b>A chip, not a highlight.</b> The first version was a square fill of fixed width behind text
+                // set at the row's own size, which is indistinguishable from selecting the word. What makes a
+                // tag read as a tag is its outline and its fit: a rounded edge in the severity color, a tinted
+                // interior, and a box sized to the word rather than padded out to a constant.
+                string severityLabel = row.Kind == UILoadingLogKind.Error ? "ERROR" : "WARN";
                 Color severity = row.Kind == UILoadingLogKind.Error ? palette.Danger : palette.Warning;
-                Color badge = severity;
-                badge.a = 0.20f;
 
-                Widgets.DrawBoxSolid(tag, badge);
+                float tagWidth = Text.CalcSize(severityLabel).x + 14f;
 
-                GUI.color = severity;
+                Rect tag = new Rect(x, rect.y + 2f, tagWidth, Mathf.Max(11f, rect.height - 4f));
+
+                // <b>Filled solid, with the text near black.</b> The tinted version set the word in the same hue
+                // as the ground behind it, which at this size is barely legible and reads as smudged rather than
+                // labelled. A badge wants the strongest contrast available, and the panel already has this
+                // idiom: the selected filter tab is a solid accent fill with dark text. Reusing it means the two
+                // read as the same kind of object rather than as two designers' opinions.
+                UIElementPainter.FillRounded(tag, severity);
+
+                GUI.color = palette.WindowBackground;
                 Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(tag, row.Kind == UILoadingLogKind.Error ? "ERROR" : "WARN");
+                Widgets.Label(tag, severityLabel);
                 Text.Anchor = TextAnchor.MiddleLeft;
 
-                x += 42f;
+                x += tagWidth + 7f;
             }
 
             string label = row.Header ? row.Text : UILoadingLog.FirstLine(row.Text);
@@ -1183,213 +1227,6 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             if (!row.Entry.Path.NullOrEmpty())
                 tip += "\n\n" + row.Entry.Path;
-
-            TooltipHandler.TipRegion(rect, (TipSignal) tip);
-        }
-
-        private static void DrawRow(Rect rect, UILoadingLogEntry entry, UIColorPaletteDef palette)
-        {
-            bool chosen = selected.HasValue && selected.Value.Seconds == entry.Seconds
-                                            && selected.Value.Text == entry.Text;
-
-            // <b>The bar is the change that makes this panel readable.</b> Drawn first, behind everything, at a
-            // width proportional to the slowest phase. Without it a phase costing 141 seconds and one costing
-            // 127 milliseconds are the same row with different digits, and the reader has to compare numbers
-            // across thirty lines to find the one that matters.
-            CategorySpan span;
-
-            bool measured = IsHeading(entry) && spanByKey.TryGetValue(KeyOf(entry), out span)
-                                             && span.Duration > 0.01f;
-
-            // <b>Steps get a bar too, and that was the whole point.</b> The first version drew these only on
-            // headings, which meant the rows that actually name the culprit -- a single asset load costing
-            // fifty-five seconds -- were flat text identical to the hundreds of instant ones around them. Any
-            // row that cost measurable time earns a bar, whatever kind of row it is.
-            float measuredSeconds = measured && spanByKey.TryGetValue(KeyOf(entry), out span)
-                ? span.Duration
-                : entry.Duration;
-
-            if (measuredSeconds > 0.05f && entry.Kind != UILoadingLogKind.Def && !entry.IsProblem)
-            {
-                // One scale for the whole list, so a step and a phase of the same length draw the same width and
-                // the panel can be read straight down.
-                float scale = Mathf.Max(0.01f, slowest.Duration);
-                float width = Mathf.Clamp01(measuredSeconds / scale) * rect.width;
-
-                // Red once a row owns a serious share of the load, so the offender is found by color rather
-                // than by reading. The threshold is deliberately high: everything looks alarming otherwise.
-                Color fill = measuredSeconds >= slowest.Duration * 0.25f ? palette.Danger : palette.Accent;
-
-                fill.a = 0.18f;
-
-                // A minimum width, so a row worth a bar always shows one. Sub-pixel bars read as no bar, which
-                // is indistinguishable from "this took no time".
-                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, Mathf.Max(2f, width), rect.height), fill);
-            }
-
-            if (chosen)
-                Widgets.DrawBoxSolid(rect, palette.SelectionOverlay);
-            else if (Mouse.IsOver(rect))
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
-
-            Text.Anchor = TextAnchor.MiddleRight;
-            GUI.color = palette.TextDisabled;
-
-            Widgets.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height), entry.Seconds.ToString("F2"));
-
-            Text.Anchor = TextAnchor.MiddleLeft;
-
-            float indent = entry.Kind == UILoadingLogKind.Step || entry.Kind == UILoadingLogKind.Def
-                ? StepIndent
-                : 0f;
-
-            float x = rect.x + TimeColumn + 6f + indent;
-
-            // A heading gets a marker showing which way it is folded, and the marker is its own hit area: the
-            // rest of the row still opens the line in the detail pane, so folding never costs the ability to
-            // read the heading itself.
-            bool heading = IsHeading(entry);
-            Rect chevron = Rect.zero;
-
-            if (heading)
-            {
-                chevron = new Rect(x, rect.y, 14f, rect.height);
-                x += 16f;
-
-                // Vanilla's own tree twisties rather than typed characters. A "+" set in the body font sits on
-                // the text baseline and reads as punctuation in the label; these are drawn as an icon, centred
-                // in their own hit area, and match every other expandable tree in the game.
-                GUI.color = Mouse.IsOver(chevron) ? palette.TextPrimary : palette.TextSecondary;
-
-                Widgets.DrawTextureFitted(chevron.ContractedBy(2f),
-                    collapsed.Contains(KeyOf(entry)) ? TexButton.Reveal : TexButton.Collapse, 1f);
-            }
-            else if (indent > 0f)
-            {
-                // The rail: a hairline down the gutter of every indented row, so a phase and its contents read
-                // as one group rather than as a heading followed by unrelated lines.
-                GUI.color = palette.Border;
-                Widgets.DrawLineVertical(rect.x + TimeColumn + 10f, rect.y, rect.height);
-            }
-
-            // A severity tag, so an error keeps its place in the sequence and is still identifiable as one. The
-            // Problems filter answers "show me only these"; this answers "what was happening around it", which
-            // is the question a filtered list destroys.
-            if (entry.IsProblem)
-            {
-                Rect tag = new Rect(x, rect.y + 2f, 34f, rect.height - 4f);
-
-                Color severity = entry.Kind == UILoadingLogKind.Error ? palette.Danger : palette.Warning;
-                Color badge = severity;
-                badge.a = 0.18f;
-
-                Widgets.DrawBoxSolid(tag, badge);
-
-                GUI.color = severity;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(tag, entry.Kind == UILoadingLogKind.Error ? "ERR" : "WARN");
-                Text.Anchor = TextAnchor.MiddleLeft;
-
-                x += 38f;
-            }
-
-            GUI.color = ColorOf(entry, palette);
-
-            // Only the first line of a logged message. An error carries its whole stack trace, which is what
-            // makes it useful in the copied text and unusable in a row.
-            string label = entry.IsProblem ? UILoadingLog.FirstLine(entry.Text) : entry.Text;
-
-            if (entry.Repeats > 1)
-                label += "  x" + entry.Repeats;
-
-            // What a folded phase is hiding, as a pill rather than as text in the label. Drawn after the label
-            // width is known, below.
-            int hidden = heading && collapsed.Contains(KeyOf(entry))
-                                 && spanByKey.TryGetValue(KeyOf(entry), out span)
-                ? span.Children
-                : 0;
-
-            // The right-hand column carries whichever of the two matters for this kind of line: how long a phase
-            // took, or which file a definition came from. Neither is ever wanted at the same time as the other.
-            // A heading shows its measured span rather than the time it held the screen, which is the number the
-            // bar behind it is drawn from and the one the timings panel agrees with.
-            float shown = measuredSeconds;
-
-            bool slow = shown >= 0.25f && !entry.IsProblem && entry.Kind != UILoadingLogKind.Def;
-            bool hasPath = !entry.Path.NullOrEmpty();
-
-            // The path column gets a generous share now the panel is wide enough for one. A path is the longer of
-            // the two things on the row and the one that is useless truncated to a stub.
-            float rightWidth = slow ? 60f : hasPath ? Mathf.Min(420f, rect.width * 0.4f) : 0f;
-
-            float pill = hidden > 0 ? 20f + hidden.ToString().Length * 6f : 0f;
-
-            Widgets.LabelEllipses(new Rect(x, rect.y, Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f),
-                rect.height), label);
-
-            if (hidden > 0)
-            {
-                float labelWidth = Mathf.Min(Text.CalcSize(label).x,
-                    Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f));
-
-                Rect chip = new Rect(x + labelWidth + 6f, rect.y + 1f, pill, rect.height - 2f);
-
-                UIElementPainter.OutlineRounded(chip, palette.Border, palette.SurfaceSunken);
-
-                GUI.color = palette.TextSecondary;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(chip, hidden.ToString());
-                Text.Anchor = TextAnchor.MiddleLeft;
-            }
-
-            if (slow)
-            {
-                Text.Anchor = TextAnchor.MiddleRight;
-
-                // Anything over a second is worth pointing at rather than merely stating.
-                GUI.color = shown >= 10f ? palette.Danger : shown >= 1f ? palette.Warning : palette.TextDisabled;
-
-                Widgets.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
-                    UILoadingLog.Duration(shown));
-            }
-            else if (hasPath)
-            {
-                Text.Anchor = TextAnchor.MiddleRight;
-                GUI.color = palette.TextDisabled;
-
-                // The file name in the row and the full path on hover. A full path is two hundred characters and
-                // would leave no room for the definition it belongs to, which is the thing being looked up.
-                Widgets.LabelEllipses(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
-                    FileNameOf(entry.Path));
-            }
-
-            // The marker is tested first and swallows the click, so folding and selecting never both happen.
-            if (heading && Widgets.ButtonInvisible(chevron))
-            {
-                Fold(KeyOf(entry));
-                SoundDefOf.Click.PlayOneShotOnCamera();
-
-                return;
-            }
-
-            // Clicking opens the line in the detail pane; clicking the open one closes it again, so the list can
-            // be given its full height back without hunting for a close button.
-            if (Widgets.ButtonInvisible(rect))
-            {
-                selected = chosen ? (UILoadingLogEntry?) null : entry;
-                detailScroll = Vector2.zero;
-                SoundDefOf.Click.PlayOneShotOnCamera();
-            }
-
-            if (!Mouse.IsOver(rect))
-                return;
-
-            // A short tooltip only. The full text has a pane of its own now, and a tooltip carrying a whole stack
-            // trace covers the list it is describing.
-            string tip = entry.IsProblem ? "Click for the full message." : entry.Text;
-
-            if (hasPath)
-                tip += "\n\n" + entry.Path;
 
             TooltipHandler.TipRegion(rect, (TipSignal) tip);
         }
@@ -1479,12 +1316,18 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 Widgets.BeginScrollView(list, ref timingsScroll, view);
 
-                float longest = sorted.Count > 0 ? Mathf.Max(0.001f, sorted[0].Duration) : 1f;
+                try
+                {
+                    float longest = sorted.Count > 0 ? Mathf.Max(0.001f, sorted[0].Duration) : 1f;
 
-                for (int i = 0; i < sorted.Count; i++)
-                    DrawTiming(new Rect(0f, i * lineHeight, view.width, lineHeight), sorted[i], palette, longest);
-
-                Widgets.EndScrollView();
+                    for (int i = 0; i < sorted.Count; i++)
+                        DrawTiming(new Rect(0f, i * lineHeight, view.width, lineHeight), sorted[i], palette,
+                            longest);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {
@@ -1668,8 +1511,15 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 Rect view = new Rect(0f, 0f, textRect.width - 18f, Mathf.Max(height, textRect.height));
 
                 Widgets.BeginScrollView(textRect, ref detailScroll, view);
-                Widgets.Label(view, entry.Text);
-                Widgets.EndScrollView();
+
+                try
+                {
+                    Widgets.Label(view, entry.Text);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {
@@ -1842,13 +1692,19 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 Widgets.BeginScrollView(list, ref searchScroll, view);
 
-                int first = Mathf.Max(0, Mathf.FloorToInt(searchScroll.y / rowHeight) - 1);
-                int last = Mathf.Min(results.Count, first + Mathf.CeilToInt(list.height / rowHeight) + 2);
+                try
+                {
+                    int first = Mathf.Max(0, Mathf.FloorToInt(searchScroll.y / rowHeight) - 1);
+                    int last = Mathf.Min(results.Count, first + Mathf.CeilToInt(list.height / rowHeight) + 2);
 
-                for (int i = first; i < last; i++)
-                    DrawHit(new Rect(0f, i * rowHeight, view.width, rowHeight), results[i], palette, lineHeight);
-
-                Widgets.EndScrollView();
+                    for (int i = first; i < last; i++)
+                        DrawHit(new Rect(0f, i * rowHeight, view.width, rowHeight), results[i], palette,
+                            lineHeight);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {
@@ -1985,17 +1841,6 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 default:
                     return palette.TextSecondary;
             }
-        }
-
-        /// <summary>The file name out of a full path, without paying for a Path.GetFileName exception contract.</summary>
-        private static string FileNameOf(string path)
-        {
-            if (path.NullOrEmpty())
-                return string.Empty;
-
-            int slash = path.LastIndexOfAny(new[] { '\\', '/' });
-
-            return slash >= 0 && slash < path.Length - 1 ? path.Substring(slash + 1) : path;
         }
 
         private static void DrawFooter(Rect rect, UIColorPaletteDef palette)

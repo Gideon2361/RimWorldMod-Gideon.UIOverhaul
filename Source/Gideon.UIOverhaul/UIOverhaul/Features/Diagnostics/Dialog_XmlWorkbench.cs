@@ -43,6 +43,66 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// </summary>
         private const float ListFraction = 0.42f;
 
+        /// <summary>The three things the workbench does.</summary>
+        private enum WorkbenchMode
+        {
+            Find,
+            Simulate,
+            Hunt
+        }
+
+        /// <summary>
+        /// Which of them is on screen.
+        ///
+        /// Static, so switching tabs and reopening the window comes back to where the last question was left.
+        /// It was a bool while there were two modes; a third made the pair of bools it would have become the
+        /// kind of state that goes wrong quietly.
+        /// </summary>
+        private static WorkbenchMode mode = WorkbenchMode.Find;
+
+        /// <summary>
+        /// The operation being tested, typed or pasted.
+        ///
+        /// <b>A real editable box, so an xpath can be corrected in place.</b> Testing a patch is a loop: run it,
+        /// see it match nothing, change one predicate, run it again. Making this read only meant leaving the
+        /// game for an editor on every turn of that loop, which is most of the value of having the tool at all.
+        ///
+        /// <c>UITextBoxControl</c> rather than a bare text area, because that is the control that keeps the
+        /// camera and the shortcut keys off the keystrokes -- typing "Steel" into anything else drives the map
+        /// sideways and toggles whatever S and L are bound to.
+        /// </summary>
+        private static readonly UITextBoxControl Operation = new UITextBoxControl
+        {
+            Multiline = true,
+            ShowClearButton = false,
+            MaxLength = 20000,
+            Placeholder = "Paste or type a single Operation element"
+        };
+
+        private static PatchSimulation simulation;
+        private static bool hasSimulation;
+
+        /// <summary>
+        /// The report, composed once when the patch runs.
+        ///
+        /// <b>Built here rather than while drawing, and that was the lag.</b> The first version assembled the
+        /// whole report -- up to fifty pretty printed XML nodes -- into a StringBuilder on every frame, then
+        /// measured it with <c>Text.CalcHeight</c>, which walks the text to work out how it wraps. Sixty times a
+        /// second, for a string that can run to tens of thousands of characters. Neither the text nor its height
+        /// changes between frames unless the pane is resized, so neither belongs in the draw.
+        /// </summary>
+        private static string reportText = string.Empty;
+
+        private static float reportHeight;
+        private static float reportWidth = -1f;
+
+        private static float pastedHeight;
+        private static float pastedWidth = -1f;
+        private static int pastedLength = -1;
+
+        private static Vector2 pasteScroll;
+        private static Vector2 simulationScroll;
+
         private static readonly UITextBoxControl Xpath = new UITextBoxControl
         {
             Placeholder = "Defs/ThingDef[defName=\"Steel\"]"
@@ -96,6 +156,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         {
             base.PostClose();
 
+            // The hunt first. It borrows the game's inheritance registry for the length of a run, and that has
+            // to be handed back before the document it refers to is dropped.
+            UIGuard.Try("Diagnostics.ReleaseBugHunt", XmlBugHunt.Release, null);
             UIGuard.Try("Diagnostics.ReleaseWorkbench", XmlWorkbench.Release, null);
         }
 
@@ -115,21 +178,439 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             Rect scope = new Rect(inRect.x, header.yMax + 2f, inRect.width, BarHeight);
             DrawScopeBar(scope, palette);
 
-            Rect query = new Rect(inRect.x, scope.yMax + 4f, inRect.width, BarHeight);
-            DrawQueryBar(query, palette);
+            Rect modes = new Rect(inRect.x, scope.yMax + 4f, inRect.width, BarHeight);
+            DrawModeBar(modes, palette);
+
+            // The hunt has its own controls inside its panel, so it gets the whole area under the tabs rather
+            // than a bar of its own that would sit empty.
+            float top = modes.yMax + 4f;
+
+            if (mode == WorkbenchMode.Hunt)
+            {
+                BugHuntPanel.Draw(new Rect(inRect.x, top, inRect.width, Mathf.Max(0f, inRect.yMax - top - 4f)),
+                    palette, StartHunt, Reveal);
+
+                return;
+            }
+
+            Rect query = new Rect(inRect.x, top, inRect.width, BarHeight);
+
+            if (mode == WorkbenchMode.Simulate)
+                DrawSimulateBar(query, palette);
+            else
+                DrawQueryBar(query, palette);
 
             // Side by side rather than stacked. The matches are short lines and the XML is a tall block, so a
             // list across the full width wastes most of its row on nothing while the code underneath gets a
             // letterbox. Splitting them gives the list the height to show a useful number of matches and the
             // XML the height to show a definition without scrolling.
-            float top = query.yMax + 6f;
+            top = query.yMax + 6f;
+
             float height = Mathf.Max(0f, inRect.yMax - top - 4f);
 
             Rect list = new Rect(inRect.x, top, inRect.width * ListFraction - 4f, height);
             Rect detail = new Rect(list.xMax + 8f, top, Mathf.Max(0f, inRect.xMax - list.xMax - 8f), height);
 
-            DrawResults(list, palette);
-            DrawDetail(detail, palette);
+            if (mode == WorkbenchMode.Simulate)
+            {
+                DrawOperation(list, palette);
+                DrawSimulation(detail, palette);
+            }
+            else
+            {
+                DrawResults(list, palette);
+                DrawDetail(detail, palette);
+            }
+        }
+
+        /// <summary>The three things the workbench does, as tabs.</summary>
+        private void DrawModeBar(Rect rect, UIColorPaletteDef palette)
+        {
+            Rect find = new Rect(rect.x, rect.y, 130f, rect.height);
+            Rect patch = new Rect(find.xMax + 4f, rect.y, 150f, rect.height);
+            Rect hunt = new Rect(patch.xMax + 4f, rect.y, 130f, rect.height);
+
+            if (Mode(find, "Find", mode == WorkbenchMode.Find, palette))
+                mode = WorkbenchMode.Find;
+
+            if (Mode(patch, "Simulate patch", mode == WorkbenchMode.Simulate, palette))
+                mode = WorkbenchMode.Simulate;
+
+            if (Mode(hunt, "Bug hunt", mode == WorkbenchMode.Hunt, palette))
+                mode = WorkbenchMode.Hunt;
+        }
+
+        /// <summary>
+        /// Starts a scan and puts its progress window up.
+        ///
+        /// The window is what drives the scan; see <see cref="Dialog_BugHunt"/>. Opening it after Begin rather
+        /// than before means it never draws a bar for a run that failed to start.
+        /// </summary>
+        private void StartHunt()
+        {
+            UIGuard.Try("Diagnostics.StartBugHunt", () =>
+            {
+                BugHuntPanel.Invalidate();
+                XmlBugHunt.Begin(chosenMod == null ? "every active mod" : chosenMod.Name);
+
+                if (XmlBugHunt.Running)
+                    Find.WindowStack.Add(new Dialog_BugHunt());
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }, "The bug hunt could not be started.");
+        }
+
+        /// <summary>
+        /// Jumps from a finding to the definition it is about, in the Find tab.
+        ///
+        /// The whole definition rather than the offending field: the surrounding XML is what tells somebody
+        /// whether the value is wrong or the field is in the wrong place, and the field is named on the card
+        /// they came from.
+        /// </summary>
+        private void Reveal(BugFinding finding)
+        {
+            UIGuard.Try("Diagnostics.RevealBugFinding", () =>
+            {
+                Xpath.Text = "Defs/" + finding.DefType + "[defName=\"" + finding.DefName + "\"]";
+                mode = WorkbenchMode.Find;
+
+                Run();
+            }, "That definition could not be selected.");
+        }
+
+        private static bool Mode(Rect rect, string label, bool chosen, UIColorPaletteDef palette)
+        {
+            bool over = Mouse.IsOver(rect);
+
+            // <b>Unselected is not the same as unavailable.</b> The unselected segment used to sit on
+            // ControlBackgroundFaded with TextSecondary on top, which is the palette's vocabulary for a control
+            // that cannot be used: a washed out body and dimmed text. It read as greyed out rather than as the
+            // other half of a choice. A raised surface with full strength text says "available, just not the
+            // one you are on", and hovering lifts it further.
+            if (chosen)
+                UIElementPainter.FillRounded(rect, palette.Accent);
+            else
+                UIElementPainter.OutlineRounded(rect, palette.Border,
+                    over ? palette.SurfaceRaised : palette.PanelBackground);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            GUI.color = chosen ? palette.WindowBackground : palette.TextPrimary;
+
+            Widgets.Label(rect, label);
+
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+
+            return Widgets.ButtonInvisible(rect);
+        }
+
+        /// <summary>
+        /// The simulator's controls.
+        ///
+        /// <b>Pasted from the clipboard rather than typed, and that is a deliberate choice twice over.</b> An
+        /// Operation is a multi-line block, and the one text control in this mod that is safe to type into is a
+        /// single-line field: anything else lets the camera and the shortcut keys take the keystrokes. More to
+        /// the point, nobody composes a patch here. They have one in a file, and the question is what it does to
+        /// this document, so copying it out of the file and pressing a button is the actual workflow.
+        /// </summary>
+        private void DrawSimulateBar(Rect rect, UIColorPaletteDef palette)
+        {
+            Rect paste = new Rect(rect.x, rect.y, 168f, rect.height);
+            Rect run = new Rect(paste.xMax + 6f, rect.y, 110f, rect.height);
+            Rect clear = new Rect(run.xMax + 6f, rect.y, 90f, rect.height);
+
+            // Kept alongside Ctrl+V in the box itself, because it means something slightly different: replace
+            // everything, rather than insert at the caret.
+            if (Button(paste, "Paste over", palette))
+            {
+                UIGuard.Try("Diagnostics.PastePatch",
+                    () => { Operation.Text = GUIUtility.systemCopyBuffer ?? string.Empty; },
+                    "The clipboard could not be read.");
+
+                hasSimulation = false;
+                pastedWidth = -1f;
+                pasteScroll = Vector2.zero;
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            bool ready = !Operation.Text.NullOrEmpty() && XmlWorkbench.State == XmlWorkbenchState.Ready;
+
+            if (ready && Button(run, "Simulate", palette))
+            {
+                simulation = XmlPatchSimulator.Run(Operation.Text);
+                hasSimulation = true;
+                reportText = Compose(simulation);
+                reportWidth = -1f;
+                simulationScroll = Vector2.zero;
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+            else if (!ready)
+            {
+                UIElementPainter.OutlineRounded(run, palette.Border, palette.ControlBackgroundFaded);
+
+                // <b>Restored to what was here, not to a guess.</b> This used to put the anchor back to
+                // MiddleLeft and the color to TextPrimary, neither of which is what RimWorld starts a frame
+                // with. Text.StartOfOnGUI checks that state at the top of every frame and logs once when it
+                // finds it modified, which is the error that appeared on switching tabs.
+                TextAnchor previousDisabledAnchor = Text.Anchor;
+                Color previousDisabledColor = GUI.color;
+
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = palette.TextDisabled;
+
+                Widgets.Label(run, "Simulate");
+
+                Text.Anchor = previousDisabledAnchor;
+                GUI.color = previousDisabledColor;
+            }
+
+            if (Button(clear, "Clear", palette))
+            {
+                Operation.Text = string.Empty;
+                hasSimulation = false;
+                pastedWidth = -1f;
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            GameFont previousFont = Text.Font;
+            Text.Font = GameFont.Tiny;
+            Color previousColor = GUI.color;
+            GUI.color = palette.TextDisabled;
+
+            Widgets.Label(new Rect(clear.xMax + 10f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 10f),
+                rect.height), "Copy a single Operation element from a mod's XML, then press Ctrl+V or the "
+                              + "button.");
+
+            GUI.color = previousColor;
+            Text.Font = previousFont;
+        }
+
+        /// <summary>
+        /// What the operation did: whether it applied, and the targeted nodes before and after.
+        ///
+        /// <b>Applied and matched are different answers and both are shown.</b> An operation can report success
+        /// while changing nothing, because <c>success</c> can be forced in the XML, and it can change something
+        /// and still report failure. The count before and after says what actually happened to the document,
+        /// which is the thing a patch author is guessing at.
+        /// </summary>
+        private void DrawSimulation(Rect rect, UIColorPaletteDef palette)
+        {
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+
+            Rect inner = rect.ContractedBy(8f);
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+
+                float line = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
+
+                GUI.color = palette.TextDisabled;
+                Widgets.Label(new Rect(inner.x, inner.y, inner.width, line), "RESULT");
+
+                Rect body = new Rect(inner.x, inner.y + line + 2f, inner.width,
+                    Mathf.Max(0f, inner.height - line - 2f));
+
+                if (!hasSimulation)
+                {
+                    GUI.color = palette.TextSecondary;
+                    Widgets.Label(body, "Not run yet.");
+
+                    return;
+                }
+
+                if (!simulation.Error.NullOrEmpty())
+                {
+                    GUI.color = palette.Danger;
+                    Text.WordWrap = true;
+                    Widgets.Label(body, simulation.Error);
+
+                    return;
+                }
+
+                Text.WordWrap = false;
+
+                string text = reportText;
+
+                // Measured only when the pane's width actually changes. CalcHeight walks the whole string to
+                // work out where it wraps, which on a report of this size is not something to do per frame.
+                if (!Mathf.Approximately(reportWidth, body.width))
+                {
+                    reportWidth = body.width;
+                    reportHeight = Text.CalcHeight(text, body.width - 18f);
+                }
+
+                float height = Mathf.Max(body.height, reportHeight);
+                Rect view = new Rect(0f, 0f, body.width - 18f, height);
+
+                Widgets.BeginScrollView(body, ref simulationScroll, view);
+
+                try
+                {
+                    UIElementPainter.SelectableText(view, text,
+                        simulation.Applied ? palette.TextPrimary : palette.Warning);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
+            }
+            finally
+            {
+                // Restored to what it was, not to true. True happens to be RimWorld's default, which is exactly
+                // why a hardcoded restore hides the bug until some caller sets it false.
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>
+        /// Turns a finished simulation into the text of the report, once.
+        ///
+        /// <b>Capped, because a matched node can be a whole definition.</b> Twenty five nodes before and after,
+        /// each potentially several hundred lines of pretty printed XML, is a string IMGUI struggles to lay out
+        /// and nobody reads to the end of. What answers the question is the shape of the change and the first
+        /// few examples of it; the counts above say how many there were.
+        /// </summary>
+        private static string Compose(PatchSimulation result)
+        {
+            System.Text.StringBuilder report = new System.Text.StringBuilder();
+
+            report.Append(result.Applied ? "APPLIED" : "DID NOT APPLY").Append("   ")
+                .Append(result.Operation).Append('\n');
+
+            if (!result.Xpath.NullOrEmpty())
+            {
+                report.Append(result.Xpath).Append('\n')
+                    .Append("matched ").Append(result.MatchedBefore).Append(" before, ")
+                    .Append(result.MatchedAfter).Append(" after\n");
+            }
+            else
+            {
+                report.Append("This operation has no single xpath, so there is nothing to show before and "
+                              + "after.\n");
+            }
+
+            // The most common failure has its own sentence, because "matched 0" is the answer to the question
+            // and deserves to be said rather than inferred from a zero.
+            if (result.MatchedBefore == 0 && !result.Xpath.NullOrEmpty())
+                report.Append("\nThe xpath matched nothing in this scope. Check the scope above, and the path "
+                              + "itself.\n");
+
+            Append(report, "BEFORE", result.Before);
+            Append(report, "AFTER", result.After);
+
+            return report.ToString();
+        }
+
+        private static void Append(System.Text.StringBuilder report, string heading, List<string> nodes)
+        {
+            if (nodes == null || nodes.Count == 0)
+                return;
+
+            report.Append('\n').Append(heading).Append('\n');
+
+            // <b>A tight budget, and the tightness is the point.</b> This text ends up in a GUI.TextArea, which
+            // IMGUI lays out in full on every frame the pane is open -- so an oversized report does not cost a
+            // moment when it is built, it costs frame rate across the whole game for as long as the window
+            // stays up. Four thousand characters a section is enough to see what a patch did and cheap enough
+            // to draw sixty times a second.
+            const int budget = 4000;
+            int used = 0;
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                string node = nodes[i] ?? string.Empty;
+
+                if (used >= budget)
+                {
+                    report.Append("... ").Append(nodes.Count - i).Append(" more not shown\n");
+
+                    return;
+                }
+
+                if (node.Length > budget - used)
+                    node = node.Substring(0, budget - used) + "\n... truncated";
+
+                used += node.Length;
+
+                report.Append(node).Append('\n');
+            }
+        }
+
+        /// <summary>The operation as pasted, so what is about to run is visible before it runs.</summary>
+        private void DrawOperation(Rect rect, UIColorPaletteDef palette)
+        {
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+
+            Rect inner = rect.ContractedBy(8f);
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = palette.TextDisabled;
+
+                float line = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
+                Widgets.Label(new Rect(inner.x, inner.y, inner.width, line), "OPERATION");
+
+                Rect body = new Rect(inner.x, inner.y + line + 2f, inner.width,
+                    Mathf.Max(0f, inner.height - line - 2f));
+
+                Text.WordWrap = false;
+
+                // Measured on width change only. CalcHeight walks the whole string, and this runs every frame
+                // the tab is open.
+                if (!Mathf.Approximately(pastedWidth, body.width) || Operation.Text.Length != pastedLength)
+                {
+                    pastedWidth = body.width;
+                    pastedLength = Operation.Text.Length;
+                    pastedHeight = Text.CalcHeight(Operation.Text + "\n ", body.width - 22f);
+                }
+
+                // The box is given the taller of the pane and its content, so it grows as the operation does and
+                // the scroll view carries it. A text area does not scroll itself.
+                float height = Mathf.Max(body.height - 2f, pastedHeight + 8f);
+                Rect view = new Rect(0f, 0f, body.width - 18f, height);
+
+                Widgets.BeginScrollView(body, ref pasteScroll, view);
+
+                try
+                {
+                    if (Operation.Draw(view, palette))
+                    {
+                        // Any edit invalidates the result below it: a report describing the previous text, sat
+                        // beside text that has since changed, is the panel telling two stories at once.
+                        hasSimulation = false;
+                    }
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
+            }
+            finally
+            {
+                // Restored to what it was, not to true. True happens to be RimWorld's default, which is exactly
+                // why a hardcoded restore hides the bug until some caller sets it false.
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
         }
 
         private static void DrawHeader(Rect rect, UIColorPaletteDef palette)
@@ -199,7 +680,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// </summary>
         private void DrawScopeBar(Rect rect, UIColorPaletteDef palette)
         {
-            Rect picker = new Rect(rect.x, rect.y, Mathf.Min(420f, rect.width * 0.45f), rect.height);
+            Rect picker = new Rect(rect.x, rect.y, Mathf.Min(340f, rect.width * 0.36f), rect.height);
 
             string label = chosenMod == null
                 ? "Scope: every active mod"
@@ -207,6 +688,24 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             if (Button(picker, label, palette))
                 OpenScopeMenu();
+
+            // <b>The single most consequential setting in this window.</b> Off, the document is the files as
+            // they sit on disk, which is not what the game reads and not what anything here should be judged
+            // against: the bug hunt reports missing inherited parents that patches create, and the Find tab
+            // shows values that patches have since changed. On, it costs the slowest half of the build. See
+            // XmlWorkbench.Patch.
+            Rect patched = new Rect(picker.xMax + 10f, rect.y, 150f, rect.height);
+            bool applying = XmlWorkbench.Patching;
+
+            if (UICheckboxControl.Draw(patched, ref applying, palette, "Apply patches",
+                    "Runs every mod's patch operations over the document, the way loading does.\n\nOn is what "
+                    + "the game actually reads, and what the bug hunt needs in order not to report faults that "
+                    + "patches have already fixed.\n\nTurn it off to test a patch operation against the raw "
+                    + "files, so your own patch is not already in the document you are testing it against.",
+                    disabled: XmlWorkbench.State == XmlWorkbenchState.Building))
+            {
+                Load(applying);
+            }
 
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -219,17 +718,39 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             GUI.color = building ? palette.Accent : palette.TextDisabled;
 
-            Widgets.Label(new Rect(picker.xMax + 10f, rect.y, Mathf.Max(0f, rect.xMax - picker.xMax - 12f),
-                    rect.height),
-                building
-                    ? "Reading " + XmlWorkbench.ScopeName + " ..."
-                    : chosenMod == null
-                        ? "Every active mod's Defs folder. Narrow the scope for a faster, smaller read."
-                        : "One mod plus the base game, which is enough for most expressions.");
+            Rect hint = new Rect(patched.xMax + 10f, rect.y, Mathf.Max(0f, rect.xMax - patched.xMax - 12f),
+                rect.height);
+
+            Widgets.Label(hint, building
+                ? "Reading " + XmlWorkbench.ScopeName + " ..."
+                : XmlWorkbench.Patching
+                    ? Patched()
+                    : "Raw files, before any patch operation has run.");
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
+        }
+
+        /// <summary>
+        /// What the patch pass did, once it has.
+        ///
+        /// <b>Failures are stated rather than hidden, and put next to the scope,</b> because with one mod
+        /// selected most of them are meaningless: every other mod's patches were still run, and the definitions
+        /// they target were never read. On the full scope the same number means something quite different, so
+        /// the sentence changes with the scope rather than leaving the reader to work out which case they are
+        /// looking at.
+        /// </summary>
+        private string Patched()
+        {
+            int failures = XmlWorkbench.PatchFailures;
+
+            if (failures == 0)
+                return "Patched, as the game reads it.";
+
+            return chosenMod == null
+                ? "Patched. " + failures + " operations matched nothing, which is worth looking into."
+                : "Patched. " + failures + " operations matched nothing, expected when the scope is narrowed.";
         }
 
         private void OpenScopeMenu()
@@ -261,7 +782,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             Find.WindowStack.Add(new FloatMenu(options));
         }
 
-        private void Load()
+        /// <param name="applyPatches">Null keeps whatever the toggle is already set to.</param>
+        private void Load(bool? applyPatches = null)
         {
             UIGuard.Try("Diagnostics.WorkbenchLoad", () =>
             {
@@ -287,7 +809,13 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                     name = chosenMod.Name;
                 }
 
-                XmlWorkbench.Build(scope, name);
+                XmlWorkbench.Build(scope, name, applyPatches);
+
+                // Findings belong to the scope they were found in, and their nodes belong to the document that
+                // is about to be replaced. Keeping them across a rebuild would leave cards pointing at files
+                // that are no longer being read.
+                XmlBugHunt.Release();
+                BugHuntPanel.Invalidate();
 
                 results = new List<XmlMatch>();
                 queryError = null;
@@ -403,13 +931,18 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 Widgets.BeginScrollView(inner, ref resultScroll, view);
 
-                int first = Mathf.Max(0, Mathf.FloorToInt(resultScroll.y / RowHeight) - 1);
-                int last = Mathf.Min(results.Count, first + Mathf.CeilToInt(inner.height / RowHeight) + 2);
+                try
+                {
+                    int first = Mathf.Max(0, Mathf.FloorToInt(resultScroll.y / RowHeight) - 1);
+                    int last = Mathf.Min(results.Count, first + Mathf.CeilToInt(inner.height / RowHeight) + 2);
 
-                for (int i = first; i < last; i++)
-                    DrawResult(new Rect(0f, i * RowHeight, view.width, RowHeight), i, palette);
-
-                Widgets.EndScrollView();
+                    for (int i = first; i < last; i++)
+                        DrawResult(new Rect(0f, i * RowHeight, view.width, RowHeight), i, palette);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {
@@ -536,8 +1069,15 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 //
                 // This is what vanilla's own debug log does with its stack traces, for the same reason.
                 Widgets.BeginScrollView(body, ref detailScroll, view);
-                UIElementPainter.SelectableText(view, xml, palette.TextPrimary);
-                Widgets.EndScrollView();
+
+                try
+                {
+                    UIElementPainter.SelectableText(view, xml, palette.TextPrimary);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {

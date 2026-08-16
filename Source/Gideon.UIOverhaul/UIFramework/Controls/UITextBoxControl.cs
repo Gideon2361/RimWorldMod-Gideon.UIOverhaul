@@ -115,6 +115,26 @@ namespace Gideon.UIFramework.Controls
         /// <summary>Longest text accepted. Vanilla's search widget uses 30; this is for prose as well.</summary>
         public int MaxLength = 60;
 
+        /// <summary>
+        /// Whether the box accepts more than one line.
+        ///
+        /// <b>Why this belongs here rather than in a second control.</b> Everything that makes this class worth
+        /// having is about focus, not about line count: the id-shift repair, the tracked reference behind
+        /// <see cref="AnyFocused"/>, and the camera gate that reads it. A separate multi-line box would have to
+        /// carry all of that again, and the day the two copies drifted apart would be the day typing into one of
+        /// them started driving the map.
+        ///
+        /// What changes is small: a text area instead of a field, the text sitting at the top of the box rather
+        /// than centred in it, and no clear button or icon -- both are single-line furniture that would sit
+        /// oddly beside a paragraph, and a multi-line box is nearly always tall enough that a stray click on a
+        /// corner button is a real risk.
+        ///
+        /// <b>Enter inserts a newline rather than committing.</b> That is what a text area is for, and it means
+        /// a caller wanting Enter to mean "go" must use a single-line box or provide a button. The workbench
+        /// does the latter.
+        /// </summary>
+        public bool Multiline;
+
         /// <summary>Drawn at the left, inside the box. <c>TexButton.Search</c> makes it a search field.</summary>
         public Texture2D Icon;
 
@@ -201,7 +221,11 @@ namespace Gideon.UIFramework.Controls
 
             Rect inner = rect.ContractedBy(EdgePad);
 
-            if (Icon != null)
+            // Both are single-line furniture. See the note on Multiline.
+            bool showIcon = Icon != null && !Multiline;
+            bool showClear = ShowClearButton && !Multiline;
+
+            if (showIcon)
             {
                 float size = Mathf.Min(IconSize, inner.height);
 
@@ -214,10 +238,10 @@ namespace Gideon.UIFramework.Controls
 
             // The clear button's lane is reserved whether or not it is drawn, so the text does not reflow the
             // moment the first character arrives.
-            if (ShowClearButton)
+            if (showClear)
                 inner.xMax -= IconSize + EdgePad;
 
-            Verse.Text.Anchor = TextAnchor.MiddleLeft;
+            Verse.Text.Anchor = Multiline ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft;
 
             string before = text;
 
@@ -242,7 +266,12 @@ namespace Gideon.UIFramework.Controls
             UISkinRestyler.SetFieldChrome(false);
             try
             {
-                edited = Widgets.TextField(inner, text, MaxLength);
+                // GUI.TextArea rather than Widgets.TextArea, because vanilla's wrapper takes no length limit and
+                // this control promises one. The style is vanilla's own either way, so the caret and the
+                // selection match every other field in the game.
+                edited = Multiline
+                    ? GUI.TextArea(inner, text, MaxLength, Verse.Text.CurTextAreaStyle)
+                    : Widgets.TextField(inner, text, MaxLength);
             }
             finally
             {
@@ -269,7 +298,7 @@ namespace Gideon.UIFramework.Controls
             Verse.Text.Anchor = previousAnchor;
             Text_Font = previousFont;
 
-            if (ShowClearButton && !text.NullOrEmpty())
+            if (showClear && !text.NullOrEmpty())
             {
                 Rect clear = new Rect(inner.xMax + EdgePad, rect.y + (rect.height - IconSize) * 0.5f,
                     IconSize, IconSize);

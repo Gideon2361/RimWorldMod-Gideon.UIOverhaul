@@ -316,9 +316,11 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 GUI.color = previousColor;
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
-            }
 
-            Widgets.EndScrollView();
+                // Inside the finally: a throw between Begin and End unbalances Unity's clip stack, and the
+                // damage lands on everything drawn afterwards rather than on this panel alone.
+                Widgets.EndScrollView();
+            }
         }
 
         private static void DrawRow(Rect rect, LogMessage message, UIColorPaletteDef palette)
@@ -483,13 +485,19 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 Widgets.BeginScrollView(body, ref detailScroll, view);
 
-                UIElementPainter.SelectableText(new Rect(0f, 0f, view.width, messageHeight), selected.text,
-                    palette.TextPrimary);
+                try
+                {
+                    UIElementPainter.SelectableText(new Rect(0f, 0f, view.width, messageHeight), selected.text,
+                        palette.TextPrimary);
 
-                UIElementPainter.SelectableText(new Rect(0f, messageHeight + 8f, view.width,
-                    Mathf.Max(0f, view.height - messageHeight - 8f)), selected.StackTrace, palette.TextSecondary);
-
-                Widgets.EndScrollView();
+                    UIElementPainter.SelectableText(new Rect(0f, messageHeight + 8f, view.width,
+                        Mathf.Max(0f, view.height - messageHeight - 8f)), selected.StackTrace,
+                        palette.TextSecondary);
+                }
+                finally
+                {
+                    Widgets.EndScrollView();
+                }
             }
             finally
             {
