@@ -7,6 +7,7 @@ using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.Diagnostics;
 using Gideon.UIOverhaul.Features.Integrations;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
@@ -101,6 +102,15 @@ namespace Gideon.UIOverhaul.Features.Options
         private Mod lastSettingsMod;
 
         /// <summary>
+        /// The windows that were open just before a mod's settings page drew.
+        ///
+        /// Kept so the page can be checked afterwards for having opened one of its own. Reused rather than
+        /// allocated per call, because this runs on every pass of every frame a mod page is showing and the
+        /// stack is short enough that clearing and refilling it costs nothing worth measuring.
+        /// </summary>
+        private static readonly List<Window> WindowsBeforePage = new List<Window>();
+
+        /// <summary>
         /// Wide enough that the settings pane is no narrower than the single column it replaced.
         ///
         /// The column, its gap and the window padding take a little over 200, so the old 620 would have left the
@@ -127,10 +137,10 @@ namespace Gideon.UIOverhaul.Features.Options
         /// gets the page shrunk to fit rather than cropped.
         /// </summary>
         private static float RequiredWidth =>
-            VanillaModPane.x + PaneInset * 2f + ColumnWidth + ColumnGap + Pad * 2f;
+            LargestPane.x + PaneInset * 2f + ColumnWidth + ColumnGap + Pad * 2f;
 
         private static float RequiredHeight =>
-            VanillaModPane.y + PaneInset * 2f + HeaderHeight + FooterHeight;
+            LargestPane.y + PaneInset * 2f + HeaderHeight + FooterHeight;
 
         public override Vector2 InitialSize => new Vector2(
             Mathf.Min(RequiredWidth, UI.screenWidth - 20f),
@@ -177,7 +187,7 @@ namespace Gideon.UIOverhaul.Features.Options
             Text.Font = GameFont.Medium;
             GUI.color = palette.TextPrimary;
             Widgets.Label(new Rect(inRect.x + Pad, inRect.y + 12f, inRect.width - Pad * 3f - 24f, 32f),
-                "UI Options");
+                "Options");
 
             Rect closeRect = new Rect(inRect.xMax - Pad - 24f, inRect.y + 14f, 24f, 24f);
             if (SmallButton(closeRect, "X", palette))
@@ -214,7 +224,19 @@ namespace Gideon.UIOverhaul.Features.Options
             if (current.RawPane)
             {
                 lastSettingsMod = current.Mod;
-                DrawModSettings(inner, current.Mod);
+
+                if (DrawModSettings(inner, current.Mod))
+                {
+                    // The page is done with this window: it opened one of its own, or it asked to close. Step
+                    // back to the category page first, because the selection is static and outlives this window
+                    // -- left pointing at a redirect it would walk straight back into it the next time Options
+                    // was opened, with no way through to anything else.
+                    selectedChild = -1;
+
+                    // Silently, because the window the page just opened is the feedback. A close sound here would
+                    // read as something having gone wrong at the moment their window appears.
+                    Close(false);
+                }
             }
             else
             {
@@ -290,6 +312,43 @@ namespace Gideon.UIOverhaul.Features.Options
             new Vector2(900f, 700f - 40f - Window.CloseButSize.y);
 
         /// <summary>
+        /// The rect a particular mod's page is drawn into, before it is scaled to fit.
+        ///
+        /// Nearly always the vanilla one, because that is the rect every settings page in the game was written
+        /// against. <see cref="XmlExtensionsIntegration"/> is the exception: its menu is hosted rather than
+        /// asked to draw itself, and its layout needs more width than a vanilla settings page is ever given.
+        /// </summary>
+        private static Vector2 PaneFor(Mod mod)
+        {
+            return XmlExtensionsIntegration.Hosts(mod)
+                ? XmlExtensionsIntegration.AuthoredPane
+                : VanillaModPane;
+        }
+
+        /// <summary>
+        /// The largest pane anything could ask for, which is what the window is sized around.
+        ///
+        /// <b>One size for every page, chosen up front rather than per selection.</b> Sizing to the current
+        /// page would make the window jump under the cursor the moment a mod was picked, which is worse than a
+        /// Theme page with room to spare around it. So if a hosted menu that wants more is installed, every page
+        /// gets the larger window and the smaller ones sit in it comfortably.
+        /// </summary>
+        private static Vector2 LargestPane
+        {
+            get
+            {
+                Vector2 largest = VanillaModPane;
+
+                if (!XmlExtensionsIntegration.Available)
+                    return largest;
+
+                Vector2 hosted = XmlExtensionsIntegration.AuthoredPane;
+
+                return new Vector2(Mathf.Max(largest.x, hosted.x), Mathf.Max(largest.y, hosted.y));
+            }
+        }
+
+        /// <summary>
         /// Hands the pane to another mod to draw into, scaled so its layout arrives whole.
         ///
         /// <b>Scaled rather than resized, because their layout is not ours to reflow.</b> A settings page is
@@ -317,16 +376,60 @@ namespace Gideon.UIOverhaul.Features.Options
         /// frame. Left unguarded, a mod whose settings page throws would take this whole window down with it and
         /// look for all the world like our bug. The matrix is restored in a finally, because leaving it set would
         /// scale everything drawn after it for the rest of the frame.
+        ///
+        /// <b>Some pages do not draw into the rect at all, and this reports them.</b> A settings page is free to
+        /// ignore its rect and open a window of its own instead, and several do -- XML Extensions' whole page is
+        /// <c>Find.WindowStack.Add(new XmlExtensionsMenuModSettings(...))</c> and nothing else. That works in
+        /// vanilla because the window it opens closes <c>Dialog_ModSettings</c> from its constructor, so the call
+        /// happens exactly once. It looks for <c>Dialog_ModSettings</c> by type, does not find this window, and so
+        /// nothing stops us calling the page again on the very next pass.
+        ///
+        /// The result is a loop, and a nasty one: <c>WindowStack.Add</c> begins by removing any window of the same
+        /// type, which fires that window's <c>soundClose</c> -- left at its default of <c>SoundDefOf.Click</c> --
+        /// and runs its <c>PreClose</c>, which writes the settings file to disk. So every pass of every frame
+        /// played a click, wrote a file and rebuilt the mod list. That is the constant clicking and the
+        /// unresponsive window, and none of it reaches the log because nothing throws.
+        ///
+        /// So the window stack is compared across the call, and a page that opened one is reported to the caller,
+        /// which gets this window out of the way -- the same handoff vanilla's dialog performs, arrived at from
+        /// the other side.
         /// </summary>
-        private static void DrawModSettings(Rect rect, Mod mod)
+        /// <returns>True if this page is finished with the window: it opened one of its own, or asked to close.</returns>
+        private static bool DrawModSettings(Rect rect, Mod mod)
         {
             if (mod == null)
-                return;
+                return false;
+
+            // XML Extensions is drawn by us rather than asked to draw itself, so its redirect never runs and
+            // there is nothing to watch for. See XmlExtensionsIntegration for why that one mod is worth it.
+            bool hosting = XmlExtensionsIntegration.Hosts(mod);
+
+            // Only Layout and Repaint are watched, and that is what tells a redirect apart from a page doing
+            // something perfectly ordinary. A float menu off a dropdown, or a confirmation dialog, is opened in
+            // response to a click, which arrives as a mouse event -- never on these two passes. A redirect opens
+            // its window unconditionally, so it shows up here on the first pass of the first frame.
+            WindowStack stack = Find.WindowStack;
+
+            bool watching = !hosting
+                            && stack != null
+                            && (Event.current == null
+                                || Event.current.type == EventType.Layout
+                                || Event.current.type == EventType.Repaint);
+
+            if (watching)
+            {
+                WindowsBeforePage.Clear();
+
+                for (int index = 0; index < stack.Count; index++)
+                    WindowsBeforePage.Add(stack[index]);
+            }
+
+            bool finished = false;
 
             UIGuardedPanel.Draw("Options.ModSettings." + mod.GetType().Name, rect,
                 () =>
                 {
-                    Vector2 authored = VanillaModPane;
+                    Vector2 authored = PaneFor(mod);
                     float scale = Mathf.Min(rect.width / authored.x, rect.height / authored.y, 1f);
 
                     Matrix4x4 previous = GUI.matrix;
@@ -338,7 +441,12 @@ namespace Gideon.UIOverhaul.Features.Options
                         GUI.matrix = previous * Matrix4x4.TRS(new Vector3(rect.x, rect.y, 0f),
                             Quaternion.identity, new Vector3(scale, scale, 1f));
 
-                        mod.DoSettingsWindowContents(new Rect(0f, 0f, authored.x, authored.y));
+                        Rect page = new Rect(0f, 0f, authored.x, authored.y);
+
+                        if (hosting)
+                            finished = XmlExtensionsIntegration.Draw(page);
+                        else
+                            mod.DoSettingsWindowContents(page);
                     }
                     finally
                     {
@@ -347,11 +455,40 @@ namespace Gideon.UIOverhaul.Features.Options
                 },
                 "This mod's settings page could not be drawn. The fault is in that mod rather than in this one; "
                 + "its own settings window from the mod list may still work.");
+
+            bool redirected = false;
+
+            if (watching)
+            {
+                for (int index = 0; index < stack.Count; index++)
+                {
+                    Window opened = stack[index];
+
+                    // ImmediateWindow is the one thing vanilla adds during Repaint by design: it is how
+                    // Find.WindowStack.ImmediateWindow draws an overlay, and the first call for a given ID creates
+                    // one. Counting it would call a page a redirect for drawing a tooltip over itself.
+                    if (opened is ImmediateWindow || WindowsBeforePage.Contains(opened))
+                        continue;
+
+                    redirected = true;
+
+                    break;
+                }
+
+                WindowsBeforePage.Clear();
+            }
+
+            return redirected || finished;
         }
 
         /// <summary>Saves the settings of whichever mod was last shown, if any.</summary>
         private void LeaveModSettings()
         {
+            // First, and outside the null check: a hosted menu holds a live window object of another mod's, and
+            // its PreClose is what writes the settings the player just changed. Dropping it without that would
+            // lose them silently.
+            XmlExtensionsIntegration.Leave();
+
             if (lastSettingsMod == null)
                 return;
 
@@ -575,6 +712,7 @@ namespace Gideon.UIOverhaul.Features.Options
             /// </summary>
             public bool RawPane;
 
+
             /// <summary>
             /// How tall this category's content was the last time it drew.
             ///
@@ -592,6 +730,7 @@ namespace Gideon.UIOverhaul.Features.Options
 
             categories = new List<Category>
             {
+                MakeCategory("Game Settings", "Saving, options, quitting", DrawGameSettingsSection),
                 MakeCategory("Theme", "Colors and palettes", DrawThemeSection),
                 MakeCategory("Manage Tabs", "The button bar", DrawBarSection),
                 MakeCategory("Clock", "How the time reads", DrawClockSection),
@@ -600,6 +739,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Mod Integrations", "Extras for other mods you have", DrawIntegrationSection),
                 MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
+                MakeCategory("Developer Tools", "For working on mods", DrawDeveloperToolsSection),
                 MakeModSettingsCategory()
             };
         }
@@ -1105,6 +1245,468 @@ namespace Gideon.UIOverhaul.Features.Options
         /// <summary>How far the notification controls sit in from the group heading above them.</summary>
         private const float Indent = 18f;
 
+        /// <summary>Width of the label column in the game settings rows, so the controls line up.</summary>
+        private const float LabelColumn = 190f;
+
+        /// <summary>Whether a colony is loaded, which several of the game controls depend on.</summary>
+        private static bool InGame =>
+            UIGuard.Try("Options.ReadProgramState", () => Current.ProgramState == ProgramState.Playing, false,
+                null);
+
+        /// <summary>
+        /// RimWorld's own pause menu and options, reimplemented in this mod's controls.
+        ///
+        /// <b>Reimplemented rather than hosted, and the trade is worth stating.</b> Hosting vanilla's own drawing
+        /// would be complete by construction and could never drift; this cannot make either promise. What it buys
+        /// is that the settings a player reaches most often look like the rest of this mod instead of like a
+        /// window embedded in it. That was the call, and the cost is that a RimWorld update adding an option adds
+        /// it here too, by hand.
+        ///
+        /// <b>Every control calls the same API vanilla's own does.</b> The values are <c>Prefs</c>, the resolution
+        /// and scale changes go through <c>ResolutionUtility</c>'s safe setters, and quitting goes through the
+        /// same confirmation. Nothing here reimplements behavior -- only layout. That is the line: getting the
+        /// arrangement wrong is cosmetic, getting <c>SafeSetUIScale</c> wrong makes the game unusable.
+        ///
+        /// <b>What is deliberately not here:</b> keybindings and the developer options. Both are large, both are
+        /// tables rather than rows, and both are reached from RimWorld's own Options window, which this mod has
+        /// not taken away.
+        /// </summary>
+        private void DrawGameSettingsSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Game Settings", palette);
+
+            bool playing = InGame;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "RimWorld's own pause menu and options. Everything here changes the game rather than this mod, "
+                + "and takes effect exactly as it does in RimWorld's own windows.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            DrawGameActions(view, ref y, palette, playing);
+            DrawGeneralGroup(view, ref y, palette, playing);
+            DrawGraphicsGroup(view, ref y, palette);
+            DrawAudioGroup(view, ref y, palette);
+            DrawQuitGroup(view, ref y, palette, playing);
+
+            y += 12f;
+        }
+
+        /// <summary>
+        /// The pause menu's actions.
+        ///
+        /// <b>Save and Review scenario are unavailable outside a colony, and so is quitting to the menu.</b>
+        /// Vanilla does not offer them at all in that state rather than offering them dead, which is the better
+        /// behavior in a menu that is rebuilt every time it opens. Here the rows are fixed, so they are shown
+        /// disabled with a reason -- a row that appeared and vanished between the menu and a colony would be
+        /// harder to find than one that is always in the same place.
+        ///
+        /// Vanilla's own conditions are reproduced rather than simplified to "is a game loaded": saving is also
+        /// off during a temporary block and in permadeath, where the only save is the automatic one.
+        /// </summary>
+        private void DrawGameActions(Rect view, ref float y, UIColorPaletteDef palette, bool playing)
+        {
+            GroupLabel(view, ref y, palette, "This game");
+
+            bool permadeath = playing && UIGuard.Try("Options.ReadPermadeath",
+                () => Current.Game.Info.permadeathMode, false, null);
+
+            // Only asked while a colony is loaded, and that is not belt-and-braces. Despite reading like a
+            // static flag, SavingIsTemporarilyDisabled goes through Find.TilePicker, which does not exist at the
+            // main menu -- so reading it there throws every frame this section is drawn.
+            bool savingBlocked = playing && UIGuard.Try("Options.ReadSavingBlocked",
+                () => GameDataSaveLoader.SavingIsTemporarilyDisabled, false, null);
+
+            bool canSave = playing && !savingBlocked && !permadeath;
+
+            float x = Indent;
+            float row = y;
+
+            ActionButton(ref x, row, 130f, "Save", palette, canSave,
+                playing
+                    ? permadeath
+                        ? "This colony is in permadeath, so it saves itself."
+                        : "Saving is temporarily unavailable."
+                    : "Only available while a colony is loaded.",
+                () => Find.WindowStack.Add(new Dialog_SaveFileList_Save()));
+
+            ActionButton(ref x, row, 130f, "Load", palette, !permadeath,
+                "Permadeath colonies cannot load another save.",
+                () => Find.WindowStack.Add(new Dialog_SaveFileList_Load()));
+
+            ActionButton(ref x, row, 150f, "Review scenario", palette, playing,
+                "Only available while a colony is loaded.",
+                () => Find.WindowStack.Add(new Dialog_MessageBox(Find.Scenario.GetFullInformationText(),
+                    null, null, null, null, Find.Scenario.name) { layer = WindowLayer.Super }));
+
+            ActionButton(ref x, row, 130f, "Mods", palette, !playing,
+                "The mod list can only be changed from the main menu.",
+                () => Find.WindowStack.Add(new Page_ModsConfig()));
+
+            y += RowHeight + 8f;
+        }
+
+        private void DrawGeneralGroup(Rect view, ref float y, UIColorPaletteDef palette, bool playing)
+        {
+            GroupLabel(view, ref y, palette, "General");
+
+            // Vanilla refuses a language change mid-colony and says so rather than doing it, because the switch
+            // reloads the def database. Reproduced exactly, message and all.
+            ChoiceRow(view, ref y, palette, "Language",
+                UIGuard.Try("Options.ReadLanguage", () => LanguageDatabase.activeLanguage.DisplayName, "?", null),
+                () =>
+                {
+                    if (playing)
+                    {
+                        Messages.Message("ChangeLanguageFromMainMenu".Translate(), MessageTypeDefOf.RejectInput,
+                            false);
+
+                        return;
+                    }
+
+                    List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                    foreach (LoadedLanguage language in LanguageDatabase.AllLoadedLanguages)
+                    {
+                        LoadedLanguage captured = language;
+
+                        options.Add(new FloatMenuOption(captured.DisplayName,
+                            UIGuard.Wrap("Options.SelectLanguage",
+                                () => LanguageDatabase.SelectLanguage(captured))));
+                    }
+
+                    Find.WindowStack.Add(new FloatMenu(options));
+                });
+
+            // The same eight steps vanilla offers, in days. A free slider would let somebody ask for an autosave
+            // every four seconds.
+            float[] intervals = { 0.05f, 0.075f, 0.1f, 0.125f, 0.25f, 0.5f, 1f, 2f };
+
+            ChoiceRow(view, ref y, palette, "Autosave interval", AutosaveLabel(Prefs.AutosaveIntervalDays),
+                () =>
+                {
+                    List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                    foreach (float days in intervals)
+                    {
+                        float captured = days;
+
+                        options.Add(new FloatMenuOption(AutosaveLabel(captured),
+                            UIGuard.Wrap("Options.SetAutosave",
+                                () => Prefs.AutosaveIntervalDays = captured)));
+                    }
+
+                    Find.WindowStack.Add(new FloatMenu(options));
+                });
+
+            bool background = Prefs.RunInBackground;
+
+            if (UICheckboxControl.Draw(new Rect(Indent, y, view.width - Indent, RowHeight), ref background,
+                    palette, "Run in background",
+                    "Keep simulating while the window is not focused."))
+                UIGuard.Try("Options.SetRunInBackground", () => Prefs.RunInBackground = background, null);
+
+            y += RowHeight + 8f;
+        }
+
+        private static string AutosaveLabel(float days)
+        {
+            if (days >= 1f)
+                return days + (days == 1f ? " day" : " days");
+
+            return Mathf.RoundToInt(days * 24f * 60f) + " minutes";
+        }
+
+        private void DrawGraphicsGroup(Rect view, ref float y, UIColorPaletteDef palette)
+        {
+            GroupLabel(view, ref y, palette, "Graphics");
+
+            ChoiceRow(view, ref y, palette, "Resolution",
+                Screen.width + " x " + Screen.height,
+                () =>
+                {
+                    List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                    foreach (Resolution resolution in Screen.resolutions)
+                    {
+                        Resolution captured = resolution;
+
+                        options.Add(new FloatMenuOption(captured.width + " x " + captured.height, () =>
+                        {
+                            // Vanilla's check, and it is not optional: a resolution too small for the current UI
+                            // scale produces a game whose interface does not fit on its own screen.
+                            if (!ResolutionUtility.UIScaleSafeWithResolution(Prefs.UIScale, captured.width,
+                                    captured.height))
+                            {
+                                Messages.Message("MessageScreenResTooSmallForUIScale".Translate(),
+                                    MessageTypeDefOf.RejectInput, false);
+
+                                return;
+                            }
+
+                            ResolutionUtility.SafeSetResolution(captured);
+                        }));
+                    }
+
+                    Find.WindowStack.Add(new FloatMenu(options));
+                });
+
+            ChoiceRow(view, ref y, palette, "UI scale", Prefs.UIScale + "x", () =>
+            {
+                List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                // Vanilla's own list, read from its public field rather than copied, so a future release adding
+                // a scale adds it here too.
+                foreach (float scale in Dialog_Options.UIScales)
+                {
+                    float captured = scale;
+
+                    options.Add(new FloatMenuOption(captured + "x", () =>
+                    {
+                        if (captured != 1f && !ResolutionUtility.UIScaleSafeWithResolution(captured,
+                                Screen.width, Screen.height))
+                        {
+                            Messages.Message("MessageScreenResTooSmallForUIScale".Translate(),
+                                MessageTypeDefOf.RejectInput, false);
+
+                            return;
+                        }
+
+                        ResolutionUtility.SafeSetUIScale(captured);
+                    }));
+                }
+
+                Find.WindowStack.Add(new FloatMenu(options));
+            });
+
+            if (!ResolutionUtility.BorderlessFullscreen)
+            {
+                bool fullscreen = Screen.fullScreen;
+
+                if (UICheckboxControl.Draw(new Rect(Indent, y, view.width - Indent, RowHeight), ref fullscreen,
+                        palette, "Fullscreen"))
+                    UIGuard.Try("Options.SetFullscreen",
+                        () => ResolutionUtility.SafeSetFullscreen(fullscreen), null);
+
+                y += RowHeight + 2f;
+            }
+
+            // Keybindings and the developer options are not reimplemented here, so the window that has them
+            // stays one click away. Opened through the bypass, since this mod otherwise replaces it.
+            if (SmallButton(new Rect(Indent, y, 230f, RowHeight), "Keybindings and dev options", palette))
+            {
+                UIGuard.Try("Options.OpenVanillaOptions", Patch_WindowStack_Add_Options.OpenVanilla,
+                    "RimWorld's own options window could not be opened.");
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 6f;
+
+            ChoiceRow(view, ref y, palette, "Temperature",
+                UIGuard.Try("Options.ReadTemperatureMode", () => Prefs.TemperatureMode.ToStringHuman(), "?",
+                    null),
+                () =>
+                {
+                    List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                    foreach (TemperatureDisplayMode mode in
+                             (TemperatureDisplayMode[]) System.Enum.GetValues(typeof(TemperatureDisplayMode)))
+                    {
+                        TemperatureDisplayMode captured = mode;
+
+                        options.Add(new FloatMenuOption(captured.ToStringHuman(),
+                            UIGuard.Wrap("Options.SetTemperatureMode",
+                                () => Prefs.TemperatureMode = captured)));
+                    }
+
+                    Find.WindowStack.Add(new FloatMenu(options));
+                });
+
+            y += 6f;
+        }
+
+        private void DrawAudioGroup(Rect view, ref float y, UIColorPaletteDef palette)
+        {
+            GroupLabel(view, ref y, palette, "Audio");
+
+            Prefs.VolumeMaster = VolumeRow(view, ref y, palette, "Master volume", Prefs.VolumeMaster);
+            Prefs.VolumeGame = VolumeRow(view, ref y, palette, "Game", Prefs.VolumeGame);
+            Prefs.VolumeMusic = VolumeRow(view, ref y, palette, "Music", Prefs.VolumeMusic);
+            Prefs.VolumeAmbient = VolumeRow(view, ref y, palette, "Ambient", Prefs.VolumeAmbient);
+            Prefs.VolumeUI = VolumeRow(view, ref y, palette, "Interface", Prefs.VolumeUI);
+
+            y += 6f;
+        }
+
+        private void DrawQuitGroup(Rect view, ref float y, UIColorPaletteDef palette, bool playing)
+        {
+            GroupLabel(view, ref y, palette, "Quit");
+
+            bool permadeath = playing && UIGuard.Try("Options.ReadPermadeathQuit",
+                () => Current.Game.Info.permadeathMode, false, null);
+
+            float x = Indent;
+            float row = y;
+
+            ActionButton(ref x, row, 210f, permadeath ? "Save and quit to main menu" : "Quit to main menu",
+                palette, playing, "Only available while a colony is loaded.",
+                () => Quit(permadeath, GenScene.GoToMainMenu));
+
+            ActionButton(ref x, row, 190f, permadeath ? "Save and quit to OS" : "Quit to OS", palette, true,
+                null, () => Quit(permadeath, Root.Shutdown));
+
+            y += RowHeight + 8f;
+        }
+
+        /// <summary>
+        /// Leaving the game, by whichever of vanilla's three routes applies.
+        ///
+        /// Permadeath saves first and does not ask, because there is nothing to decide -- the colony is being
+        /// kept either way. Otherwise the confirmation is shown only when there is something to lose, which is
+        /// what <c>CurrentGameStateIsValuable</c> answers.
+        /// </summary>
+        private static void Quit(bool permadeath, System.Action leave)
+        {
+            UIGuard.Try("Options.Quit", () =>
+            {
+                if (permadeath)
+                {
+                    LongEventHandler.QueueLongEvent(() =>
+                        {
+                            GameDataSaveLoader.SaveGame(Current.Game.Info.permadeathModeUniqueName);
+                            LongEventHandler.ExecuteWhenFinished(leave);
+                        },
+                        "SavingLongEvent", false, null, false);
+
+                    return;
+                }
+
+                // Nothing to lose outside a colony, and nothing to ask about either. The check itself has to be
+                // skipped rather than merely ignored: CurrentGameStateIsValuable reads
+                // Find.TickManager.TicksGame, which is not there at the main menu -- so quitting to the OS from
+                // the menu would have thrown instead of quitting.
+                if (!InGame)
+                {
+                    leave();
+
+                    return;
+                }
+
+                if (GameDataSaveLoader.CurrentGameStateIsValuable)
+                {
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation("ConfirmQuit".Translate(),
+                        () => leave(), true, null, WindowLayer.Super));
+
+                    return;
+                }
+
+                leave();
+            }, "The game did not quit. Use RimWorld's own menu.");
+        }
+
+        /// <summary>A labelled volume slider, written back by the caller.</summary>
+        private float VolumeRow(Rect view, ref float y, UIColorPaletteDef palette, string label, float value)
+        {
+            Rect row = new Rect(Indent, y, view.width - Indent, RowHeight);
+
+            Color previous = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(row.x, row.y, LabelColumn, row.height), label);
+
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = palette.TextPrimary;
+            Widgets.Label(new Rect(row.xMax - 60f, row.y, 56f, row.height), Mathf.RoundToInt(value * 100f) + "%");
+
+            Text.Anchor = previousAnchor;
+            GUI.color = previous;
+
+            float result = Widgets.HorizontalSlider(
+                new Rect(row.x + LabelColumn, row.y + (row.height - 22f) * 0.5f,
+                    Mathf.Max(60f, row.width - LabelColumn - 70f), 22f),
+                value, 0f, 1f, false, null, null, null, 0.01f);
+
+            y += RowHeight + 2f;
+
+            return result;
+        }
+
+        /// <summary>A labelled row whose value is a button opening a menu of choices.</summary>
+        private void ChoiceRow(Rect view, ref float y, UIColorPaletteDef palette, string label, string value,
+            System.Action onClick)
+        {
+            Rect row = new Rect(Indent, y, view.width - Indent, RowHeight);
+
+            Color previous = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(row.x, row.y, LabelColumn, row.height), label);
+
+            Text.Anchor = previousAnchor;
+            GUI.color = previous;
+
+            Rect button = new Rect(row.x + LabelColumn, row.y + 2f,
+                Mathf.Min(280f, Mathf.Max(80f, row.width - LabelColumn - 10f)), row.height - 4f);
+
+            if (SmallButton(button, value, palette))
+            {
+                UIGuard.Try("Options.ChoiceRow", onClick, "That option could not be opened.");
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 2f;
+        }
+
+        /// <summary>
+        /// One action button on a row of them, advancing the cursor.
+        ///
+        /// A disabled one keeps its place and says why on hover, rather than disappearing. These rows are fixed,
+        /// unlike vanilla's rebuilt list, so a control that vanished between the menu and a colony would be
+        /// harder to find again than one that is always where it was.
+        /// </summary>
+        private void ActionButton(ref float x, float y, float width, string label, UIColorPaletteDef palette,
+            bool enabled, string disabledReason, System.Action action)
+        {
+            Rect rect = new Rect(x, y, width, RowHeight);
+
+            x += width + 6f;
+
+            if (!enabled)
+            {
+                // Rounded like the enabled one. A disabled control that is also a different shape reads as a
+                // different kind of control rather than as the same one switched off.
+                UIElementPainter.OutlineRounded(rect, palette.Border, palette.ControlBackgroundFaded);
+
+                Color previous = GUI.color;
+                TextAnchor previousAnchor = Text.Anchor;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = palette.TextDisabled;
+                Widgets.Label(rect, label);
+
+                Text.Anchor = previousAnchor;
+                GUI.color = previous;
+
+                if (Mouse.IsOver(rect) && !disabledReason.NullOrEmpty())
+                    TooltipHandler.TipRegion(rect, (TipSignal) disabledReason);
+
+                return;
+            }
+
+            if (!SmallButton(rect, label, palette))
+                return;
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+
+            UIGuard.Try("Options.GameAction", action, "That action could not be started.");
+        }
+
         /// <summary>
         /// The mod integrations section: things this mod adds alongside another mod, shown only when that mod is
         /// actually installed.
@@ -1336,6 +1938,11 @@ namespace Gideon.UIOverhaul.Features.Options
             y += 60f;
             GUI.color = palette.TextPrimary;
 
+            // There is deliberately no switch here for the modernized debug log. The two options would be this
+            // mod's log and the one it exists to replace, which is not a choice worth offering -- the same
+            // reasoning that retired the speed glyph toggle. Whether it applies at all is decided by whether
+            // Modern Dev Tools is loaded, and that is not a preference either.
+
             bool console = settings.showLoadingConsole;
 
             if (UICheckboxControl.Draw(new Rect(0f, y, view.width, RowHeight), ref console, palette,
@@ -1357,6 +1964,50 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "find out which phase of a long load is the slow one. The panel has a button to copy the "
                 + "whole thing for pasting into a bug report.");
             y += 60f;
+            GUI.color = palette.TextPrimary;
+
+        }
+
+        /// <summary>
+        /// The developer tools section: things that are opened rather than set.
+        ///
+        /// <b>Separate from Diagnostics on purpose.</b> Diagnostics holds switches that change what the mod
+        /// records and shows; these are windows a person opens to go and look at something. Mixing the two would
+        /// mean a category where half the rows do nothing until you tick them and the other half do something
+        /// the moment you click.
+        /// </summary>
+        private void DrawDeveloperToolsSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Developer Tools", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "Tools for working on mods rather than playing with them. Nothing here changes anything about "
+                + "your game; they open a window and show you something.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "XML Workbench");
+
+            if (SmallButton(new Rect(Indent, y, 200f, RowHeight), "Open XML Workbench", palette))
+            {
+                UIGuard.Try("Options.OpenWorkbench",
+                    () => Find.WindowStack.Add(new Dialog_XmlWorkbench()),
+                    "The XML workbench could not be opened.");
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 72f),
+                "Run an XPath expression against the game's definition XML and see exactly which nodes it "
+                + "matches, and which file each one came from.\n\nThis is the answer to \"why did my patch "
+                + "operation fail\": a patch whose xpath matches nothing fails silently hours later, during a "
+                + "load, with nothing pointing at the expression.");
+            y += 76f;
             GUI.color = palette.TextPrimary;
         }
 

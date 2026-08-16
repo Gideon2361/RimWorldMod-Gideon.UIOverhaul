@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Controls;
@@ -105,7 +105,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             // Borderless: these buttons sit in a continuous strip, where each outline would double against
             // its neighbor's. The gap between them and the accent rule below do the separating instead.
-            UIElementPainter.PaintButton(rect, palette, over, held, false);
+            //
+            // <b>And square. Nothing in this renderer rounds, deliberately.</b> A tab is not a floating control:
+            // it abuts its neighbours and carries an accent rule along its top edge. Rounding pulled the corners
+            // away from that rule and left a lit arc hanging over the tab, which is what it looked like in
+            // practice. Every other fill in this method is DrawBoxSolid for the same reason; if a rounded one is
+            // ever added here, that arc comes back.
+            UIElementPainter.PaintButton(rect, palette, over, held, false, false);
 
             if (selected)
                 Widgets.DrawBoxSolid(rect, palette.SelectionOverlay);

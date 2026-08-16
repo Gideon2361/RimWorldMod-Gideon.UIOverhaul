@@ -3,7 +3,7 @@
   <name>Gideon's UI Overhaul</name>
   <author>Gideon</author>
   <packageId>gideon.uioverhaul</packageId>
-  <modVersion>1.6.4871.14098</modVersion>
+  <modVersion>1.6.4871.14101</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>
@@ -27,12 +27,7 @@
     <li>Gideon.CleanArchitect</li>
   </incompatibleWith>
   <loadAfter>
-    <!-- Storage mods whose categories the architect patches fold into UnifiedStorage.
-
-         Every def from every mod is loaded before any patch runs, so this is not about being able to
-         see their categories: it is about running after their own patches, which may themselves be
-         moving things between categories. Losing that race means repointing a def they then repoint
-         back. -->
+    <!-- Storage mods we unify -->
     <li>adaptive.storage.framework</li>
     <li>adaptive.primitivestorage</li>
     <li>adaptive.simplestorage</li>

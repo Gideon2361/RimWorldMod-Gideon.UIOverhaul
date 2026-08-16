@@ -61,15 +61,20 @@ namespace Gideon.UIFramework.Patches.UIElements
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
-            Widgets.DrawBoxSolid(rect, palette.WindowBackground * colorFactor);
-
+            // A tab is square, and deliberately: it is anchored to the button bar and reads as part of the frame
+            // around the game, so rounding its corners would detach it from the bar it grows out of. A dialog
+            // floats and is rounded, at the one radius every other surface in this mod uses.
             if (IsTab())
-                return;
+            {
+                Widgets.DrawBoxSolid(rect, palette.WindowBackground * colorFactor);
 
-            Color previous = GUI.color;
-            GUI.color = palette.Border * colorFactor;
-            Widgets.DrawBox(rect, 1);
-            GUI.color = previous;
+                return;
+            }
+
+            // The border and the fill in one pass. DrawBox cannot follow a curve, so the outline is a rounded
+            // fill with the background punched out of it.
+            UIElementPainter.OutlineRounded(rect, palette.Border * colorFactor,
+                palette.WindowBackground * colorFactor);
         }
 
         /// <summary>

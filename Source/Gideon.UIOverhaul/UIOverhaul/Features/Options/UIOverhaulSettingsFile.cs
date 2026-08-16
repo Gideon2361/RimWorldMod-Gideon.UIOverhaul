@@ -54,6 +54,7 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public bool showLoadingConsole;
 
+
         /// <summary>
         /// Whether to force fullscreen at the display's native resolution on every launch.
         ///
@@ -379,6 +380,7 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showLoadingConsole = value.EqualsIgnoreCase("true");
                             break;
 
+
                         case "fullscreenOnStartup":
                             settings.fullscreenOnStartup = value.EqualsIgnoreCase("true");
                             break;
@@ -504,6 +506,10 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showExplicitStoryEvents = value.EqualsIgnoreCase("true");
                             break;
 
+                        // modernDebugLog was here briefly and never shipped. Listed anyway: a local test run
+                        // may have written it, and a warning about a setting nobody chose is exactly the noise
+                        // this list exists to prevent.
+                        case "modernDebugLog":
                         case "showBarButton":
                         case "showDesktopWidgets":
                         case "showSeasonWidget":
