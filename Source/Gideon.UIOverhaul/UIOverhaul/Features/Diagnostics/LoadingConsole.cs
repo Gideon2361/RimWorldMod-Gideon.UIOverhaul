@@ -86,6 +86,15 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
         /// <summary>The verdict strip: a label, a figure and a line of context, stacked.</summary>
         private const float VerdictHeight = 54f;
+
+        /// <summary>
+        /// How long a step must have taken to appear in the overview.
+        ///
+        /// Fifty milliseconds: below this a row cannot draw a bar anybody can see, and a row without a bar in a
+        /// view built around them is a row saying nothing. Deliberately the same figure the bars use, so the
+        /// overview holds exactly the entries the overview can express.
+        /// </summary>
+        private const float OverviewThreshold = 0.05f;
         private const float ToolbarHeight = 28f;
         private const float FooterHeight = 28f;
         private const float RowPad = 2f;
@@ -128,6 +137,44 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         }
 
         private static List<CategorySpan> categories = new List<CategorySpan>();
+
+        /// <summary>
+        /// One line of the overview, with its part already decided.
+        ///
+        /// <b>The panel used to render the log's raw sequence and hope structure emerged from it.</b> It did not:
+        /// every row was the same kind of thing, so a phase looked like a step, a phase that vanilla runs three
+        /// times appeared three times, and the mods inside a phase were indistinguishable from the profiler
+        /// noise around them. Deciding what each row <i>is</i> here, once, is what lets the drawing code give a
+        /// heading its weight and a child its place without guessing from the entry's kind.
+        /// </summary>
+        private struct ConsoleRow
+        {
+            /// <summary>Fold identity. Headers only.</summary>
+            public string Key;
+
+            public string Text;
+
+            /// <summary>When it first ran.</summary>
+            public float Seconds;
+
+            /// <summary>Total across every occurrence.</summary>
+            public float Duration;
+
+            /// <summary>How many times this phase ran during the load. One for most.</summary>
+            public int Occurrences;
+
+            /// <summary>Lines underneath it, whether or not they are showing.</summary>
+            public int Children;
+
+            public bool Header;
+
+            public UILoadingLogKind Kind;
+
+            /// <summary>The entry behind this row, for the detail pane.</summary>
+            public UILoadingLogEntry Entry;
+        }
+
+        private static List<ConsoleRow> rows = new List<ConsoleRow>();
 
         /// <summary>
         /// Headings the reader has folded away, by <see cref="KeyOf"/>.
@@ -356,12 +403,6 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             BuildCategories(all);
 
-            // Which heading each line currently sits under. A section folds everything to the next section; a
-            // phase folds its own contents to the next phase. Tracked while walking rather than looked up, so
-            // this stays one pass over the log however deep the nesting gets.
-            bool sectionFolded = false;
-            bool stageFolded = false;
-
             errorCount = 0;
             warningCount = 0;
 
@@ -373,25 +414,92 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                     errorCount++;
                 else if (entry.Kind == UILoadingLogKind.Warning)
                     warningCount++;
+            }
 
-                if (entry.Kind == UILoadingLogKind.Section)
-                {
-                    sectionFolded = collapsed.Contains(KeyOf(entry));
-                    stageFolded = false;
-                }
-                else if (entry.Kind == UILoadingLogKind.Stage)
-                {
-                    // A phase inside a folded section stays hidden whatever its own state, so unfolding the
-                    // section brings back exactly what was there before it was folded.
-                    stageFolded = collapsed.Contains(KeyOf(entry));
+            BuildRows(all);
 
-                    if (sectionFolded)
-                        continue;
-                }
-                else if (sectionFolded || stageFolded)
+            foreach (ConsoleRow row in rows)
+                shown.Add(row.Entry);
+
+            visible = shown;
+        }
+
+        /// <summary>
+        /// One phase of the load while the model is being assembled.
+        ///
+        /// A class rather than a struct because it is looked up by name and added to repeatedly; a struct would
+        /// have to be written back into its list on every touch.
+        /// </summary>
+        private class PhaseGroup
+        {
+            public string Name;
+            public float Seconds;
+            public float Duration;
+            public int Occurrences;
+            public int TotalChildren;
+            public UILoadingLogKind Kind;
+            public UILoadingLogEntry Entry;
+
+            public readonly List<ConsoleRow> Children = new List<ConsoleRow>();
+            public readonly Dictionary<string, int> ChildIndex = new Dictionary<string, int>();
+        }
+
+        /// <summary>
+        /// Turns the log into the overview: phases merged by identity, their contents merged underneath them.
+        ///
+        /// <b>Merged by name, and that is the point of the exercise.</b> RimWorld resolves references three
+        /// times, binds DefOfs twice and drains deferred work four times, so a panel listing occurrences shows
+        /// the same six phase names over and over and leaves the reader to add them up. One row per phase with
+        /// its total and how many times it ran is the same information, organized.
+        ///
+        /// Children are merged the same way, so a hundred separate "loading X" lines under one phase collapse to
+        /// the handful of distinct things that actually happened, each carrying its own total.
+        ///
+        /// The search box narrows the children rather than the phases, so searching keeps the shape of the load
+        /// instead of returning a flat list of hits with no context.
+        /// </summary>
+        private static void BuildRows(List<UILoadingLogEntry> all)
+        {
+            List<PhaseGroup> groups = new List<PhaseGroup>();
+            Dictionary<string, int> byName = new Dictionary<string, int>();
+
+            PhaseGroup current = null;
+
+            foreach (UILoadingLogEntry entry in all)
+            {
+                if (IsHeading(entry))
                 {
+                    int index;
+
+                    if (!byName.TryGetValue(entry.Text ?? string.Empty, out index))
+                    {
+                        index = groups.Count;
+                        byName[entry.Text ?? string.Empty] = index;
+
+                        groups.Add(new PhaseGroup
+                        {
+                            Name = entry.Text,
+                            Seconds = entry.Seconds,
+                            Kind = entry.Kind,
+                            Entry = entry
+                        });
+                    }
+
+                    current = groups[index];
+                    current.Occurrences++;
+
+                    CategorySpan span;
+
+                    if (spanByKey.TryGetValue(KeyOf(entry), out span))
+                        current.Duration += span.Duration;
+
                     continue;
                 }
+
+                if (current == null)
+                    continue;
+
+                current.TotalChildren++;
 
                 if (!PassesFilter(entry))
                     continue;
@@ -401,10 +509,70 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 if (!Search.IsEmpty && !Search.Matches(entry.Text) && !Search.Matches(entry.Path))
                     continue;
 
-                shown.Add(entry);
+                MergeChild(current, entry);
             }
 
-            visible = shown;
+            Flatten(groups);
+        }
+
+        private static void MergeChild(PhaseGroup group, UILoadingLogEntry entry)
+        {
+            string text = entry.Text ?? string.Empty;
+            int index;
+
+            if (group.ChildIndex.TryGetValue(text, out index))
+            {
+                ConsoleRow existing = group.Children[index];
+                existing.Duration += entry.Duration;
+                existing.Occurrences++;
+                group.Children[index] = existing;
+
+                return;
+            }
+
+            group.ChildIndex[text] = group.Children.Count;
+
+            group.Children.Add(new ConsoleRow
+            {
+                Text = text,
+                Seconds = entry.Seconds,
+                Duration = entry.Duration,
+                Occurrences = 1,
+                Kind = entry.Kind,
+                Entry = entry
+            });
+        }
+
+        /// <summary>Lays the groups out as rows, honoring which of them are folded.</summary>
+        private static void Flatten(List<PhaseGroup> groups)
+        {
+            List<ConsoleRow> built = new List<ConsoleRow>(groups.Count * 4);
+
+            foreach (PhaseGroup group in groups)
+            {
+                string key = group.Name ?? string.Empty;
+
+                built.Add(new ConsoleRow
+                {
+                    Key = key,
+                    Text = group.Name,
+                    Seconds = group.Seconds,
+                    Duration = group.Duration,
+                    Occurrences = group.Occurrences,
+                    Children = group.TotalChildren,
+                    Header = true,
+                    Kind = group.Kind,
+                    Entry = group.Entry
+                });
+
+                if (collapsed.Contains(key))
+                    continue;
+
+                foreach (ConsoleRow child in group.Children)
+                    built.Add(child);
+            }
+
+            rows = built;
         }
 
         /// <summary>
@@ -505,7 +673,20 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 case LoadingConsoleFilter.Phases:
                     // Problems stay visible in the overview. They are the reason somebody is reading it, and a
                     // view that hid them would be an overview of a load that looked fine.
-                    return entry.Kind != UILoadingLogKind.Def;
+                    if (entry.IsProblem)
+                        return true;
+
+                    // Headings are the skeleton of the overview and are always in it, however fast they were.
+                    if (IsHeading(entry))
+                        return true;
+
+                    // <b>Everything else has to have cost something.</b> This is the rule the panel never had.
+                    // RimWorld profiles its own work in great detail -- ResolveAllCrossReferences,
+                    // DoAllPostLoadInits, Parse loaded defs -- and each of those labels becomes a step, so an
+                    // overview that admitted all of them ran to a hundred and seventy thousand rows describing a
+                    // load whose interesting parts number about thirty. A step earns its place here by having
+                    // taken measurable time; the rest are still in All, which is what All is for.
+                    return entry.Kind == UILoadingLogKind.Step && entry.Duration >= OverviewThreshold;
 
                 default:
                     return true;
@@ -706,12 +887,13 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             if (fold)
             {
-                foreach (CategorySpan span in categories)
+                foreach (ConsoleRow row in rows)
                 {
-                    // Only phases fold, not the sections above them: folding those too would leave a panel
-                    // showing two lines, which is not a view of anything.
-                    if (span.Kind == UILoadingLogKind.Stage)
-                        collapsed.Add(span.Key);
+                    // Keyed by phase name, matching what the fold marker on each header uses. Folding is now a
+                    // property of the phase rather than of one occurrence of it, so folding "Resolving
+                    // references" folds all three runs of it at once.
+                    if (row.Header && row.Kind == UILoadingLogKind.Stage)
+                        collapsed.Add(row.Key);
                 }
             }
 
@@ -807,7 +989,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         private static void DrawRows(Rect rect, UIColorPaletteDef palette)
         {
             float rowHeight = UIFonts.LineHeightOf(GameFont.Tiny) + RowPad;
-            float contentHeight = visible.Count * rowHeight;
+            float contentHeight = rows.Count * rowHeight;
 
             Rect view = new Rect(0f, 0f, rect.width - 18f, contentHeight);
 
@@ -834,10 +1016,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 Text.WordWrap = false;
 
                 int first = Mathf.Max(0, Mathf.FloorToInt(scroll.y / rowHeight) - 1);
-                int last = Mathf.Min(visible.Count, first + Mathf.CeilToInt(rect.height / rowHeight) + 2);
+                int last = Mathf.Min(rows.Count, first + Mathf.CeilToInt(rect.height / rowHeight) + 2);
 
                 for (int i = first; i < last; i++)
-                    DrawRow(new Rect(0f, i * rowHeight, view.width, rowHeight), visible[i], palette);
+                    DrawModelRow(new Rect(0f, i * rowHeight, view.width, rowHeight), rows[i], palette);
             }
             finally
             {
@@ -852,6 +1034,157 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             // Measured after the view, so it reflects wherever the wheel or the bar just left it. The tolerance
             // is a row, so landing a pixel short of the bottom still counts as being at it.
             pinnedToEnd = scroll.y >= contentHeight - rect.height - rowHeight;
+        }
+
+        /// <summary>
+        /// One row of the model.
+        ///
+        /// <b>A header and a child are drawn as different things,</b> which the old version could not do because
+        /// every row was simply an entry and the code had to infer a role from its kind. A header is white and
+        /// heavy with its total on the right; a child is dimmer, indented against a rail, and carries its own
+        /// count when it happened more than once. That difference is what makes the panel scannable.
+        /// </summary>
+        private static void DrawModelRow(Rect rect, ConsoleRow row, UIColorPaletteDef palette)
+        {
+            bool chosen = selected.HasValue && selected.Value.Seconds == row.Entry.Seconds
+                                            && selected.Value.Text == row.Entry.Text;
+
+            if (row.Duration > OverviewThreshold)
+            {
+                float scale = Mathf.Max(0.01f, slowest.Duration);
+                float width = Mathf.Clamp01(row.Duration / scale) * rect.width;
+
+                Color fill = row.Duration >= slowest.Duration * 0.25f ? palette.Danger : palette.Accent;
+                fill.a = row.Header ? 0.20f : 0.12f;
+
+                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, Mathf.Max(2f, width), rect.height), fill);
+            }
+
+            if (chosen)
+                Widgets.DrawBoxSolid(rect, palette.SelectionOverlay);
+            else if (Mouse.IsOver(rect))
+                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
+
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = palette.TextDisabled;
+            Widgets.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height), row.Seconds.ToString("F2"));
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+
+            float x = rect.x + TimeColumn + 6f;
+            Rect twist = Rect.zero;
+
+            if (row.Header)
+            {
+                twist = new Rect(x, rect.y, 14f, rect.height);
+                x += 16f;
+
+                GUI.color = Mouse.IsOver(twist) ? palette.TextPrimary : palette.TextSecondary;
+                Widgets.DrawTextureFitted(twist.ContractedBy(2f),
+                    collapsed.Contains(row.Key) ? TexButton.Reveal : TexButton.Collapse, 1f);
+            }
+            else
+            {
+                GUI.color = palette.Border;
+                Widgets.DrawLineVertical(rect.x + TimeColumn + 12f, rect.y, rect.height);
+                x += StepIndent + 10f;
+            }
+
+            bool problem = row.Kind == UILoadingLogKind.Error || row.Kind == UILoadingLogKind.Warning;
+
+            if (problem)
+            {
+                Rect tag = new Rect(x, rect.y + 2f, 38f, rect.height - 4f);
+                Color severity = row.Kind == UILoadingLogKind.Error ? palette.Danger : palette.Warning;
+                Color badge = severity;
+                badge.a = 0.20f;
+
+                Widgets.DrawBoxSolid(tag, badge);
+
+                GUI.color = severity;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Widgets.Label(tag, row.Kind == UILoadingLogKind.Error ? "ERROR" : "WARN");
+                Text.Anchor = TextAnchor.MiddleLeft;
+
+                x += 42f;
+            }
+
+            string label = row.Header ? row.Text : UILoadingLog.FirstLine(row.Text);
+
+            // How many times it happened, when that is more than once. A phase RimWorld runs three times is one
+            // row saying so, rather than three rows the reader has to notice are the same.
+            if (row.Occurrences > 1)
+                label += "  x" + row.Occurrences;
+
+            GUI.color = problem
+                ? (row.Kind == UILoadingLogKind.Error ? palette.Danger : palette.Warning)
+                : row.Header
+                    ? palette.TextPrimary
+                    : palette.TextSecondary;
+
+            float rightWidth = row.Duration >= OverviewThreshold ? 62f : 0f;
+            float pill = row.Header && collapsed.Contains(row.Key) && row.Children > 0
+                ? 20f + row.Children.ToString().Length * 6f
+                : 0f;
+
+            Widgets.LabelEllipses(new Rect(x, rect.y, Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f),
+                rect.height), label);
+
+            if (pill > 0f)
+            {
+                float labelWidth = Mathf.Min(Text.CalcSize(label).x,
+                    Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f));
+
+                Rect chip = new Rect(x + labelWidth + 6f, rect.y + 1f, pill, rect.height - 2f);
+
+                UIElementPainter.OutlineRounded(chip, palette.Border, palette.SurfaceSunken);
+
+                GUI.color = palette.TextSecondary;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Widgets.Label(chip, row.Children.ToString());
+                Text.Anchor = TextAnchor.MiddleLeft;
+            }
+
+            if (rightWidth > 0f)
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = row.Duration >= 10f ? palette.Danger
+                    : row.Duration >= 1f ? palette.Warning
+                    : palette.TextDisabled;
+
+                Widgets.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
+                    UILoadingLog.Duration(row.Duration));
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+            }
+
+            if (row.Header && Widgets.ButtonInvisible(twist))
+            {
+                Fold(row.Key);
+                SoundDefOf.Click.PlayOneShotOnCamera();
+
+                return;
+            }
+
+            if (Widgets.ButtonInvisible(rect))
+            {
+                selected = chosen ? (UILoadingLogEntry?) null : row.Entry;
+                detailScroll = Vector2.zero;
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            if (!Mouse.IsOver(rect))
+                return;
+
+            string tip = row.Text;
+
+            if (row.Occurrences > 1)
+                tip += "\n\nRan " + row.Occurrences + " times, " + UILoadingLog.Duration(row.Duration) + " total.";
+
+            if (!row.Entry.Path.NullOrEmpty())
+                tip += "\n\n" + row.Entry.Path;
+
+            TooltipHandler.TipRegion(rect, (TipSignal) tip);
         }
 
         private static void DrawRow(Rect rect, UILoadingLogEntry entry, UIColorPaletteDef palette)
@@ -1115,9 +1448,28 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 Widgets.Label(new Rect(inner.x, inner.y + lineHeight - 6f, inner.width, lineHeight),
                     "Longest first. Click to jump.");
 
-                // Sorted rather than in load order, and copied first so the sort cannot disturb the list the rows
-                // are keyed against.
-                List<CategorySpan> sorted = new List<CategorySpan>(categories);
+                // <b>Built from the same merged model the list uses,</b> so a phase RimWorld runs three times is
+                // one entry with its total here as well. The old version listed every occurrence separately,
+                // which put "Resolving references" in the panel three times with three partial figures and no
+                // way to see what the phase actually cost.
+                List<CategorySpan> sorted = new List<CategorySpan>(rows.Count);
+
+                foreach (ConsoleRow row in rows)
+                {
+                    if (!row.Header)
+                        continue;
+
+                    sorted.Add(new CategorySpan
+                    {
+                        Key = row.Key,
+                        Name = row.Text,
+                        Kind = row.Kind,
+                        Seconds = row.Seconds,
+                        Duration = row.Duration,
+                        Children = row.Children
+                    });
+                }
+
                 sorted.Sort((a, b) => b.Duration.CompareTo(a.Duration));
 
                 Rect list = new Rect(inner.x, inner.y + lineHeight * 2f - 2f, inner.width,
@@ -1195,15 +1547,16 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// <summary>Scrolls the list to a phase, unfolding it first if it is folded away.</summary>
         private static void Jump(CategorySpan span)
         {
-            if (collapsed.Remove(span.Key))
+            // Keyed by name, like everything else about folding now.
+            if (collapsed.Remove(span.Name ?? string.Empty))
             {
                 collapsedVersion++;
                 Rebuild();
             }
 
-            for (int i = 0; i < visible.Count; i++)
+            for (int i = 0; i < rows.Count; i++)
             {
-                if (KeyOf(visible[i]) != span.Key)
+                if (!rows[i].Header || rows[i].Key != (span.Name ?? string.Empty))
                     continue;
 
                 scroll.y = i * (UIFonts.LineHeightOf(GameFont.Tiny) + RowPad);
