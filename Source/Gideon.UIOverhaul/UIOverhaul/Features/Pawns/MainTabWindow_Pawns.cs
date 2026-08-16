@@ -1,6 +1,7 @@
 ﻿using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Tabs;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -15,12 +16,32 @@ namespace Gideon.UIOverhaul.Features.Pawns
     /// fails. Drawing goes through <see cref="UIGuard.Content"/> for that reason: with no fallback available, the
     /// contained failure has to be something the player can see and read about rather than a blank window.
     /// </summary>
-    public class MainTabWindow_Pawns : MainTabWindow
+    public class MainTabWindow_Pawns : MainTabWindow, IUITabWidthReservation
     {
         public override Vector2 RequestedTabSize => new Vector2(PawnsPanel.WindowWidth, PawnsPanel.WindowHeight);
 
         /// <summary>Zero, because the panel does its own insetting -- the same arrangement the work tab uses.</summary>
         protected override float Margin => 0f;
+
+        /// <summary>
+        /// Room the work pane needs, held back on top of whatever width the tab has been dragged to.
+        ///
+        /// See <see cref="IUITabWidthReservation"/>. Without it, a player who had resized this tab got the pane
+        /// drawn inside their chosen width instead of beside it: the columns were squeezed, the activity column
+        /// fell off the right edge and a horizontal scrollbar appeared under a table that had been fitting.
+        /// </summary>
+        public float ReservedWidth => PawnsPanel.PaneReservation;
+
+        /// <summary>
+        /// The reservation this window was last sized for.
+        ///
+        /// <b>Remembered, where the earlier version compared the rect against the width the panel wanted.</b>
+        /// That read better and was wrong once a stored size existed: the stored width legitimately differs
+        /// from the panel's ideal, so the comparison was true on every frame forever and this called
+        /// <c>SetInitialSizeAndPosition</c> sixty times a second to be handed the same rect back. Watching the
+        /// thing that actually changes fires once per open and once per close.
+        /// </summary>
+        private float sizedFor = -1f;
 
         /// <summary>
         /// Resizes the window when the work pane opens or closes.
@@ -33,17 +54,31 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// In <c>WindowUpdate</c> rather than in <c>DoWindowContents</c> on purpose: this runs outside the GUI pass,
         /// so the rect is settled before anything lays out against it. Moving the window mid-draw would leave the
         /// frame's controls positioned against a rect that no longer exists.
-        ///
-        /// The comparison is against the actual rect rather than a remembered value, so the check answers "does the
-        /// window match what it should be" instead of "did we notice the change" -- and it therefore also corrects
-        /// itself after a resolution change or anything else that moves the window.
         /// </summary>
         public override void WindowUpdate()
         {
             base.WindowUpdate();
 
-            if (Mathf.Abs(windowRect.width - PawnsPanel.WindowWidth) > 0.5f)
-                SetInitialSizeAndPosition();
+            float reserved = ReservedWidth;
+
+            if (Mathf.Abs(sizedFor - reserved) <= 0.5f)
+                return;
+
+            sizedFor = reserved;
+            SetInitialSizeAndPosition();
+        }
+
+        /// <summary>
+        /// Forgets what the window was sized for, so the next update re-applies it.
+        ///
+        /// The pane can be left open when the tab closes, and a stale value here would mean reopening the tab
+        /// with the pane already open and nothing widening it.
+        /// </summary>
+        public override void PreOpen()
+        {
+            base.PreOpen();
+
+            sizedFor = -1f;
         }
 
         public override void DoWindowContents(Rect inRect)

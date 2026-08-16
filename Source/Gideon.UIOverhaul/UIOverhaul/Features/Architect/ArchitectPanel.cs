@@ -10,6 +10,7 @@ using UnityEngine;
 using Verse;
 using Verse.Sound;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Options;
 
 namespace Gideon.UIOverhaul.Features.Architect
 {
@@ -133,8 +134,32 @@ namespace Gideon.UIOverhaul.Features.Architect
         // No headroom by design, but none is needed: the row sets are fixed in ArchitectStatBlock, so a fifth
         // row cannot appear without a code change here as well.
         private const float OptionCardHeight = 100f;
+
+        /// <summary>
+        /// A material card with its stats hidden: the icon, and the name beside it.
+        ///
+        /// Sized from the icon rather than from the text, since the icon is the taller of the two and is what
+        /// sets how short the row can honestly get. Collapsing the stats without collapsing the height would
+        /// leave a column of mostly empty cards, which is more scrolling than showing the numbers cost.
+        /// </summary>
+        private const float OptionCardHeightPlain = OptionIconSize + 14f;
+
         private const float OptionIconSize = 34f;
         private const float OptionStatLineHeight = 16f;
+
+        /// <summary>Height of the toggle above the material list.</summary>
+        private const float StuffToggleHeight = 22f;
+
+        /// <summary>
+        /// Whether material cards carry their stats, read fresh from the settings each time.
+        ///
+        /// Not cached in a static: this is read a handful of times per frame while one small pane is open,
+        /// and a cached copy would be one more thing to invalidate when the options window writes the file.
+        /// </summary>
+        private static bool StuffDetails =>
+            UIGuard.Try("Architect.ReadStuffDetails",
+                () => UIOverhaulSettingsFile.Current?.showStuffDetails ?? true, true,
+                "The architect's material list shows its stats.");
 
         private static readonly UICardControl OptionCard = new UICardControl { Padding = 6f };
 
@@ -756,24 +781,47 @@ namespace Gideon.UIOverhaul.Features.Architect
                     OptionStuffs.Add(candidate);
             }
 
-            Rect view = new Rect(0f, 0f, list.width - ScrollBarWidth,
-                OptionStuffs.Count * (OptionCardHeight + DesignatorCardGap));
+            // The toggle sits above the list it governs rather than in the mod's options window. Whether the
+            // numbers are wanted is a question that arises while looking at them, and an answer that costs a
+            // trip out to a settings screen is one nobody gives.
+            bool details = StuffDetails;
 
-            ThingDef chosen = null;
-            Widgets.BeginScrollView(list, ref optionScroll, view);
+            Rect toggle = new Rect(list.x, list.y, list.width - ScrollBarWidth, StuffToggleHeight);
 
-            for (int i = 0; i < OptionStuffs.Count; i++)
+            if (UICheckboxControl.Draw(toggle, ref details, palette, "Show detailed stuff",
+                    "Show each material's stats on its card.\n\nOff leaves the icon and the name, which is a "
+                    + "shorter list to scroll once you know the numbers."))
             {
-                ThingDef stuff = OptionStuffs[i];
-                Rect card = new Rect(0f, i * (OptionCardHeight + DesignatorCardGap),
-                    view.width, OptionCardHeight);
-
-                if (DrawOptionCard(card, null, stuff, stuff.LabelCap, placing, stuff,
-                        build.StuffDef == stuff, palette))
-                    chosen = stuff;
+                SetStuffDetails(details);
             }
 
-            Widgets.EndScrollView();
+            Rect cards = new Rect(list.x, toggle.yMax + 4f, list.width,
+                Mathf.Max(0f, list.yMax - toggle.yMax - 4f));
+
+            float height = details ? OptionCardHeight : OptionCardHeightPlain;
+
+            Rect view = new Rect(0f, 0f, cards.width - ScrollBarWidth,
+                OptionStuffs.Count * (height + DesignatorCardGap));
+
+            ThingDef chosen = null;
+            Widgets.BeginScrollView(cards, ref optionScroll, view);
+
+            try
+            {
+                for (int i = 0; i < OptionStuffs.Count; i++)
+                {
+                    ThingDef stuff = OptionStuffs[i];
+                    Rect card = new Rect(0f, i * (height + DesignatorCardGap), view.width, height);
+
+                    if (DrawOptionCard(card, null, stuff, stuff.LabelCap, placing, stuff,
+                            build.StuffDef == stuff, palette, details))
+                        chosen = stuff;
+                }
+            }
+            finally
+            {
+                Widgets.EndScrollView();
+            }
 
             if (chosen == null)
                 return;
@@ -800,8 +848,15 @@ namespace Gideon.UIOverhaul.Features.Architect
         /// is what makes sandstone blocks sandstone-colored. Drawing the texture directly left every stone,
         /// wood and metal the same grey, so the list gave no visual clue which material was which.
         /// </param>
+        /// <param name="showStats">
+        /// False draws the icon and the name only, for the collapsed material list. It also moves the name to
+        /// the middle of the card: left at the top it would sit against the icon's crown with the empty half
+        /// of the row beneath it, which reads as a card whose contents failed to load rather than one that was
+        /// asked to be brief.
+        /// </param>
         private static bool DrawOptionCard(Rect card, Designator variant, ThingDef iconThing, string label,
-            BuildableDef placing, ThingDef stuff, bool selected, UIColorPaletteDef palette)
+            BuildableDef placing, ThingDef stuff, bool selected, UIColorPaletteDef palette,
+            bool showStats = true)
         {
             OptionCard.BackgroundColor = palette.SurfaceRaised;
             OptionCard.Selected = selected;
@@ -811,7 +866,9 @@ namespace Gideon.UIOverhaul.Features.Architect
             float textX = OptionIconSize + 8f;
 
             OptionName.Text = label;
-            OptionName.Bounds = new Rect(textX, 0f, Mathf.Max(0f, content.width - textX), 20f);
+            OptionName.Anchor = showStats ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft;
+            OptionName.Bounds = new Rect(textX, 0f, Mathf.Max(0f, content.width - textX),
+                showStats ? 20f : content.height);
             OptionName.Color = selected ? palette.TextPrimary : palette.TextSecondary;
 
             bool clicked = OptionCard.Draw(card, palette);
@@ -823,10 +880,36 @@ namespace Gideon.UIOverhaul.Features.Architect
             else if (variant != null)
                 variant.DrawIcon(iconRect, null, default(GizmoRenderParms));
 
-            DrawOptionStats(new Rect(content.x + textX, content.y + 22f,
-                content.width - textX, content.height - 22f), placing, stuff, palette);
+            if (showStats)
+            {
+                DrawOptionStats(new Rect(content.x + textX, content.y + 22f,
+                    content.width - textX, content.height - 22f), placing, stuff, palette);
+            }
 
             return clicked;
+        }
+
+        /// <summary>
+        /// Writes the material list's detail setting and puts it on disk.
+        ///
+        /// Saved on the click rather than batched, because this toggle lives in a transient pane: the options
+        /// pane closes the moment a material is chosen, and a preference that only survived if you closed the
+        /// panel a particular way would look like it was not saving at all.
+        /// </summary>
+        private static void SetStuffDetails(bool value)
+        {
+            UIGuard.Try("Architect.WriteStuffDetails", () =>
+            {
+                UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;
+
+                if (settings == null || settings.showStuffDetails == value)
+                    return;
+
+                settings.showStuffDetails = value;
+                settings.Save();
+            }, "That preference could not be saved and reverts when the game restarts.");
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
         }
 
         private static void DrawOptionStats(Rect rect, BuildableDef placing, ThingDef stuff,

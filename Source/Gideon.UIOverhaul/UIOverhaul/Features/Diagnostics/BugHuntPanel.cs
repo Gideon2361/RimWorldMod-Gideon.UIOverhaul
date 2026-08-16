@@ -395,22 +395,16 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 Rect head = new Rect(content.x, content.y, content.width, small);
                 float x = head.x;
 
-                // The same chip the loading console uses: a solid fill in the severity color with near black
-                // text, sized to the word. Two diagnostics that mark the same thing should mark it the same way.
+                // The shared badge, so a fault flagged here and the same fault flagged in the loading console
+                // are the same object rather than two panels agreeing by hand.
                 Text.Font = GameFont.Tiny;
 
                 string label = finding.Fatal ? "FATAL" : finding.Error ? "ERROR" : "WARN";
-                float chipWidth = Text.CalcSize(label).x + 14f;
-                Rect chip = new Rect(x, head.y + 2f, chipWidth, Mathf.Max(11f, small - 4f));
 
-                UIElementPainter.FillRounded(chip, severity);
-
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.WindowBackground;
-                Widgets.Label(chip, label);
+                x = UITagControl.DrawLeading(new Rect(x, head.y, head.width, small), label, severity, palette,
+                    8f);
 
                 Text.Anchor = TextAnchor.MiddleLeft;
-                x += chipWidth + 8f;
 
                 // The field, right aligned, so the eye can run down one column of field names rather than hunt
                 // for them at the end of names of different lengths.

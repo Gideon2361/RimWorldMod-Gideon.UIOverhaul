@@ -123,7 +123,10 @@ namespace Gideon.UIOverhaul.Features.Tabs
             // Rounded here as well as in Resized, and for the same reason: a size that arrives fractional from a
             // hand-edited file would otherwise put the window on a half pixel, and Rounded() truncates the
             // position and the size separately, which is what lets an anchored edge slip.
-            float width = Mathf.Round(Mathf.Clamp(stored.x, MinWidthFor(tab), UI.screenWidth));
+            //
+            // The reservation is added rather than competed with: the stored number is how much room the player
+            // gave the content, and a side panel is not content. See IUITabWidthReservation.
+            float width = Mathf.Round(Mathf.Clamp(stored.x + Reserved(tab), MinWidthFor(tab), UI.screenWidth));
             float height = Mathf.Round(Mathf.Clamp(stored.y, MinHeightFor(tab), bottom));
 
             float x = tab.Anchor == MainTabWindowAnchor.Left ? 0f : UI.screenWidth - width;
@@ -193,7 +196,12 @@ namespace Gideon.UIOverhaul.Features.Tabs
 
                 if (tab.def != null)
                 {
-                    TabSizes.Set(tab.def.defName, new Vector2(windowRect.width, windowRect.height));
+                    // The reservation comes back off before storing. Left in, it would be added again on the
+                    // next open, and again the time after, and the tab would creep wider every time its side
+                    // panel was used. See IUITabWidthReservation.
+                    TabSizes.Set(tab.def.defName,
+                        new Vector2(windowRect.width - Reserved(tab), windowRect.height));
+
                     TabSizes.SaveIfNeeded();
                 }
 
@@ -258,9 +266,29 @@ namespace Gideon.UIOverhaul.Features.Tabs
         /// </summary>
         private static float MinWidthFor(MainTabWindow tab)
         {
-            return Mathf.Min(MinWidth, UIGuard.Try("Tabs.ReadRequestedSize",
+            // The reservation is a floor as well as an addition: while a side panel is open the tab cannot
+            // usefully be dragged narrower than the panel, and letting it would put the player back in the
+            // squeezed state this exists to prevent.
+            return Reserved(tab) + Mathf.Min(MinWidth, UIGuard.Try("Tabs.ReadRequestedSize",
                 () => tab.RequestedTabSize.x, MinWidth,
                 "One tab uses the standard minimum size."));
+        }
+
+        /// <summary>
+        /// Width this tab currently wants held back for a side panel, or zero.
+        ///
+        /// Guarded because the tab supplying it is arbitrary code running once per frame per resize
+        /// calculation; a throw here would take out the resizer for every tab rather than one.
+        /// </summary>
+        private static float Reserved(MainTabWindow tab)
+        {
+            IUITabWidthReservation reserving = tab as IUITabWidthReservation;
+
+            if (reserving == null)
+                return 0f;
+
+            return UIGuard.Try("Tabs.ReadReservedWidth", () => Mathf.Max(0f, reserving.ReservedWidth), 0f,
+                "One tab does not widen for its side panel.");
         }
 
         private static float MinHeightFor(MainTabWindow tab)

@@ -32,6 +32,9 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         /// <summary>Short numeric stats per row. The wider list column fits all of them on one line.</summary>
         private const int StatColumns = 5;
         private const float CardGap = 6f;
+
+        /// <summary>Side of the favorite star. Large enough to hit without hunting, small enough to ignore.</summary>
+        private const float StarSize = 18f;
         private const float HeaderHeight = 46f;
         private const float HeroHeight = 68f;
         private const float FooterHeight = 52f;
@@ -99,10 +102,16 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             draggable = true;
         }
 
+        /// <summary>
+        /// The plants to list: everything the zone offers, filtered by the search, favorites first.
+        ///
+        /// The ordering is applied after filtering rather than once up front, so a search that matches a
+        /// favorite still floats it to the top of whatever is left.
+        /// </summary>
         private List<ThingDef> VisiblePlants()
         {
             if (search.NullOrEmpty())
-                return allPlants;
+                return PlantFavorites.Ordered(allPlants);
 
             List<ThingDef> filtered = new List<ThingDef>();
             foreach (ThingDef plant in allPlants)
@@ -110,7 +119,8 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 if (plant.label.IndexOf(search, System.StringComparison.OrdinalIgnoreCase) >= 0)
                     filtered.Add(plant);
             }
-            return filtered;
+
+            return PlantFavorites.Ordered(filtered);
         }
 
         public override void DoWindowContents(Rect inRect)
@@ -245,7 +255,9 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             plantCard.BackgroundTexture = notice.HasValue ? GzpTex.NoticeBackground : null;
             plantCard.BackgroundTint = notice.HasValue ? WashFor(notice.Value) : (Color?) null;
 
-            bool clicked = plantCard.Draw(card);
+            // Chrome only. The card's own click is taken at the very end of this method instead, because
+            // anything clickable drawn on top of it has to be asked first. See the note down there.
+            plantCard.DrawChrome(card);
 
             Rect iconRect = new Rect(card.x + 10f, card.y + 8f, 44f, 44f);
             Widgets.ThingIcon(iconRect, plant);
@@ -318,13 +330,23 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                     notice.Value.IsBenefit ? GzpPalette.Good : GzpPalette.Warn);
             }
 
-            bool overProduct = DrawProduct(card, plant);
+            // <b>The small targets are drawn before the card's own, and the order is the whole of it.</b>
+            // Widgets.ButtonInvisible is GUI.Button, which takes the event on mouse down: the first control
+            // drawn that contains the point calls Use() and every control after it sees an event that has
+            // already been spent. So whichever button is drawn first wins, regardless of which is on top
+            // visually or which is smaller.
+            //
+            // This method used to take the card's click first, at the top, and then try to undo it by asking
+            // whether the cursor happened to be over the product icon. That silently did nothing on the
+            // product -- its own button could never fire, because the card had already consumed the event --
+            // and the star added later inherited the same fault, which is how it was found.
+            //
+            // Drawing them in this order makes the guessing unnecessary: the star gets first refusal, then the
+            // product, then the card takes whatever neither claimed.
+            DrawFavorite(card, plant);
+            DrawProduct(card, plant);
 
-            // Clicking the product icon opens its info card; it must not also select the card. The card's
-            // own click was captured before the product was drawn, which is why it is tested here rather
-            // than asked for again -- ButtonInvisible consumes the event, so a second call would report
-            // nothing.
-            if (overProduct || !clicked)
+            if (!Widgets.ButtonInvisible(card))
                 return;
 
             selected = plant;
@@ -332,14 +354,68 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         }
 
         /// <summary>
-        /// Draws the harvested product's own artwork as a button onto the vanilla info card.
-        /// Returns true when the cursor is over it, so the card behind can ignore the click.
+        /// The favorite star: hollow until flagged, solid after.
+        ///
+        /// <b>Under the plant icon, in the left gutter.</b> The product icon is top right and opens an info
+        /// card, and the card itself selects the plant, so a third target has to land where neither reaches.
+        /// The bottom right corner looked free and is not: a hazardous plant carries an extra notice row
+        /// spanning the full width down there, so the star would have sat on top of the warning on exactly
+        /// the cards that most need reading. The column beneath the icon is empty on every card, whatever its
+        /// height, because the stat grid starts to the right of it.
+        ///
+        /// <b>Filled means flagged, and the shape carries that rather than the colour.</b> An outline against
+        /// a solid is legible at sixteen pixels and on any card wash, where two shades of the same fill are
+        /// not -- these sit on hazard red and benefit green as often as on the plain panel.
         /// </summary>
-        private static bool DrawProduct(Rect card, ThingDef plant)
+        private static void DrawFavorite(Rect card, ThingDef plant)
+        {
+            bool favorite = PlantFavorites.IsFavorite(plant);
+
+            // Centred on the plant icon's column, just below it. Kept in step with the icon rect in
+            // DrawPlantCard rather than written as its own literals, so moving the icon moves this with it.
+            Rect star = new Rect(card.x + 10f + (44f - StarSize) * 0.5f, card.y + 8f + 44f + 8f,
+                StarSize, StarSize);
+
+            bool over = Mouse.IsOver(star);
+
+            Texture2D shape = favorite ? UIShapes.StarFilled : UIShapes.StarHollow;
+
+            if (shape != null)
+            {
+                Color previous = GUI.color;
+
+                // Dim until it is either flagged or under the cursor. A row of bright stars down an unsorted
+                // list would compete with the plant names, which are what somebody is actually reading.
+                GUI.color = favorite
+                    ? GzpPalette.Accent
+                    : over
+                        ? GzpPalette.Stat
+                        : GzpPalette.TextDim;
+
+                GUI.DrawTexture(star, shape);
+
+                GUI.color = previous;
+            }
+
+            TooltipHandler.TipRegion(star, (TipSignal) (favorite
+                ? "Favorited. Click to remove.\n\nFavorites are pinned to the top of this list and kept "
+                  + "between colonies."
+                : "Click to favorite.\n\nFavorites are pinned to the top of this list and kept between "
+                  + "colonies."));
+
+            if (Widgets.ButtonInvisible(star))
+            {
+                PlantFavorites.Toggle(plant);
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+        }
+
+        /// <summary>Draws the harvested product's own artwork as a button onto the vanilla info card.</summary>
+        private static void DrawProduct(Rect card, ThingDef plant)
         {
             ThingDef harvested = plant.plant.harvestedThingDef;
             if (harvested == null)
-                return false;
+                return;
 
             // Top-right, clear of the stat rows below.
             Rect productRect = new Rect(card.xMax - 42f, card.y + 8f, 32f, 32f);
@@ -357,8 +433,6 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 Find.WindowStack.Add(new Dialog_InfoCard(harvested, (Precept_ThingStyle) null));
                 SoundDefOf.Click.PlayOneShotOnCamera();
             }
-
-            return over;
         }
 
         private struct Stat

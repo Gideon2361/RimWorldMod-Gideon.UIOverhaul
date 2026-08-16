@@ -89,6 +89,25 @@ namespace Gideon.UIFramework.Helpers
         internal const float StripePitch = 32f;
 
         /// <summary>
+        /// A solid five-pointed star. Tint it with <c>GUI.color</c>.
+        ///
+        /// Generated rather than shipped as artwork, for the same reason the disc and the rounded rectangle
+        /// are: it costs nothing to build, it is authored once at a size nothing draws at so downscaling does
+        /// the smoothing, and it cannot go missing from a texture folder or arrive at the wrong resolution.
+        /// </summary>
+        internal static readonly Texture2D StarFilled;
+
+        /// <summary>
+        /// The same star as an outline: <see cref="StarFilled"/> with a smaller one punched out of the middle.
+        ///
+        /// <b>Two textures rather than one drawn twice,</b> because a hollow star cannot be made by layering
+        /// the way a ring can. A ring is a disc with a background-coloured disc on top, which only works
+        /// because whatever is behind is a flat fill. These sit on card art and washes, so a punched-out
+        /// middle has to be genuinely transparent.
+        /// </summary>
+        internal static readonly Texture2D StarHollow;
+
+        /// <summary>
         /// <b>Guarded, and for a reason particular to static constructors.</b> RimWorld already catches these, so a
         /// throw does not stop the game loading -- but the CLR then marks the type as failed, and every later read
         /// of one of these fields throws <c>TypeInitializationException</c> instead of returning a texture. Since
@@ -109,11 +128,13 @@ namespace Gideon.UIFramework.Helpers
                 DiscCutout = BuildDisc(true);
                 Stripes = BuildStripes();
                 RoundedRect = BuildRoundedRect();
+                StarFilled = BuildStar(false);
+                StarHollow = BuildStar(true);
             }
             catch (Exception ex)
             {
                 UIGuard.Report("Framework.BuildShapes", ex,
-                    "Rounded corners, circles and the striped fill are drawn as plain rectangles.");
+                    "Rounded corners, circles, stars and the striped fill are drawn as plain rectangles.");
             }
         }
 
@@ -182,6 +203,124 @@ namespace Gideon.UIFramework.Helpers
             texture.Apply();
 
             return texture;
+        }
+
+        /// <summary>
+        /// How far in the star's inner vertices sit, as a fraction of the outer radius.
+        ///
+        /// The value a regular five-pointed star actually has, rather than a number picked by eye: the ratio
+        /// is 1 over phi squared. Anything larger gives fat stubby points, anything smaller gives spindly
+        /// ones, and both read as a botched star rather than as a different style.
+        /// </summary>
+        private const float StarInnerRatio = 0.382f;
+
+        /// <summary>How thick the hollow star's outline is, as a fraction of the outer radius.</summary>
+        private const float StarStroke = 0.18f;
+
+        /// <summary>
+        /// A five-pointed star, solid or outlined.
+        ///
+        /// Coverage-sampled like the rounded rectangle: each pixel's alpha is the fraction of it inside the
+        /// shape, measured over a subsample grid, which is what keeps the points clean when the texture is
+        /// drawn at sixteen pixels instead of the hundred and twenty eight it is authored at.
+        ///
+        /// The outline is the outer star minus the same star scaled about its centre, so the stroke follows
+        /// the points rather than being a constant distance from the edge. That is what an outlined star
+        /// looks like; an even offset would round the points off.
+        /// </summary>
+        private static Texture2D BuildStar(bool hollow)
+        {
+            Texture2D texture = new Texture2D(Resolution, Resolution, TextureFormat.ARGB32, false)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+                name = hollow ? "Gideon.UIFramework.StarHollow" : "Gideon.UIFramework.StarFilled"
+            };
+
+            const int samples = 4;
+            const float centre = Resolution * 0.5f;
+
+            // Short of half the texture so the points do not touch the edge, where clamping would smear them.
+            float outer = Resolution * 0.47f;
+
+            Vector2[] star = StarPoints(centre, outer);
+            Vector2[] inner = hollow ? StarPoints(centre, outer * (1f - StarStroke)) : null;
+
+            Color[] pixels = new Color[Resolution * Resolution];
+
+            for (int y = 0; y < Resolution; y++)
+            for (int x = 0; x < Resolution; x++)
+            {
+                int covered = 0;
+
+                for (int sy = 0; sy < samples; sy++)
+                for (int sx = 0; sx < samples; sx++)
+                {
+                    float px = x + (sx + 0.5f) / samples;
+                    float py = y + (sy + 0.5f) / samples;
+
+                    if (!Contains(star, px, py))
+                        continue;
+
+                    if (inner != null && Contains(inner, px, py))
+                        continue;
+
+                    covered++;
+                }
+
+                pixels[y * Resolution + x] =
+                    new Color(1f, 1f, 1f, covered / (float) (samples * samples));
+            }
+
+            texture.SetPixels(pixels);
+            texture.Apply();
+
+            return texture;
+        }
+
+        /// <summary>
+        /// The ten vertices of a five-pointed star, alternating outer and inner, first point straight up.
+        ///
+        /// Y is negated for the upward point because texture space runs bottom-up while the angles here are
+        /// written screen-style. A star is close enough to symmetric that getting this backwards is invisible,
+        /// which is exactly why it is worth stating.
+        /// </summary>
+        private static Vector2[] StarPoints(float centre, float outer)
+        {
+            Vector2[] points = new Vector2[10];
+
+            for (int i = 0; i < 10; i++)
+            {
+                float radius = i % 2 == 0 ? outer : outer * StarInnerRatio;
+                float angle = Mathf.PI * 0.5f + i * Mathf.PI / 5f;
+
+                points[i] = new Vector2(centre + Mathf.Cos(angle) * radius,
+                    centre + Mathf.Sin(angle) * radius);
+            }
+
+            return points;
+        }
+
+        /// <summary>Ray crossing test. The star is concave, so nothing simpler than this will do.</summary>
+        private static bool Contains(Vector2[] polygon, float x, float y)
+        {
+            bool inside = false;
+
+            for (int i = 0, j = polygon.Length - 1; i < polygon.Length; j = i++)
+            {
+                if (polygon[i].y > y == polygon[j].y > y)
+                    continue;
+
+                float span = polygon[j].y - polygon[i].y;
+
+                if (Mathf.Approximately(span, 0f))
+                    continue;
+
+                if (x < (polygon[j].x - polygon[i].x) * (y - polygon[i].y) / span + polygon[i].x)
+                    inside = !inside;
+            }
+
+            return inside;
         }
 
         /// <param name="inverted">

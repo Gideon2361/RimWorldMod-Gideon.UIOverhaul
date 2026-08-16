@@ -1127,30 +1127,15 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             if (problem)
             {
-                // <b>A chip, not a highlight.</b> The first version was a square fill of fixed width behind text
-                // set at the row's own size, which is indistinguishable from selecting the word. What makes a
-                // tag read as a tag is its outline and its fit: a rounded edge in the severity color, a tinted
-                // interior, and a box sized to the word rather than padded out to a constant.
+                // The shared badge. This panel is where the look was worked out, and it moved to
+                // UITagControl once a third caller wanted it; the reasoning lives there now.
                 string severityLabel = row.Kind == UILoadingLogKind.Error ? "ERROR" : "WARN";
                 Color severity = row.Kind == UILoadingLogKind.Error ? palette.Danger : palette.Warning;
 
-                float tagWidth = Text.CalcSize(severityLabel).x + 14f;
+                x = UITagControl.DrawLeading(new Rect(x, rect.y, rect.width, rect.height), severityLabel,
+                    severity, palette);
 
-                Rect tag = new Rect(x, rect.y + 2f, tagWidth, Mathf.Max(11f, rect.height - 4f));
-
-                // <b>Filled solid, with the text near black.</b> The tinted version set the word in the same hue
-                // as the ground behind it, which at this size is barely legible and reads as smudged rather than
-                // labelled. A badge wants the strongest contrast available, and the panel already has this
-                // idiom: the selected filter tab is a solid accent fill with dark text. Reusing it means the two
-                // read as the same kind of object rather than as two designers' opinions.
-                UIElementPainter.FillRounded(tag, severity);
-
-                GUI.color = palette.WindowBackground;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(tag, severityLabel);
                 Text.Anchor = TextAnchor.MiddleLeft;
-
-                x += tagWidth + 7f;
             }
 
             string label = row.Header ? row.Text : UILoadingLog.FirstLine(row.Text);

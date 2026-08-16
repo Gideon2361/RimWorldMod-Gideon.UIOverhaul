@@ -109,6 +109,41 @@ namespace Gideon.UIOverhaul.Features.Options
         /// </summary>
         public bool resizableTabs = true;
 
+        /// <summary>
+        /// Whether the architect's material list shows each material's stats, or only its icon and name.
+        ///
+        /// <b>On by default, because the stats are the reason that pane exists.</b> Vanilla offers materials
+        /// through a float menu, which can only list names, so choosing granite over sandstone meant already
+        /// knowing the difference or leaving the menu to look it up.
+        ///
+        /// Off is for the player who does know: once the numbers are in your head, four lines of them per
+        /// material is four times the scrolling to reach the one you were always going to pick.
+        /// </summary>
+        public bool showStuffDetails = true;
+
+        /// <summary>
+        /// Plants flagged as favorites in the growing bill picker, as defNames separated by commas.
+        ///
+        /// <b>In the config file rather than in the save,</b> because a favorite is a statement about how
+        /// somebody plays rather than about one colony. Anybody who always plants rice and healroot wants that
+        /// list on the next colony too, and storing it per save would make them rebuild it every time.
+        ///
+        /// <b>One string rather than a list of elements,</b> to match how everything else in this file is
+        /// written: the reader is a switch over element names taking each one's text, and a nested list would
+        /// be the only shape in here that needed its own parsing. A defName cannot contain a comma, so the
+        /// separator is unambiguous.
+        /// </summary>
+        public string favoritePlants = string.Empty;
+
+        /// <summary>
+        /// Pawn categories switched off in the pawns tab, by name, separated by commas.
+        ///
+        /// <b>What is hidden rather than what is shown,</b> so an empty value means everything is visible. The
+        /// other way round, a fresh install and somebody who had hidden every category would be written
+        /// identically, and the fresh install would open to an empty tab.
+        /// </summary>
+        public string hiddenPawnCategories = string.Empty;
+
         // ---------------------------------------------------------------------------------------
         // Notifications
         //
@@ -426,6 +461,18 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.resizableTabs = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "showStuffDetails":
+                            settings.showStuffDetails = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "favoritePlants":
+                            settings.favoritePlants = value ?? string.Empty;
+                            break;
+
+                        case "hiddenPawnCategories":
+                            settings.hiddenPawnCategories = value ?? string.Empty;
+                            break;
+
                         case "notifyPhinixChat":
                             settings.notifyPhinixChat = !value.EqualsIgnoreCase("false");
                             break;
@@ -590,6 +637,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("timeFormat", timeFormat.ToString());
 
                     writer.WriteElementString("resizableTabs", resizableTabs ? "true" : "false");
+                    writer.WriteElementString("showStuffDetails", showStuffDetails ? "true" : "false");
+                    writer.WriteElementString("favoritePlants", favoritePlants ?? string.Empty);
+                    writer.WriteElementString("hiddenPawnCategories",
+                        hiddenPawnCategories ?? string.Empty);
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
 
                     writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");

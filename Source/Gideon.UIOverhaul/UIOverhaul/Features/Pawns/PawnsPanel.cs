@@ -93,6 +93,14 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <summary>Gap between the grid and the pane, matching the architect tab's.</summary>
         private const float PaneGap = 8f;
 
+        /// <summary>
+        /// Width the work pane needs, or zero when it is closed.
+        ///
+        /// Read by the window every frame to decide how much wider than the player's own size it should be.
+        /// See <see cref="Tabs.IUITabWidthReservation"/>.
+        /// </summary>
+        internal static float PaneReservation => paneFor == null ? 0f : PawnWorkPane.PaneWidth + PaneGap;
+
         internal static float WindowHeight => Mathf.Min(760f, UI.screenHeight * 0.8f);
 
         /// <summary>
@@ -170,6 +178,15 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Rect content = inRect.ContractedBy(6f);
 
+            // Above everything, spanning the grid and the pane both. The filters govern what the whole tab is
+            // about, so putting them inside the grid's own area would read as a property of the table rather
+            // than of the view.
+            Rect filters = new Rect(content.x, content.y, content.width, FilterBarHeight);
+            DrawFilterBar(filters, palette);
+
+            content = new Rect(content.x, filters.yMax + FilterBarGap, content.width,
+                Mathf.Max(0f, content.height - FilterBarHeight - FilterBarGap));
+
             // The pane takes its width off the right before the grid is laid out, so the grid draws into what is
             // left rather than being covered by it -- the same order the architect tab's option pane uses.
             if (paneFor != null)
@@ -191,6 +208,101 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             // After the grid, so the scroll view a portrait was clicked in has been closed out.
             PawnCameraJump.Resolve();
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Category filters
+        // ---------------------------------------------------------------------------------------
+
+        private const float FilterBarHeight = 26f;
+        private const float FilterBarGap = 6f;
+        private const float FilterButtonGap = 4f;
+
+        /// <summary>Padding either side of a filter button's label.</summary>
+        private const float FilterButtonPadding = 22f;
+
+        /// <summary>
+        /// One button per category the game can actually produce.
+        ///
+        /// <b>The workbench's tab styling, and its correction with it.</b> An unselected button sits on a raised
+        /// surface with full strength text, not on <c>ControlBackgroundFaded</c> with dimmed text -- that
+        /// combination is this palette's vocabulary for a control that <i>cannot</i> be used, and it made the
+        /// off half of a choice read as broken rather than as available. See <c>Dialog_XmlWorkbench.Mode</c>,
+        /// where the same mistake was made and fixed.
+        ///
+        /// <b>Selected is filled in the category's own colour</b> rather than in one accent for all of them, so
+        /// each button says which kind of person it governs and not merely that it is on.
+        ///
+        /// The same colours are the accent stripe on every row, so this bar reads as the legend for them. See
+        /// <see cref="DrawRowBackground"/>.
+        /// </summary>
+        private static void DrawFilterBar(Rect bar, UIColorPaletteDef palette)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleCenter;
+
+                float x = bar.x;
+
+                foreach (PawnCategory category in PawnCategories.All)
+                {
+                    if (!PawnCategories.Available(category))
+                        continue;
+
+                    string label = PawnCategories.Label(category);
+                    float width = Text.CalcSize(label).x + FilterButtonPadding;
+
+                    // Stops rather than wrapping or clipping. The bar sits above a table that is already the
+                    // width it needs, so running out of room here means the window is narrower than anything
+                    // was designed for, and a half drawn button is worse than a missing one.
+                    if (x + width > bar.xMax)
+                        break;
+
+                    Rect button = new Rect(x, bar.y, width, bar.height);
+
+                    if (DrawFilterButton(button, label, PawnCategories.Shown(category),
+                            PawnCategories.Color(category, palette), palette))
+                    {
+                        PawnCategories.Toggle(category);
+                        Grid.Scroll = Vector2.zero;
+                        SoundDefOf.Click.PlayOneShotOnCamera();
+                    }
+
+                    x += width + FilterButtonGap;
+                }
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+        }
+
+        private static bool DrawFilterButton(Rect rect, string label, bool on, Color color,
+            UIColorPaletteDef palette)
+        {
+            bool over = Mouse.IsOver(rect);
+
+            if (on)
+                UIElementPainter.FillRounded(rect, color);
+            else
+                UIElementPainter.OutlineRounded(rect, palette.Border,
+                    over ? palette.SurfaceRaised : palette.PanelBackground);
+
+            // Near black on the filled state, full strength text on the empty one. Both are the workbench's,
+            // and both are chosen for contrast against what they actually sit on rather than for a rule about
+            // selected controls being brighter.
+            GUI.color = on ? palette.WindowBackground : palette.TextPrimary;
+
+            Widgets.Label(rect, label);
+
+            return Widgets.ButtonInvisible(rect);
         }
 
         // ---------------------------------------------------------------------------------------
@@ -296,6 +408,62 @@ namespace Gideon.UIOverhaul.Features.Pawns
             });
         }
 
+        /// <summary>Reused between frames, so a rebuild does not allocate a list per map.</summary>
+        private static readonly List<Pawn> Considered = new List<Pawn>();
+
+        /// <summary>
+        /// Every pawn on a map this tab could list, whatever the filters say.
+        ///
+        /// <b>Assembled from vanilla's own indexed lists where it can be.</b> Colonists, prisoners and slaves
+        /// are each a list <c>MapPawns</c> already maintains, so taking them costs nothing. The two modded
+        /// categories have no such list and are found by walking the map's humanlikes -- which is why that walk
+        /// only happens when one of those mods is actually loaded, and never on a vanilla game.
+        ///
+        /// <b>Deduplicated on the way in,</b> because the sources overlap by design: a slave appears in the
+        /// slave list, and Hospitality may also have an opinion about a pawn already claimed elsewhere. The
+        /// category itself is decided once per pawn afterwards, in <c>PawnCategories.Of</c>.
+        /// </summary>
+        private static void Candidates(Map map)
+        {
+            Considered.Clear();
+
+            MapPawns pawns = map.mapPawns;
+
+            if (pawns == null)
+                return;
+
+            Take(pawns.FreeColonists);
+            Take(pawns.PrisonersOfColonySpawned);
+            Take(pawns.SlavesOfColonySpawned);
+
+            if (!PawnCategories.Available(PawnCategory.Patient)
+                && !PawnCategories.Available(PawnCategory.Guest))
+                return;
+
+            foreach (Pawn pawn in pawns.AllHumanlikeSpawned)
+            {
+                PawnCategory category = PawnCategories.Of(pawn);
+
+                if (category == PawnCategory.Patient || category == PawnCategory.Guest)
+                    Take(pawn);
+            }
+        }
+
+        private static void Take(List<Pawn> source)
+        {
+            if (source == null)
+                return;
+
+            foreach (Pawn pawn in source)
+                Take(pawn);
+        }
+
+        private static void Take(Pawn pawn)
+        {
+            if (pawn != null && !Considered.Contains(pawn))
+                Considered.Add(pawn);
+        }
+
         /// <summary>
         /// Rebuilds the rows from the live game state, every frame.
         ///
@@ -320,16 +488,17 @@ namespace Gideon.UIOverhaul.Features.Pawns
             foreach (Map map in maps)
             {
                 group.Clear();
+                Candidates(map);
 
-                foreach (Pawn pawn in map.mapPawns.FreeColonists)
+                foreach (Pawn pawn in Considered)
                 {
-                    // Every colonist joins the roster, matching or not. The roster answers "is this pawn still
-                    // in the colony", which is what decides whether an open pane still has a subject -- and a
-                    // pawn filtered out of view has not gone anywhere. Building it from the matches instead
-                    // would close the pane the moment you searched for somebody else.
+                    // Every pawn the tab could list joins the roster, matching or not. The roster answers "is
+                    // this pawn still here", which is what decides whether an open pane still has a subject --
+                    // and a pawn filtered out of view has not gone anywhere. Building it from the matches
+                    // instead would close the pane the moment you searched for somebody else.
                     Roster.Add(pawn);
 
-                    if (PawnSearch.Matches(Search, pawn))
+                    if (PawnCategories.Shown(PawnCategories.Of(pawn)) && PawnSearch.Matches(Search, pawn))
                         group.Add(pawn);
                 }
 
@@ -341,7 +510,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Grid.Rows.Add(new UIDesignatorTabRow
                 {
                     SectionLabel = MapLabels.NameOf(map),
-                    SectionSuffix = group.Count == 1 ? "1 colonist" : group.Count + " colonists"
+                    SectionSuffix = group.Count == 1 ? "1 person" : group.Count + " people"
                 });
 
                 foreach (Pawn pawn in group)
@@ -380,15 +549,24 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// have to forward it, and the gaps between cells would be dead. Registered on the top band only, so
         /// clicking inside an open schedule strip does not immediately close it again.
         /// </summary>
+        /// <summary>
+        /// The row's chrome, and the stripe down its left edge.
+        ///
+        /// <b>The stripe says which kind of person this is, not how they are.</b> It carried health until the
+        /// tab started listing prisoners, slaves, patients and guests together, at which point the more urgent
+        /// question a row has to answer became "why is this person on my colonist list" -- and health had
+        /// somewhere better to be said anyway. The condition column two cells over now carries a severity
+        /// badge and colored text, which is a stronger signal than three pixels of edge ever was, so nothing
+        /// was lost in the trade.
+        ///
+        /// The colours are <see cref="PawnCategories.Color"/>, the same ones the filter bar fills its buttons
+        /// with, so the bar reads as the legend for the stripes beneath it.
+        /// </summary>
         private static void DrawRowBackground(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
         {
             Pawn pawn = (Pawn) data.Payload;
-            PawnHealthSummary summary = PawnAttributes.Condition.Get(pawn);
 
-            RowCard.AccentColor = summary.State == PawnHealthState.Healthy
-                ? palette.SurfaceRaised
-                : summary.Color(palette);
-
+            RowCard.AccentColor = PawnCategories.Color(PawnCategories.Of(pawn), palette);
             RowCard.BackgroundColor = palette.PanelBackground;
             RowCard.DrawChrome(row, palette);
 
@@ -624,9 +802,17 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.MiddleLeft;
             Text.WordWrap = false;
+
+            Rect line = new Rect(band.x + 8f, band.y, Mathf.Max(0f, band.width - 12f), band.height);
+
+            // The badge takes the colour and the label follows in it, so the two agree without either being
+            // told about the other. DrawLeading returns where the text starts, which is the only reason this
+            // cell never has to know how wide a badge is.
+            float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
+
             GUI.color = summary.Color(palette);
 
-            Widgets.Label(new Rect(band.x + 8f, band.y, band.width - 12f, band.height), summary.Label);
+            Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
 
             Text.WordWrap = true;
             GUI.color = previousColor;

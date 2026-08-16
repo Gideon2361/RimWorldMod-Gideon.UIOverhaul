@@ -13,22 +13,53 @@ namespace Gideon.UIOverhaul.Features.Pawns
     /// three problems, but a column that says all three says nothing at a glance -- and only one of them is
     /// what you would act on first. So the most urgent wins the line, and the tooltip carries the rest.
     ///
-    /// The order is by how soon it kills: bleeding out has a clock on it, vacuum burns through a pawn in
-    /// seconds, being downed is dangerous but stable, needing treatment is a job to queue, temperature is a
-    /// warning, and healthy is everything else.
+    /// The order is by how soon it costs you something: bleeding out has a clock on it, vacuum burns through
+    /// a pawn in seconds, being downed is dangerous but stable, the temperature hediffs take body parts, a
+    /// mental break is doing damage right now, a life-threatening condition is the game's own red alert,
+    /// needing treatment is a job to queue, being merely too cold is a room to fix, and healthy is everything
+    /// else.
     /// </summary>
     internal enum PawnHealthState
     {
         Healthy,
+
+        /// <summary>
+        /// Standing somewhere outside what this pawn can comfortably take, with nothing yet wrong with them.
+        /// Amber, no badge.
+        /// </summary>
         Temperature,
 
-        /// <summary>Something is tendable, and nothing about it is racing a clock. Amber.</summary>
+        /// <summary>Something is tendable, and nothing about it is racing a clock. Amber, badged TEND.</summary>
         NeedsTending,
 
-        /// <summary>An infection is present. Red: this one gets worse on its own if left.</summary>
+        /// <summary>
+        /// An infection is present. Amber like plain tending, because it is the same kind of problem and the
+        /// pawn is not dying of it today; badged HELP, because unlike a wound it gets worse on its own.
+        /// </summary>
         UrgentTending,
 
+        /// <summary>
+        /// The game itself considers something this pawn has to be currently life threatening. Red, badged
+        /// 911. See <see cref="HasLifeThreateningHediff"/>: this is the same test that raises vanilla's own
+        /// critical alert, so the column and the alert cannot disagree.
+        /// </summary>
+        LifeThreatening,
+
+        /// <summary>
+        /// The pawn is in a mental state. Purple, badged BREAK: the only state here that is not a medical
+        /// problem at all, which is exactly why it gets a colour of its own rather than sharing red.
+        /// </summary>
+        MentalBreak,
+
         Downed,
+
+        /// <summary>
+        /// The game has given this pawn a temperature hediff: frostbite forming, heatstroke, or hypothermia.
+        /// Red, badged 911. All three progress on their own and all three end in something lost, which is what
+        /// separates them from the amber state of merely standing somewhere too cold.
+        /// </summary>
+        SevereTemperature,
+
         Vacuum,
 
         /// <summary>The game says this pawn dies of blood loss soon. Red, and stated as an emergency.</summary>
@@ -46,6 +77,23 @@ namespace Gideon.UIOverhaul.Features.Pawns
     /// </summary>
     internal readonly struct PawnHealthSummary
     {
+        /// <summary>
+        /// What the badges say. See <see cref="Tag"/> for which state gets which.
+        ///
+        /// Untranslated, and that is deliberate rather than an omission. All three are three or four
+        /// characters wide in a column with none to spare, and they are read as symbols rather than as
+        /// English -- the color and the position carry the meaning, and the text only distinguishes them from
+        /// each other. Translating would mean promising the replacement stays this short in every language
+        /// the mod is played in, and a badge that wraps or clips is worse than one nobody has to read.
+        /// </summary>
+        private const string EmergencyTag = "911";
+
+        private const string UrgentTag = "HELP";
+
+        private const string TendTag = "TEND";
+
+        private const string BreakTag = "BREAK";
+
         public readonly PawnHealthState State;
 
         /// <summary>What the cell shows. Carries the countdown when there is one.</summary>
@@ -59,6 +107,86 @@ namespace Gideon.UIOverhaul.Features.Pawns
             State = state;
             Label = label;
             Detail = detail;
+        }
+
+        /// <summary>
+        /// A badge drawn before the label, or null for the states that do not warrant one.
+        ///
+        /// <b>Derived from the state rather than passed in,</b> so a state cannot end up badged in one branch
+        /// of <see cref="For"/> and bare in another. Three of them are a triage scale, sorted by how long you
+        /// have rather than by how bad it looks, and the fourth is off that scale entirely:
+        ///
+        /// <b>911, red. This pawn is losing something you cannot give back.</b> Bleeding out has a clock the
+        /// game has already started, vacuum burns through an unprotected pawn in seconds, a downed pawn has to
+        /// be carried out now, and frostbite, heatstroke and hypothermia are the point at which cold and heat
+        /// stop being discomfort and start taking body parts and lives. Every one is a
+        /// drop-what-you-are-doing.
+        ///
+        /// <b>HELP, amber. This gets worse while you decide.</b> An infection races the pawn's immunity, so it
+        /// is not something to leave for the next tending pass, but nobody is dying this hour.
+        ///
+        /// <b>TEND, blue. This is work to queue.</b> A wound that needs tending waits patiently; it belongs on
+        /// the list rather than at the top of it, and blue is the palette's colour for "here is something",
+        /// which is exactly the weight it should carry. It is also the one badge that does not match its own
+        /// text colour, and see <see cref="TagColor"/> for why that is the point rather than an oversight.
+        ///
+        /// <b>BREAK, purple. This one is not medicine at all.</b> A pawn in a mental state needs talking down,
+        /// arresting or leaving alone, and a doctor is no use to any of it. It sits off the red-amber-blue
+        /// scale for that reason: sharing a colour with the medical rows would file it as a treatment queue
+        /// item, which is the one thing it is not.
+        ///
+        /// <b>Below that, nothing,</b> and the restraint is what keeps the rest working. Being too cold for
+        /// comfort is a room to fix rather than a job to assign, and healthy is the answer for most of the
+        /// colony most of the time; badging either would put a marker on every row, and a marker on every row
+        /// is one the eye stops finding.
+        /// </summary>
+        public string Tag
+        {
+            get
+            {
+                switch (State)
+                {
+                    case PawnHealthState.BleedingOut:
+                    case PawnHealthState.Vacuum:
+                    case PawnHealthState.Downed:
+                    case PawnHealthState.SevereTemperature:
+                    case PawnHealthState.LifeThreatening:
+                        return EmergencyTag;
+
+                    case PawnHealthState.MentalBreak:
+                        return BreakTag;
+
+                    case PawnHealthState.UrgentTending:
+                        return UrgentTag;
+
+                    case PawnHealthState.NeedsTending:
+                        return TendTag;
+
+                    default:
+                        return null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The badge's fill, which is not always the label's color.
+        ///
+        /// <b>The badge and the text answer different questions,</b> which is why the two are allowed to
+        /// disagree. The text is severity, in three tiers: red for dying, amber for hurt, green for fine. The
+        /// badge is urgency, which is not the same axis -- an infection and a plain wound are both amber
+        /// problems, and only one of them is getting worse while you read the row.
+        ///
+        /// <b>So they part in exactly one place.</b> A tendable wound keeps amber text and takes a blue badge,
+        /// which is what separates it from the infection sitting directly above it in the same colour.
+        /// Everywhere else the badge and the text agree, and a badge that agreed everywhere would be telling
+        /// you nothing the colour had not already said.
+        ///
+        /// Palette roles rather than literals throughout, so a theme restating what danger or attention looks
+        /// like carries into the badges without touching this.
+        /// </summary>
+        public Color TagColor(UIColorPaletteDef palette)
+        {
+            return State == PawnHealthState.NeedsTending ? palette.Accent : Color(palette);
         }
 
         /// <summary>
@@ -78,8 +206,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
             bool vacuum = InVacuum(pawn);
 
             TemperatureTrouble temperature = ReadTemperature(pawn);
+            Hediff dying = LifeThreateningHediff(pawn);
+            MentalStateDef breaking = pawn.InMentalState ? pawn.MentalStateDef : null;
 
-            string detail = BuildDetail(pawn, downed, needsTending, bleedRate, infected, vacuum, temperature);
+            string detail = BuildDetail(pawn, downed, needsTending, bleedRate, infected, vacuum, temperature,
+                dying, breaking);
 
             // Tier three: the game itself says this pawn dies of blood loss soon. Asked only once bleeding is
             // established, because the call walks hediffs; and gated on a day, because a scratch bleeds too and
@@ -90,8 +221,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
                 if (ticks < GenDate.TicksPerDay)
                 {
+                    // The urgency is a badge rather than a word, so the row reads as a state and a countdown
+                    // instead of a sentence. "Emergency:" spent the first third of the column saying something
+                    // the color had already said, and pushed the number that actually matters off to the right.
+                    // Which badge is decided by Tag, from the state, so it is not restated here.
                     return new PawnHealthSummary(PawnHealthState.BleedingOut,
-                        "Emergency: Bleeding Out, " + ticks.ToStringTicksToPeriod(true, false, true, true),
+                        "Bleeding Out, " + ticks.ToStringTicksToPeriod(true, false, true, true),
                         detail);
                 }
             }
@@ -101,6 +236,34 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             if (downed)
                 return new PawnHealthSummary(PawnHealthState.Downed, "Downed", detail);
+
+            // Above tending, because all three progress while a doctor walks over and the cure is a warmer or
+            // cooler room rather than a bandage. Sitting behind a row that says "Needs Tending" would point at
+            // the wrong action.
+            switch (temperature)
+            {
+                case TemperatureTrouble.Freezing:
+                    return new PawnHealthSummary(PawnHealthState.SevereTemperature, "Frostbite", detail);
+
+                case TemperatureTrouble.Hot:
+                    return new PawnHealthSummary(PawnHealthState.SevereTemperature, "Heatstroke", detail);
+
+                case TemperatureTrouble.Cold:
+                    return new PawnHealthSummary(PawnHealthState.SevereTemperature, "Hypothermic", detail);
+            }
+
+            // Above the medical rows below it, because a pawn in a break is doing damage right now and the
+            // response is nothing a doctor does. Below the rows above it, because those are all somebody dying
+            // in the next few minutes.
+            if (breaking != null)
+                return new PawnHealthSummary(PawnHealthState.MentalBreak, breaking.LabelCap, detail);
+
+            // Named by the condition rather than by a generic phrase. "Plague" beside a red 911 says both what
+            // is wrong and how bad it is, where "Life-Threatening Illness" says only the half the badge had
+            // already said. Below the temperature rows on purpose: hypothermia and heatstroke qualify here too
+            // once they progress, and their own labels point at the fix while this one does not.
+            if (dying != null)
+                return new PawnHealthSummary(PawnHealthState.LifeThreatening, dying.LabelCap, detail);
 
             // Tier two: an infection. Above plain tending because this is the one that gets worse while you
             // decide -- an untended cut waits, an infection races the pawn's immunity.
@@ -113,10 +276,16 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (needsTending || bleedRate > 0.0001f)
                 return new PawnHealthSummary(PawnHealthState.NeedsTending, "Needs Tending", detail);
 
-            if (temperature != TemperatureTrouble.None)
+            // The quiet tier: a pawn standing somewhere they cannot comfortably take, with nothing wrong with
+            // them yet. Amber and unbadged, because it is not a job to assign -- it is a room to fix, and
+            // fixing it now is what stops one of the red rows above appearing later.
+            switch (temperature)
             {
-                return new PawnHealthSummary(PawnHealthState.Temperature,
-                    temperature == TemperatureTrouble.Cold ? "Freezing" : "Overheating", detail);
+                case TemperatureTrouble.Chilly:
+                    return new PawnHealthSummary(PawnHealthState.Temperature, "Too Cold", detail);
+
+                case TemperatureTrouble.Sweltering:
+                    return new PawnHealthSummary(PawnHealthState.Temperature, "Too Hot", detail);
             }
 
             return new PawnHealthSummary(PawnHealthState.Healthy, "Healthy", detail);
@@ -133,9 +302,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 case PawnHealthState.BleedingOut:
                 case PawnHealthState.Vacuum:
                 case PawnHealthState.Downed:
-                case PawnHealthState.UrgentTending:
+                case PawnHealthState.SevereTemperature:
+                case PawnHealthState.LifeThreatening:
                     return palette.Danger;
 
+                // The palette's existing mood colour rather than a new purple, and the fit is exact rather
+                // than convenient: a mental break is a mood failure, and this is the colour the mood bar two
+                // columns over is already drawn in. A theme that restates what mood looks like gets a matching
+                // break row for free.
+                case PawnHealthState.MentalBreak:
+                    return palette.Mood;
+
+                case PawnHealthState.UrgentTending:
                 case PawnHealthState.NeedsTending:
                 case PawnHealthState.Temperature:
                     return palette.Warning;
@@ -181,6 +359,55 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         /// <summary>
+        /// The first hediff the game currently considers life threatening, or null.
+        ///
+        /// <b>Vanilla's own test, copied deliberately rather than approximated.</b> This is the condition
+        /// behind <c>Alert_LifeThreateningHediff</c>, the red critical alert at the top of the screen. Judging
+        /// it ourselves would mean the column and the alert eventually disagreeing about whether a colonist is
+        /// dying, and when those two disagree the player has no way to tell which is wrong.
+        ///
+        /// <c>IsCurrentlyLifeThreatening</c> is the game's own reading and accounts for the hediff's current
+        /// stage, so a plague that has not progressed far does not qualify and the same plague later does.
+        /// <c>FullyImmune</c> excludes the ones the pawn has already beaten and is merely recovering from,
+        /// which would otherwise sit at maximum severity looking like an emergency for days.
+        ///
+        /// <b>The Deathless exception is vanilla's too.</b> A pawn with that gene does not die of ordinary
+        /// conditions, so the alert only counts hediffs whose stage destroys the brain, and so does this. It
+        /// is guarded on Biotech being active before the gene is named, so the check costs nothing and reaches
+        /// nothing when the DLC is absent.
+        /// </summary>
+        private static Hediff LifeThreateningHediff(Pawn pawn)
+        {
+            List<Hediff> hediffs = pawn.health?.hediffSet?.hediffs;
+
+            if (hediffs == null)
+                return null;
+
+            bool deathless = ModsConfig.BiotechActive && pawn.genes != null
+                                                      && pawn.genes.HasActiveGene(GeneDefOf.Deathless);
+
+            for (int i = 0; i < hediffs.Count; i++)
+            {
+                Hediff hediff = hediffs[i];
+
+                if (hediff == null || !hediff.IsCurrentlyLifeThreatening || hediff.FullyImmune())
+                    continue;
+
+                if (deathless)
+                {
+                    HediffStage stage = hediff.CurStage;
+
+                    if (stage == null || !stage.mtbDeathDestroysBrain)
+                        continue;
+                }
+
+                return hediff;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Whether the pawn has an infection.
         ///
         /// Keyed on <c>HediffDef.isInfection</c>, which the game sets on the defs that are infections. Two
@@ -210,41 +437,154 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private enum TemperatureTrouble
         {
             None,
+
+            /// <summary>Outside the comfortable range, with nothing wrong yet.</summary>
+            Chilly,
+
+            Sweltering,
+
+            /// <summary>Hypothermia has set in, and it progresses to death if the pawn stays where they are.</summary>
             Cold,
+
+            /// <summary>Frostbite is forming. Body parts are being taken.</summary>
+            Freezing,
+
+            /// <summary>Heatstroke. The one heat state the game gives out, and it kills.</summary>
             Hot
         }
 
         /// <summary>
-        /// Whether the pawn is actually in temperature trouble.
+        /// The Frostbite hediff, looked up once.
         ///
-        /// Read from the hediffs rather than by comparing ambient temperature against the comfortable range.
-        /// The comparison answers "is this uncomfortable", which is true for a pawn walking briskly across a
-        /// cold map and in no danger at all; the hediff answers "is this doing damage", which is what a status
-        /// column should be reporting. Hypothermia and Heatstroke are the two the game itself gives out.
+        /// <b>By name, because it is not in <c>HediffDefOf</c>,</b> and unlike infection there is no flag on
+        /// the def to key off instead. Resolved lazily rather than in a static initializer, since this type is
+        /// reachable before the definition database is populated and a null there would be cached forever.
+        /// </summary>
+        private static HediffDef frostbite;
+
+        private static bool frostbiteResolved;
+
+        private static HediffDef Frostbite
+        {
+            get
+            {
+                if (frostbiteResolved)
+                    return frostbite;
+
+                frostbite = DefDatabase<HediffDef>.GetNamedSilentFail("Frostbite");
+                frostbiteResolved = true;
+
+                return frostbite;
+            }
+        }
+
+        /// <summary>
+        /// Whether the pawn is in temperature trouble, and how badly.
+        ///
+        /// <b>Two tiers, and the line between them is whether the game has given the pawn a hediff for it.</b>
+        /// Frostbite, heatstroke and hypothermia all progress on their own and all three end in something
+        /// being lost -- a body part or the pawn. Being merely too cold for comfort is a different kind of
+        /// fact: nothing is wrong with the pawn, they are standing somewhere wrong. That line is worth drawing
+        /// exactly where the game already draws it, rather than inventing a severity threshold of our own that
+        /// would disagree with the health tab.
+        ///
+        /// <b>Only frostbite that is currently forming counts.</b> The def carries
+        /// <c>HediffCompProperties_GetsPermanent</c>, so a colonist who lost a toe three winters ago still has
+        /// a frostbite hediff for the rest of their life. Testing for the def alone would have flagged that
+        /// pawn as an emergency permanently, which is the fastest way to teach somebody to ignore the badge.
+        ///
+        /// <b>Ambient temperature is the bottom tier only,</b> and it is deliberately outranked by every
+        /// hediff above it. Read alone it answers "is this uncomfortable", which is true of a pawn walking
+        /// briskly across a cold map in no danger at all -- so it is not fit to be a warning on its own. As the
+        /// quietest thing the column can say, when nothing has actually gone wrong yet, it is exactly right:
+        /// it is the reading that lets somebody fix the room before the hediff appears.
         /// </summary>
         private static TemperatureTrouble ReadTemperature(Pawn pawn)
         {
             HediffSet set = pawn.health?.hediffSet;
+
             if (set == null)
                 return TemperatureTrouble.None;
 
-            if (set.HasHediff(HediffDefOf.Hypothermia))
-                return TemperatureTrouble.Cold;
+            if (HasActiveFrostbite(set))
+                return TemperatureTrouble.Freezing;
 
             if (set.HasHediff(HediffDefOf.Heatstroke))
                 return TemperatureTrouble.Hot;
 
-            return TemperatureTrouble.None;
+            if (set.HasHediff(HediffDefOf.Hypothermia))
+                return TemperatureTrouble.Cold;
+
+            return Ambient(pawn);
+        }
+
+        /// <summary>
+        /// Whether any frostbite on the pawn is a live injury rather than an old scar.
+        ///
+        /// The hediff list is walked directly because HediffSet has no query for this: <c>HasHediff</c> would
+        /// answer for the scars too, and the permanence lives on the individual hediff's comp rather than on
+        /// the def.
+        /// </summary>
+        private static bool HasActiveFrostbite(HediffSet set)
+        {
+            HediffDef def = Frostbite;
+
+            if (def == null)
+                return false;
+
+            List<Hediff> hediffs = set.hediffs;
+
+            if (hediffs == null)
+                return false;
+
+            for (int i = 0; i < hediffs.Count; i++)
+            {
+                Hediff hediff = hediffs[i];
+
+                if (hediff != null && hediff.def == def && !hediff.IsPermanent())
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Whether the pawn is simply standing somewhere outside what they can comfortably take.
+        ///
+        /// <c>ComfortableTemperatureRange</c> is the game's own answer, so it already accounts for the pawn's
+        /// clothing, their race and any trait or gene that moves it. <c>AmbientTemperature</c> is where they
+        /// actually are rather than the map's outdoor reading, so a colonist indoors in winter reads as fine.
+        /// </summary>
+        private static TemperatureTrouble Ambient(Pawn pawn)
+        {
+            if (!pawn.Spawned)
+                return TemperatureTrouble.None;
+
+            FloatRange comfortable = pawn.ComfortableTemperatureRange();
+            float here = pawn.AmbientTemperature;
+
+            if (here < comfortable.min)
+                return TemperatureTrouble.Chilly;
+
+            return here > comfortable.max ? TemperatureTrouble.Sweltering : TemperatureTrouble.None;
         }
 
         /// <summary>
         /// Everything true at once, for the tooltip: the line in the cell is only the most urgent of these.
         /// </summary>
         private static string BuildDetail(Pawn pawn, bool downed, bool needsTending, float bleedRate,
-            bool infected, bool vacuum, TemperatureTrouble temperature)
+            bool infected, bool vacuum, TemperatureTrouble temperature, Hediff dying, MentalStateDef breaking)
         {
             string detail = "Health: "
                             + (pawn.health?.summaryHealth?.SummaryHealthPercent ?? 1f).ToStringPercent();
+
+            if (breaking != null)
+                detail += "\nMental break: " + breaking.LabelCap;
+
+            // Spelled out here even though the row already says the condition's name, because the row cannot
+            // say why that name is in red. This is the line that connects it to the alert on screen.
+            if (dying != null)
+                detail += "\n" + dying.LabelCap + " is currently life threatening";
 
             if (bleedRate > 0.0001f)
                 detail += "\nBleeding";
@@ -261,10 +601,28 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (needsTending)
                 detail += "\nHas untended injuries or conditions";
 
-            if (temperature == TemperatureTrouble.Cold)
-                detail += "\nHypothermia";
-            else if (temperature == TemperatureTrouble.Hot)
-                detail += "\nHeatstroke";
+            switch (temperature)
+            {
+                case TemperatureTrouble.Freezing:
+                    detail += "\nFrostbite is forming";
+                    break;
+
+                case TemperatureTrouble.Hot:
+                    detail += "\nHeatstroke";
+                    break;
+
+                case TemperatureTrouble.Cold:
+                    detail += "\nHypothermia";
+                    break;
+
+                case TemperatureTrouble.Chilly:
+                    detail += "\nColder than this pawn can comfortably take";
+                    break;
+
+                case TemperatureTrouble.Sweltering:
+                    detail += "\nHotter than this pawn can comfortably take";
+                    break;
+            }
 
             return detail;
         }
