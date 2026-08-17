@@ -32,7 +32,12 @@ namespace Gideon.UIOverhaul.Features.Integrations
     /// event is raised from its network thread -- their own code queues sounds rather than playing them for
     /// exactly this reason. <c>Messages.Message</c> touches the live message list, the archive and the sound
     /// system, none of which may be touched off the main thread. So the handler queues a string and
-    /// <see cref="PhinixChatPump"/> drains it during the game's own update.
+    /// <see cref="Patch_UIRootUpdate_PhinixChat"/> drains it during the game's own update.
+    ///
+    /// <b>Only while a colony is being played.</b> Phinix stays connected at the main menu and keeps receiving
+    /// there, and this stands down completely in that state: nothing is queued, anything already queued is
+    /// dropped, and no notification is raised. See <see cref="InAGame"/> for why, and note that it replaces an
+    /// earlier decision to announce menu chat as well.
     /// </summary>
     internal static class PhinixIntegration
     {
@@ -60,6 +65,24 @@ namespace Gideon.UIOverhaul.Features.Integrations
         private static bool Wanted =>
             UIGuard.Try("Integrations.ReadPhinixSetting",
                 () => UIOverhaulSettingsFile.Current?.notifyPhinixChat ?? true, true, null);
+
+        /// <summary>
+        /// Whether a colony is actually being played.
+        ///
+        /// <b>Nothing this feature does happens outside one.</b> Phinix stays connected at the main menu and
+        /// keeps receiving messages there, so without this the integration announced chat into a UI with no
+        /// colony behind it, and the notification surfaces reported failures through <c>UIGuard</c> for
+        /// messages nobody could have acted on. Being at the menu is a completely normal Phinix state rather
+        /// than an error, so it is answered here rather than caught downstream.
+        ///
+        /// <b><c>ProgramState</c> rather than a null check alone,</b> which also excludes loading for free:
+        /// the state is <c>MapInitializing</c> while a save is being read and only becomes <c>Playing</c>
+        /// afterwards, so a message arriving mid-load cannot reach a half-built game.
+        ///
+        /// <b>Safe to read from Phinix's network thread</b>, unlike most of RimWorld: both are plain static
+        /// reads that touch no Unity API and no collection.
+        /// </summary>
+        private static bool InAGame => Current.ProgramState == ProgramState.Playing && Current.Game != null;
 
         /// <summary>
         /// Subscribes to Phinix's chat event, once.
@@ -191,6 +214,16 @@ namespace Gideon.UIOverhaul.Features.Integrations
                 return;
             }
 
+            // Dropped here rather than queued for later. Holding them would mean a stack of notifications
+            // firing the moment a colony loads, for conversations that happened while the player was at the
+            // menu and which are all still readable in Phinix's own chat tab.
+            if (!InAGame)
+            {
+                UIDebug.Log("Phinix chat message ignored: no colony is being played.");
+
+                return;
+            }
+
             if (args == null)
                 return;
 
@@ -242,12 +275,27 @@ namespace Gideon.UIOverhaul.Features.Integrations
         }
 
         /// <summary>
-        /// Raises whatever has queued up. Main thread only; called from <see cref="PhinixChatPump"/>.
+        /// Raises whatever has queued up, and only while a colony is being played. Main thread only; called from
+        /// <see cref="Patch_UIRootUpdate_PhinixChat"/>.
         /// </summary>
         internal static void Drain()
         {
             if (!subscribed)
                 return;
+
+            // The second half of the same rule as InAGame, applied on the main thread at the moment RimWorld's
+            // message system would actually be touched. It catches what the handler's check cannot: a message
+            // queued during play and not yet drained when the player quit to the menu.
+            //
+            // AnyEventNowOrWaiting is tested only here, not in the handler. A save is written while the state
+            // is still Playing, so this is what distinguishes actively playing from busy in a long event, and
+            // it is a collection read that belongs on the main thread.
+            if (!InAGame || LongEventHandler.AnyEventNowOrWaiting)
+            {
+                Forget();
+
+                return;
+            }
 
             List<string> ready;
 
@@ -275,6 +323,27 @@ namespace Gideon.UIOverhaul.Features.Integrations
                 UIGuard.Try("Integrations.PhinixNotify",
                     () => Messages.Message(text, MessageTypeDefOf.SilentInput, false),
                     "One chat notification was not shown.");
+            }
+        }
+
+        /// <summary>
+        /// Throws away anything queued, because it is no longer a colony's business.
+        ///
+        /// Normally a no-op: the handler already refuses to queue outside a colony, so this only has work to do
+        /// on the frame after the player left one. Kept anyway, because the alternative is a message surviving
+        /// in the queue until the next colony loads and announcing itself there.
+        /// </summary>
+        private static void Forget()
+        {
+            lock (Lock)
+            {
+                if (pending.Count == 0)
+                    return;
+
+                UIDebug.Log("Discarded " + pending.Count
+                            + " queued Phinix chat notification(s): no colony is being played.");
+
+                pending.Clear();
             }
         }
 
@@ -407,12 +476,18 @@ namespace Gideon.UIOverhaul.Features.Integrations
     /// touches -- the live message list, the archive, the sound system -- is main thread only. Phinix has the
     /// same constraint and solves it the same way for its own sounds. So the handler queues and this drains.
     ///
-    /// <b>A patch on <c>UIRootUpdate</c> rather than a GameComponent, and the difference is a bug.</b> The first
-    /// version used <c>GameComponentUpdate</c>, which is tidy, idiomatic, and only runs while a game is loaded.
-    /// Phinix chat does not require a game -- it connects and receives at the main menu perfectly happily, and
-    /// RimWorld draws messages there too -- so a notification that arrived outside a colony was queued and never
-    /// shown. <c>UIRoot.UIRootUpdate</c> runs on the main thread every frame in both the menu and play, which is
-    /// the actual requirement.
+    /// <b>Nothing is announced outside a colony, and that reverses an earlier decision here.</b> This used to run
+    /// deliberately at the main menu, on the reasoning that Phinix connects and receives there and so a message
+    /// arriving outside a colony should still be shown. In practice that is what made the integration misbehave:
+    /// the notification surfaces are built around a loaded game, so announcing menu chat drove failures out
+    /// through <c>UIGuard</c> for messages nobody was in a position to act on. Asked for by Aaron on 2026-08-17,
+    /// as fully standing down whenever a save is not being played. The gate itself lives in
+    /// <c>PhinixIntegration.InAGame</c>; do not remove it to make menu chat appear again.
+    ///
+    /// <b>Still <c>UIRootUpdate</c> rather than a GameComponent,</b> even though "only while playing" is now
+    /// exactly what <c>GameComponentUpdate</c> gives. A GameComponent would be written into every save to carry
+    /// no state, and this patch already exists and costs one early return per frame at the menu. The choice is no
+    /// longer load-bearing either way, which is the point: the rule is enforced by the gate, not by the hook.
     ///
     /// The base method is patched rather than each subclass: <c>UIRoot_Play</c> and <c>UIRoot_Entry</c> both call
     /// it, so one patch covers both, and draining twice would be harmless anyway since the queue is taken whole
