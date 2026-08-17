@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Puts an "Allow all" tile in the Orders category, immediately after Allow.
+
+       <b>A def patch rather than a Harmony patch, so it exists everywhere a designator can.</b>
+       specialDesignatorClasses is how RimWorld builds a category's tool list, and every architect
+       reads the result: vanilla's, this mod's, and any other mod that draws its own. Injecting the
+       designator into our panel's grid at draw time would have produced a button that vanished
+       whenever this mod's architect was switched off.
+
+       <b>Insert after Designator_Unforbid, not append to the list.</b> Appending would drop it at the
+       end, past the plan tools, a long way from the Allow tile it belongs beside. Order in this list
+       is the order in the grid, so matching the Unforbid entry and inserting after it puts the pair
+       together no matter what a future RimWorld adds to either end.
+
+       PatchOperationInsert defaults to inserting before the matched node; Append is what makes it
+       land after.
+
+       Wrapped in a Conditional so a RimWorld that renames or drops Designator_Unforbid leaves the
+       game loading normally with one tool missing, rather than failing the patch. success is Always
+       for the same reason: that outcome is a gap, not an error worth a red line on startup.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationConditional">
+    <xpath>Defs/DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses/li[text()="Designator_Unforbid"]</xpath>
+    <success>Always</success>
+    <match Class="PatchOperationInsert">
+      <xpath>Defs/DesignationCategoryDef[defName="Orders"]/specialDesignatorClasses/li[text()="Designator_Unforbid"]</xpath>
+      <order>Append</order>
+      <value>
+        <li>Gideon.UIOverhaul.Features.Architect.Designator_AllowAll</li>
+      </value>
+    </match>
+  </Operation>
+
+</Patch>

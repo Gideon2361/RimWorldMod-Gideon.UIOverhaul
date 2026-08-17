@@ -20,7 +20,7 @@
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
              The first three move when the game does; the last increments on every change. -->
-        <Version>1.6.4871.14106</Version>
+        <Version>1.6.4871.14107</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -100,6 +100,30 @@
         <!-- Set false to build without touching the mod folder. -->
         <DeployToModFolder>true</DeployToModFolder>
         <ModAssembliesDir>$(MSBuildProjectDirectory)\..\..\Gideon.UIOverhaul\1.6\Assemblies</ModAssembliesDir>
+
+        <!-- Putting the build into the folder the game actually reads, for testing.
+
+             Needed because of worktrees. This repo now has more than one checkout: main plus a
+             worktree per branch in progress. Every checkout has its own Gideon.UIOverhaul mod folder,
+             and RimWorld reads exactly one of them, through the symlink at
+             Steam\common\RimWorld\Mods\Gideon.UIOverhaul. So a build in a branch worktree deploys
+             correctly into that worktree and is still invisible to the game.
+
+             OFF BY DEFAULT, and that is the whole point of it being a separate switch. Building to
+             check that the code compiles and deploying to the running game are different intentions,
+             and only the second one is allowed to reach outside this checkout. With several branches
+             being worked at once, a build that silently took over the game folder would overwrite
+             whichever branch's assembly was being play tested at the time.
+
+             Opt in for one build:  msbuild ... -p:DeployToGame=true
+
+             KNOW WHERE THIS WRITES. The Mods entry is a symlink into main's checkout, so this target
+             writes main's copy of Gideon.UIOverhaul.dll, and that copy is tracked in git. After
+             testing a branch build, main shows a modified assembly that wants reverting. The
+             alternative is to repoint the symlink at the worktree being tested, which keeps main
+             clean but takes the game away from every other branch. -->
+        <DeployToGame>false</DeployToGame>
+        <GameModAssembliesDir>$(SteamAppsDir)\common\RimWorld\Mods\Gideon.UIOverhaul\1.6\Assemblies</GameModAssembliesDir>
     </PropertyGroup>
 
     <!-- The copy in the mod folder is the mod, so a build lands there directly rather than being
@@ -108,6 +132,14 @@
     <Target Name="DeployToMod" AfterTargets="Build" Condition="'$(DeployToModFolder)' == 'true'">
         <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModAssembliesDir)" />
         <Message Importance="high" Text="Deployed $(TargetFileName) -> $(ModAssembliesDir)" />
+    </Target>
+
+    <!-- The assembly only, exactly as above: RimWorld never reads the .pdb, and a stray one in
+         Assemblies is bloat at best. The .pdb stays in bin\ where a debugger can still find it. -->
+    <Target Name="DeployToGameFolder" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true'">
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameModAssembliesDir)" />
+        <Message Importance="high" Text="Deployed $(TargetFileName) -> $(GameModAssembliesDir)" />
+        <Message Importance="high" Text="The game will now load this build. This path is a symlink into main's checkout, so main's tracked assembly has changed." />
     </Target>
 
 </Project>

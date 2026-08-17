@@ -136,6 +136,20 @@ namespace Gideon.UIOverhaul.Features.Options
         public string favoritePlants = string.Empty;
 
         /// <summary>
+        /// Whether the architect draws the detail strip under the build grid.
+        ///
+        /// <b>On by default, because it is where the build information lives.</b> Vanilla puts a building's
+        /// description, cost and stats in a floating info box; this mod moved that inside the window, under the
+        /// grid, where it does not cover the thing being read about. Switching it off is for somebody who knows
+        /// their build menu and would rather have the hundred and twelve pixels back as build tiles.
+        ///
+        /// <b>It also governs whether the build tiles carry a hover tip.</b> The strip and the tip say the same
+        /// words, so both at once is duplication -- but with the strip gone the tip is the only way left to read
+        /// a description, so it returns. See <c>ArchitectPanel.DrawDesignatorCard</c>.
+        /// </summary>
+        public bool showArchitectInfoPanel = true;
+
+        /// <summary>
         /// Whether the save window's compression box is ticked when it opens.
         ///
         /// <b>Off by default, and that is a decision about what happens when this mod is removed.</b> A
@@ -494,6 +508,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showStuffDetails = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Absent means on, so a config written before this existed keeps the strip the player
+                        // already had rather than silently taking it away.
+                        case "showArchitectInfoPanel":
+                            settings.showArchitectInfoPanel = !value.EqualsIgnoreCase("false");
+                            break;
+
                         case "favoritePlants":
                             settings.favoritePlants = value ?? string.Empty;
                             break;
@@ -678,6 +698,8 @@ namespace Gideon.UIOverhaul.Features.Options
 
                     writer.WriteElementString("resizableTabs", resizableTabs ? "true" : "false");
                     writer.WriteElementString("showStuffDetails", showStuffDetails ? "true" : "false");
+                    writer.WriteElementString("showArchitectInfoPanel",
+                        showArchitectInfoPanel ? "true" : "false");
                     writer.WriteElementString("favoritePlants", favoritePlants ?? string.Empty);
                     writer.WriteElementString("hiddenPawnCategories",
                         hiddenPawnCategories ?? string.Empty);

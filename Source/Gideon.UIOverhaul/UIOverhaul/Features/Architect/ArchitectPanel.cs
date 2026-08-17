@@ -445,13 +445,24 @@ namespace Gideon.UIOverhaul.Features.Architect
 
             DrawStyleButton(new Rect(inner.xMax - FilterHeight, inner.y, FilterHeight, FilterHeight));
 
+            bool showReadout = UIOverhaulSettingsFile.Current.showArchitectInfoPanel;
+
+            // The strip's gap goes with the strip. Taking out only the height would leave an eight pixel band
+            // of panel background along the bottom that reads as a drawing fault rather than as spacing.
+            float readoutSpace = showReadout ? Pad + ReadoutHeight : 0f;
+
             Rect grid = new Rect(inner.x, filterRect.yMax + Pad, inner.width,
-                inner.height - FilterHeight - Pad * 2f - ReadoutHeight);
+                inner.height - FilterHeight - Pad - readoutSpace);
 
             Designator hovered = DrawGrid(grid, open, palette);
 
-            Rect readout = new Rect(inner.x, grid.yMax + Pad, inner.width, ReadoutHeight);
-            DrawReadout(readout, hovered ?? Find.DesignatorManager.SelectedDesignator, palette);
+            // The grid reflows into the reclaimed height on its own: DrawGrid works out its column count and
+            // row count from the rect it is handed, so a taller rect simply shows more rows before scrolling.
+            if (showReadout)
+            {
+                Rect readout = new Rect(inner.x, grid.yMax + Pad, inner.width, ReadoutHeight);
+                DrawReadout(readout, hovered ?? Find.DesignatorManager.SelectedDesignator, palette);
+            }
         }
 
         /// <summary>Draws the icon grid and reports the designator under the cursor, if any.</summary>
@@ -522,9 +533,16 @@ namespace Gideon.UIOverhaul.Features.Architect
             DesignatorCard.Selected = selected;
             DesignatorCard.BorderColor = selected ? palette.Accent : (Color?) null;
 
-            // Built only for the card under the cursor. It is the only one whose tip can be shown, and
-            // composing a string for all of them every frame is pure garbage.
-            DesignatorCard.Tooltip = over ? TooltipFor(designator) : null;
+            // <b>Only when the detail strip is switched off.</b> The strip under the grid already says every
+            // word this tip would, and it says it in a fixed place that does not sit on top of the grid while
+            // you read it -- so with the strip on screen the tip is duplication that covers the neighbouring
+            // tiles. With the strip gone it is the only way left to read a description, so it comes back.
+            //
+            // Built only for the card under the cursor, and the setting is only read for that card: composing
+            // a string for every tile every frame is pure garbage.
+            DesignatorCard.Tooltip = over && !UIOverhaulSettingsFile.Current.showArchitectInfoPanel
+                ? TooltipFor(designator)
+                : null;
 
             Rect content = DesignatorCard.ContentRect(card);
 

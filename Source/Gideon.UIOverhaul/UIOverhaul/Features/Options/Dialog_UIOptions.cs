@@ -736,6 +736,7 @@ namespace Gideon.UIOverhaul.Features.Options
             {
                 MakeCategory("Game Settings", "Saving, options, quitting", DrawGameSettingsSection),
                 MakeCategory("Theme", "Colors and palettes", DrawThemeSection),
+                MakeCategory("UI Preferences", "How this mod's panels behave", DrawUIPreferencesSection),
                 MakeCategory("Manage Tabs", "The button bar", DrawBarSection),
                 MakeCategory("Clock", "How the time reads", DrawClockSection),
                 MakeCategory("Desktop Widgets", "Readouts in the corners", DrawWidgetSection),
@@ -888,6 +889,50 @@ namespace Gideon.UIOverhaul.Features.Options
             card.Tooltip = blurb.NullOrEmpty() ? label : label + "\n" + blurb;
 
             return category;
+        }
+
+        /// <summary>
+        /// How this mod's own panels behave, as opposed to what colour they are.
+        ///
+        /// <b>Separate from Theme on purpose.</b> Theme answers "what does it look like"; this answers "what is
+        /// on screen at all". They get confused with each other whenever they share a page, because a player
+        /// hunting for a panel they want gone starts looking under appearance and gives up there.
+        ///
+        /// <b>Deliberately not a dumping ground.</b> A setting belongs here when it governs a panel this mod
+        /// draws and has nowhere more specific to live. Anything that belongs to one feature stays with that
+        /// feature -- saving is under Game Settings, tab sizing is under Manage Tabs -- because a page that
+        /// collects every leftover switch is the page nobody can find anything on.
+        /// </summary>
+        private void DrawUIPreferencesSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "UI Preferences", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "What this mod puts on screen. Everything here can be switched off without losing the "
+                + "information behind it.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Architect");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Show architect tab info panel",
+                settings.showArchitectInfoPanel, value => settings.showArchitectInfoPanel = value,
+                "The strip under the build grid showing the selected building's description, what it costs "
+                + "and its stats.\n\nRimWorld puts this in a floating box that sits over the menu you are "
+                + "reading it from. This mod moved it inside the window, below the grid.\n\nSwitching it off "
+                + "gives its height back to the build tiles, so more of them fit before the grid scrolls. The "
+                + "same text then appears as a hover tip on each tile instead, so nothing becomes unreadable "
+                + "-- the tip is hidden while the panel is on precisely because the two would be saying the "
+                + "same thing twice.");
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Whether the material list shows each material's stats is a toggle in the architect itself.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 12f;
         }
 
         private void DrawThemeSection(Rect view, ref float y, UIColorPaletteDef palette,
