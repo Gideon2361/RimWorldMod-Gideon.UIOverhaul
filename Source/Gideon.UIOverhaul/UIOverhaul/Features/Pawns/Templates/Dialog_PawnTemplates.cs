@@ -42,6 +42,9 @@ namespace Gideon.UIOverhaul.Features.Pawns.Templates
         private const float PolicyRowHeight = 22f;
         private const float Pad = 10f;
 
+        /// <summary>The title row, which is also the only part of this window that drags it.</summary>
+        private const float TitleHeight = 32f;
+
         /// <summary>The pawn to apply to, or null when the window was opened to manage rather than to apply.</summary>
         private readonly Pawn target;
 
@@ -106,6 +109,8 @@ namespace Gideon.UIOverhaul.Features.Pawns.Templates
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
+
             UIGuardedPanel.Draw("Pawns.TemplatesWindow", inRect, () => DrawContents(inRect),
                 "The templates window shows a failure notice; saved templates are unaffected.");
         }
@@ -114,13 +119,7 @@ namespace Gideon.UIOverhaul.Features.Pawns.Templates
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
-            Rect title = new Rect(inRect.x, inRect.y, inRect.width - 36f, 32f);
-
-            // Only the title strip drags the window. Window calls GUI.DragWindow() across its whole area when
-            // draggable is set, which would fight the name fields for the press -- the same problem the bar
-            // editor's rows had. Assigning it from the pointer position here runs before Window reaches that
-            // call, so the answer already reflects where the cursor is.
-            draggable = title.Contains(Event.current.mousePosition);
+            Rect title = new Rect(inRect.x, inRect.y, inRect.width - 36f, TitleHeight);
 
             DrawTitle(title, palette);
 

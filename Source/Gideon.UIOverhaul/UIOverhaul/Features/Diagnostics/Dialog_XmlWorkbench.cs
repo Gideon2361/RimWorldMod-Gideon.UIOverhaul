@@ -164,6 +164,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + HeaderHeight);
+
             UIGuardedPanel.Draw("Diagnostics.Workbench", inRect, () => Contents(inRect),
                 "The XML workbench shows a failure notice. Nothing else is affected.");
         }

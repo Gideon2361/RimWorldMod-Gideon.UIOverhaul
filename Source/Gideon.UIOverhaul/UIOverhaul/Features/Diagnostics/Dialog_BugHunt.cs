@@ -96,6 +96,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
         public override void DoWindowContents(Rect inRect)
         {
+            // Matches the title rect Contents builds. Set out here rather than in there so a failure inside
+            // the guarded draw cannot leave the window stuck to the cursor.
+            UIWindowDrag.TitleBarOnly(this, inRect.y + UIFonts.LineHeightOf(GameFont.Small) + 8f);
+
             UIGuardedPanel.Draw("Diagnostics.BugHuntProgress", inRect, () => Contents(inRect),
                 "The bug hunt shows a failure notice. The scan itself is unaffected.");
         }

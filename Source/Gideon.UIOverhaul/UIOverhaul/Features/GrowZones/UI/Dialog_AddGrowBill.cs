@@ -125,6 +125,8 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + HeaderHeight);
+
             UIGuardedPanel.Draw("GrowZones.AddBillDialog", inRect, () => DrawContents(inRect),
                 "The add-bill dialog shows a failure notice; bills already on the zone are unaffected.");
         }

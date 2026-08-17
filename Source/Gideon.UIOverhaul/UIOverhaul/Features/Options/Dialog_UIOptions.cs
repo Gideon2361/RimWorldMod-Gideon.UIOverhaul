@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Gideon.UIFramework.Components.Colors;
 using Gideon.UIFramework.Components.Images;
 using Gideon.UIFramework.Controls;
@@ -12,6 +12,7 @@ using Gideon.UIOverhaul.Features.Diagnostics;
 using Gideon.UIOverhaul.Features.Integrations;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
+using Gideon.UIOverhaul.Features.Saves;
 using Gideon.UIOverhaul.Features.Tabs;
 using RimWorld;
 using UnityEngine;
@@ -167,6 +168,8 @@ namespace Gideon.UIOverhaul.Features.Options
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + HeaderHeight);
+
             UIGuardedPanel.Draw("Options.Window", inRect, () => DrawContents(inRect),
                 "The settings window shows a failure notice; settings already saved are unaffected.");
         }
@@ -1281,18 +1284,53 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(0f, y, view.width, 40f),
-                "RimWorld's own pause menu and options. Everything here changes the game rather than this mod, "
-                + "and takes effect exactly as it does in RimWorld's own windows.");
+                "RimWorld's own pause menu and options, which take effect exactly as they do in RimWorld's own "
+                + "windows, alongside how this mod writes your saves.");
             y += 44f;
             GUI.color = palette.TextPrimary;
 
             DrawGameActions(view, ref y, palette, playing);
+            DrawSavingGroup(view, ref y, palette, settings);
             DrawGeneralGroup(view, ref y, palette, playing);
             DrawGraphicsGroup(view, ref y, palette);
             DrawAudioGroup(view, ref y, palette);
             DrawQuitGroup(view, ref y, palette, playing);
 
             y += 12f;
+        }
+
+        /// <summary>
+        /// How saves are written.
+        ///
+        /// <b>The only setting in this section that belongs to this mod rather than to RimWorld,</b> and it is
+        /// here because this is where saving is: the section's own card already reads "Saving, options,
+        /// quitting", and somebody looking for what happens to their saves will look here before they look
+        /// under a mod heading.
+        ///
+        /// <b>Manual saves are not switched here on purpose.</b> That choice is a tick box in the save window
+        /// itself, where it sits in front of the person about to write one, and this page would be a second
+        /// control governing the same thing.
+        /// </summary>
+        private void DrawSavingGroup(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            GroupLabel(view, ref y, palette, "Saving");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Compress autosaves",
+                settings.compressAutosaves, value => settings.compressAutosaves = value,
+                "Rewrites each autosave with LZMA, which on a large colony is typically around fifteen times "
+                + "smaller. Autosaves are usually most of a Saves folder, so this is where the space is.\n\n"
+                + "It costs time at every autosave, and unlike a save you asked for, an autosave fires while "
+                + "you are playing. On a big colony that is a pause of a few seconds rather than a brief "
+                + "hitch.\n\nCompressed saves can only be opened while this mod is installed. Whether saves "
+                + "you make by hand are compressed is chosen in the save window.");
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Saves already written are left as they are, whichever format they are in.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 8f;
         }
 
         /// <summary>
@@ -1320,22 +1358,26 @@ namespace Gideon.UIOverhaul.Features.Options
             bool savingBlocked = playing && UIGuard.Try("Options.ReadSavingBlocked",
                 () => GameDataSaveLoader.SavingIsTemporarilyDisabled, false, null);
 
-            bool canSave = playing && !savingBlocked && !permadeath;
+            // <b>Asked of the save feature rather than worked out again here.</b> These buttons, the mode
+            // toggle inside the save windows and the windows themselves all have to agree about when saving
+            // is possible, and three copies of the rule would eventually disagree. SavesModeBar owns it and
+            // supplies the sentence explaining a refusal as well as the answer.
+            string saveWhy;
+            string loadWhy;
+
+            bool canSave = SavesModeBar.CanSave(out saveWhy) && !savingBlocked;
+            bool canLoad = SavesModeBar.CanLoad(out loadWhy);
 
             float x = Indent;
             float row = y;
 
             ActionButton(ref x, row, 130f, "Save", palette, canSave,
-                playing
-                    ? permadeath
-                        ? "This colony is in permadeath, so it saves itself."
-                        : "Saving is temporarily unavailable."
-                    : "Only available while a colony is loaded.",
-                () => Find.WindowStack.Add(new Dialog_SaveFileList_Save()));
+                saveWhy ?? "Saving is temporarily unavailable.",
+                () => Find.WindowStack.Add(new Dialog_SaveGame()));
 
-            ActionButton(ref x, row, 130f, "Load", palette, !permadeath,
-                "Permadeath colonies cannot load another save.",
-                () => Find.WindowStack.Add(new Dialog_SaveFileList_Load()));
+            ActionButton(ref x, row, 130f, "Load", palette, canLoad,
+                loadWhy ?? "Another save cannot be loaded right now.",
+                () => Find.WindowStack.Add(new Dialog_LoadGame()));
 
             ActionButton(ref x, row, 150f, "Review scenario", palette, playing,
                 "Only available while a colony is loaded.",

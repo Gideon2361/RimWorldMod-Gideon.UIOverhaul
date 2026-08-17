@@ -121,6 +121,8 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + HeaderHeight);
+
             UIGuardedPanel.Draw("DevTools.Palette", inRect, () => Contents(inRect),
                 "The developer palette could not be drawn. The game's own developer menu still works.");
         }

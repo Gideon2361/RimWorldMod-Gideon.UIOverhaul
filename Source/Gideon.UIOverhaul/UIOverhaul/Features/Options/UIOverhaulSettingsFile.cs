@@ -136,6 +136,35 @@ namespace Gideon.UIOverhaul.Features.Options
         public string favoritePlants = string.Empty;
 
         /// <summary>
+        /// Whether the save window's compression box is ticked when it opens.
+        ///
+        /// <b>Off by default, and that is a decision about what happens when this mod is removed.</b> A
+        /// compressed save is still a <c>.rws</c> file, and RimWorld without this mod cannot read it: the
+        /// player would uninstall, find every colony missing from the load list, and have no reason to connect
+        /// the two. Defaulting a format change to on is asking for a trust the mod has not earned, so it is
+        /// offered instead, in the window where saving is already being thought about.
+        ///
+        /// <b>This remembers the box rather than governing it.</b> The value that matters is the one ticked
+        /// for the save being written; this is only what the box shows next time, so somebody who compresses
+        /// everything does not re-tick it every save.
+        /// </summary>
+        public bool compressSaves;
+
+        /// <summary>
+        /// Whether autosaves are compressed too.
+        ///
+        /// <b>Separate from <see cref="compressSaves"/> because the cost lands differently.</b> A save the
+        /// player asked for happens behind RimWorld's own saving screen while they wait for it deliberately.
+        /// An autosave fires unannounced, on the main thread, in the middle of whatever is happening -- and
+        /// compressing a large colony takes seconds, which turns the brief hitch autosave already causes into
+        /// a freeze during a raid.
+        ///
+        /// Off by default for that reason, and worth switching on anyway for anybody whose autosaves are the
+        /// bulk of their Saves folder, which is most people who have played one colony for a long time.
+        /// </summary>
+        public bool compressAutosaves;
+
+        /// <summary>
         /// Pawn categories switched off in the pawns tab, by name, separated by commas.
         ///
         /// <b>What is hidden rather than what is shown,</b> so an empty value means everything is visible. The
@@ -473,6 +502,17 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.hiddenPawnCategories = value ?? string.Empty;
                             break;
 
+                        // Both read "absent means off", which is what makes a config file written before
+                        // compression existed keep writing plain saves rather than silently changing format
+                        // on a player who never asked.
+                        case "compressSaves":
+                            settings.compressSaves = value.EqualsIgnoreCase("true");
+                            break;
+
+                        case "compressAutosaves":
+                            settings.compressAutosaves = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "notifyPhinixChat":
                             settings.notifyPhinixChat = !value.EqualsIgnoreCase("false");
                             break;
@@ -641,6 +681,9 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("favoritePlants", favoritePlants ?? string.Empty);
                     writer.WriteElementString("hiddenPawnCategories",
                         hiddenPawnCategories ?? string.Empty);
+                    writer.WriteElementString("compressSaves", compressSaves ? "true" : "false");
+                    writer.WriteElementString("compressAutosaves",
+                        compressAutosaves ? "true" : "false");
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
 
                     writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");

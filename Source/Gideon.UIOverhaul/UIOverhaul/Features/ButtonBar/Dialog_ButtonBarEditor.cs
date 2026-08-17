@@ -175,6 +175,10 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         public override void DoWindowContents(Rect inRect)
         {
+            // This window had the restriction before anything else did, because its draggable rows fought the
+            // window drag for every press. It now shares the one definition of the rule.
+            UIWindowDrag.TitleBarOnly(this, inRect.y + 10f + TitleBarHeight);
+
             UIGuardedPanel.Draw("ButtonBar.Editor", inRect, () => DrawContents(inRect),
                 "The bar editor shows a failure notice. The saved layout is untouched, so the bar itself "
                 + "keeps working.");
@@ -191,15 +195,6 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             Rect header = new Rect(inRect.x + ColumnGap, inRect.y + 10f, inRect.width - ColumnGap * 2f,
                 HeaderHeight);
-
-            // Only the title strip drags the window.
-            //
-            // Window calls GUI.DragWindow() across its whole area when draggable is set, so a press meant for
-            // a row started a window drag as well and the two fought each other. draggable is assigned from
-            // the pointer position here, which runs before Window reaches that call, so by the time it asks,
-            // the answer already reflects where the cursor actually is.
-            draggable = new Rect(header.x, header.y, header.width, TitleBarHeight)
-                .Contains(Event.current.mousePosition);
 
             DrawHeader(header, palette);
 

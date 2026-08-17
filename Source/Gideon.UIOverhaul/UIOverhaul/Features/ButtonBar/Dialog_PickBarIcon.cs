@@ -23,6 +23,15 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         private const float CellSize = 64f;
         private const float CellGap = 6f;
         private const float HeaderHeight = 88f;
+
+        /// <summary>
+        /// The title row, which is the only part of this window that drags it.
+        ///
+        /// Deliberately not <see cref="HeaderHeight"/>: that reaches down over the search box, and a header
+        /// used as a drag strip would put a text field inside it.
+        /// </summary>
+        private const float TitleHeight = 40f;
+
         private const float FooterHeight = 46f;
         private const float Pad = 14f;
 
@@ -66,6 +75,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
+
             UIGuardedPanel.Draw("ButtonBar.IconPicker", inRect, () => DrawContents(inRect),
                 "The icon picker shows a failure notice; the tab keeps whichever icon it already had.");
         }

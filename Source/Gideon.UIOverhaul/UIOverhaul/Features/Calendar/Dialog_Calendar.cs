@@ -36,6 +36,9 @@ namespace Gideon.UIOverhaul.Features.Calendar
         private const int Columns = 5;
         private const float Pad = 10f;
         private const float CellGap = 4f;
+
+        /// <summary>The strip at the top, which is also the only part of this window that drags it.</summary>
+        private const float HeaderHeight = 28f;
         /// <summary>
         /// Row heights measured from what will actually be drawn, not from what Tiny would have been.
         ///
@@ -62,6 +65,8 @@ namespace Gideon.UIOverhaul.Features.Calendar
 
         public override void DoWindowContents(Rect inRect)
         {
+            UIWindowDrag.TitleBarOnly(this, inRect.y + HeaderHeight);
+
             UIGuardedPanel.Draw("Calendar.Dialog", inRect, () => DrawContents(inRect),
                 "The calendar shows a failure notice. Nothing else is affected.");
         }
@@ -81,7 +86,7 @@ namespace Gideon.UIOverhaul.Features.Calendar
 
             Dictionary<int, List<CalendarEntry>> byDay = CalendarEntries.Gather(map, first, last, Radius);
 
-            Rect header = new Rect(inRect.x, inRect.y, inRect.width, 28f);
+            Rect header = new Rect(inRect.x, inRect.y, inRect.width, HeaderHeight);
             DrawHeader(header, palette);
 
             Rect grid = new Rect(inRect.x, header.yMax + Pad, inRect.width,
