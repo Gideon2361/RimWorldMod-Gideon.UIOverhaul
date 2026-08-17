@@ -14,9 +14,15 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// the window stack catches every route at once, which is the same reasoning as
     /// <c>Patch_WindowStack_Add_DevMenu</c>.
     ///
-    /// <b>A failure falls through to vanilla.</b> Returning true hands the request back to the game, so the
-    /// worst case is the old save dialog rather than a player who cannot save at all. For this particular
-    /// window that is not a nicety: the alternative to a working save screen is losing a colony.
+    /// <b>Vanilla's dialog is never substituted for ours, even on a failure.</b> An earlier version fell back to
+    /// it, on the reasoning that any save screen beats none. That was the wrong trade and it is gone: silently
+    /// handing somebody a different interface hides the defect that caused it, so the bug ships and keeps
+    /// shipping while the symptom looks like a cosmetic inconsistency. The window either works or its failure is
+    /// visible and gets fixed.
+    ///
+    /// <b>The guard stays, and it is doing a different job now.</b> Nothing may throw out of a Harmony prefix
+    /// into RimWorld's window stack, so construction is still contained -- but containment no longer changes the
+    /// outcome. Vanilla stays suppressed either way.
     /// </summary>
     [HarmonyPatch(typeof(WindowStack), nameof(WindowStack.Add))]
     internal static class Patch_WindowStack_Add_SaveGame
@@ -30,27 +36,32 @@ namespace Gideon.UIOverhaul.Features.Saves
                 return true;
 
             if (window is Dialog_SaveFileList_Save)
-                return !Replace(() => new Dialog_SaveGame(), typeof(Dialog_SaveGame));
+            {
+                Open(() => new Dialog_SaveGame());
+
+                return false;
+            }
 
             if (window is Dialog_SaveFileList_Load)
-                return !Replace(() => new Dialog_LoadGame(), typeof(Dialog_LoadGame));
+            {
+                Open(() => new Dialog_LoadGame());
+
+                return false;
+            }
 
             return true;
         }
 
-        /// <summary>
-        /// Opens ours instead, or reports that it could not.
-        /// </summary>
-        /// <returns>True when ours is showing, so the vanilla request should be dropped.</returns>
-        private static bool Replace(Func<Window> build, Type ours)
+        /// <summary>Opens ours, containing any failure so it cannot escape into the window stack.</summary>
+        private static void Open(Func<Window> build)
         {
-            return UIGuard.Try("Saves.RedirectDialog", () =>
+            UIGuard.Try("Saves.RedirectDialog", () =>
             {
                 // Already up. Dropping the request rather than stacking a second copy, which is what a
                 // double click on the pause menu would otherwise do.
                 if (Find.WindowStack.WindowOfType<Dialog_SaveGame>() != null
                     || Find.WindowStack.WindowOfType<Dialog_LoadGame>() != null)
-                    return true;
+                    return;
 
                 opening = true;
 
@@ -62,9 +73,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                 {
                     opening = false;
                 }
-
-                return true;
-            }, false, "The save window could not open, so the game's own was used instead.");
+            }, "The save window did not open.");
         }
     }
 }

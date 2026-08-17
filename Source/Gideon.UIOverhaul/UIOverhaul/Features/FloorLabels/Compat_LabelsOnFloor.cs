@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using Verse;
@@ -55,8 +56,22 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         [HarmonyPatch]
         public static class Patch_AbsorbTypes
         {
-            [HarmonyPatch(typeof(BackCompatibility), nameof(BackCompatibility.GetBackCompatibleType))]
-            [HarmonyPatch(typeof(BackCompatibility), nameof(BackCompatibility.GetBackCompatibleTypeDirect))]
+            /// <summary>
+            /// Both resolution entry points, in code because attributes cannot express two of them.
+            ///
+            /// Stacking two <c>[HarmonyPatch]</c> attributes on one method merges them into a single target
+            /// and quietly drops the first. See the same note on <c>Patch_LegacyTypeNames</c>, which shipped
+            /// with that fault and patched a method the load never calls.
+            /// </summary>
+            [HarmonyTargetMethods]
+            public static IEnumerable<MethodBase> Targets()
+            {
+                yield return AccessTools.Method(typeof(BackCompatibility),
+                    nameof(BackCompatibility.GetBackCompatibleType));
+                yield return AccessTools.Method(typeof(BackCompatibility),
+                    nameof(BackCompatibility.GetBackCompatibleTypeDirect));
+            }
+
             [HarmonyPostfix]
             public static void Absorb(string providedClassName, ref Type __result)
             {

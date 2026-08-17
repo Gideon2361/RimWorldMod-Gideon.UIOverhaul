@@ -1719,8 +1719,12 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             GUI.color = palette.TextSecondary;
 
+            // Through FirstLine rather than drawn raw, because this is a line lifted out of somebody's XML and
+            // nothing bounds how long that is: a minified def file is one enormous line. LabelEllipses shortens
+            // by removing a character at a time and remeasuring, so an unbounded string here freezes the game
+            // rather than merely overflowing the row. See UILoadingLog.MaxRowChars.
             Widgets.LabelEllipses(new Rect(rect.x + 14f, rect.y + lineHeight, rect.width - 16f, lineHeight),
-                hit.Text);
+                UILoadingLog.FirstLine(hit.Text));
 
             if (Mouse.IsOver(rect))
                 TooltipHandler.TipRegion(rect, (TipSignal)

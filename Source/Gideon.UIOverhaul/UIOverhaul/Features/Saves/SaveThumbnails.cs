@@ -41,15 +41,25 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>
-        /// Renders the map camera into a PNG beside the save.
+        /// Arranges for a picture of the map to be written beside the save.
         ///
-        /// <b>Called before the save is queued, not during it.</b> The long event puts a full screen overlay
-        /// up and, more to the point, saving can take seconds during which the world keeps its last rendered
-        /// state; capturing first means the picture is the frame the player was looking at when they decided
-        /// to save.
+        /// <b>This does not render anything itself, and the first version's attempt to is why it produced a
+        /// black rectangle.</b> That version asked the map camera to render on demand into a texture of our
+        /// own, which sounds right and cannot work: RimWorld does not draw the map through renderers a camera
+        /// finds in the scene, it issues <c>Graphics.DrawMesh</c> calls from <c>Map.MapUpdate</c> every frame.
+        /// Those submissions belong to the frame that made them and are consumed by the normal render, so an
+        /// extra <c>Render()</c> from inside <c>OnGUI</c> -- which runs after the frame has already been drawn
+        /// -- finds an empty queue and produces the clear colour and nothing else. The symptom was two saves
+        /// whose pictures were byte-for-byte the same size.
         ///
-        /// Everything here is main thread only. Unity refuses to render or read pixels off it, and the
-        /// failure is a hard crash rather than an exception, which is why this is never handed to a worker.
+        /// <b>So the frame is taken rather than made.</b> A one-shot component on the camera reads the screen
+        /// in <c>OnPostRender</c>, which Unity runs after the camera has drawn and before <c>OnGUI</c> draws
+        /// the interface. That is the one moment in a frame where the map exists and the windows do not, which
+        /// is exactly the picture wanted -- and it needs nothing hidden first.
+        ///
+        /// <b>It costs a frame, and that is harmless.</b> The picture arrives a frame or two after the button
+        /// was pressed, by which time the save may already be written; the png is a separate file, so the
+        /// order the two land in does not matter.
         /// </summary>
         internal static void Capture(string savePath)
         {
@@ -65,42 +75,101 @@ namespace Gideon.UIOverhaul.Features.Saves
                 if (camera == null || Current.ProgramState != ProgramState.Playing)
                     return;
 
-                int height = Mathf.Max(1, Mathf.RoundToInt(Width * (float) UI.screenHeight / UI.screenWidth));
+                // Replaced rather than added to, so pressing save twice in quick succession cannot leave two
+                // grabbers reading the same frame into different files.
+                Grabber existing = camera.gameObject.GetComponent<Grabber>();
 
-                RenderTexture buffer = RenderTexture.GetTemporary(Width, height, 24);
-                RenderTexture previousTarget = camera.targetTexture;
+                if (existing != null)
+                    Object.Destroy(existing);
+
+                camera.gameObject.AddComponent<Grabber>().Target = target;
+            }, "This save has no preview picture. Nothing else is affected.");
+        }
+
+        /// <summary>
+        /// Reads one frame off the screen, writes it, and removes itself.
+        ///
+        /// <b><c>OnPostRender</c> is the whole point of this class existing.</b> It is the only hook that runs
+        /// with the map drawn and the interface not, so the picture comes out clean without hiding a single
+        /// window first. A screen grab from anywhere else -- including
+        /// <c>ScreenCapture.CaptureScreenshotAsTexture</c> -- takes the composited frame, save dialog and all.
+        ///
+        /// <b>It destroys itself on the first frame it runs,</b> so nothing here is paid for during play. A
+        /// component left attached would read and encode the screen every frame for the rest of the session.
+        /// </summary>
+        private sealed class Grabber : MonoBehaviour
+        {
+            internal string Target;
+
+            private void OnPostRender()
+            {
+                string target = Target;
+
+                // Cleared first, so any failure below still takes this component out of the frame loop
+                // instead of retrying and failing again on every frame that follows.
+                Target = null;
+                Object.Destroy(this);
+
+                if (target.NullOrEmpty())
+                    return;
+
+                UIGuard.Try("Saves.GrabFrame", () => Write(target),
+                    "This save has no preview picture. Nothing else is affected.");
+            }
+
+            /// <summary>
+            /// Reads the screen and writes it out at thumbnail size.
+            ///
+            /// <b>Read at screen size and then scaled down, which is the opposite of what the first version
+            /// tried.</b> Rendering small was cheaper and is not available here: the pixels being taken are
+            /// the ones already on the screen, so their size is not ours to choose. The scaling is a
+            /// <c>Graphics.Blit</c> rather than a manual resample, since that is the GPU doing what it is for.
+            /// </summary>
+            private static void Write(string target)
+            {
+                int screenWidth = Mathf.Max(1, Screen.width);
+                int screenHeight = Mathf.Max(1, Screen.height);
+                int height = Mathf.Max(1, Mathf.RoundToInt(Width * (float) screenHeight / screenWidth));
+
+                Texture2D full = null;
+                Texture2D small = null;
+                RenderTexture scaled = null;
                 RenderTexture previousActive = RenderTexture.active;
-
-                Texture2D shot = null;
 
                 try
                 {
-                    camera.targetTexture = buffer;
-                    camera.Render();
+                    full = new Texture2D(screenWidth, screenHeight, TextureFormat.RGB24, false);
+                    full.ReadPixels(new Rect(0f, 0f, screenWidth, screenHeight), 0, 0);
+                    full.Apply();
 
-                    RenderTexture.active = buffer;
+                    scaled = RenderTexture.GetTemporary(Width, height, 0);
+                    Graphics.Blit(full, scaled);
 
-                    shot = new Texture2D(Width, height, TextureFormat.RGB24, false);
-                    shot.ReadPixels(new Rect(0f, 0f, Width, height), 0, 0);
-                    shot.Apply();
+                    RenderTexture.active = scaled;
+
+                    small = new Texture2D(Width, height, TextureFormat.RGB24, false);
+                    small.ReadPixels(new Rect(0f, 0f, Width, height), 0, 0);
+                    small.Apply();
 
                     Directory.CreateDirectory(Path.GetDirectoryName(target) ?? SaveFolders.Root);
-                    File.WriteAllBytes(target, shot.EncodeToPNG());
+                    File.WriteAllBytes(target, small.EncodeToPNG());
                 }
                 finally
                 {
-                    // Put the camera back before anything else can draw through it. Leaving a target texture
-                    // attached would send the entire game's rendering into our buffer and leave the screen
-                    // black, which is a spectacular way for a screenshot feature to fail.
-                    camera.targetTexture = previousTarget;
                     RenderTexture.active = previousActive;
 
-                    RenderTexture.ReleaseTemporary(buffer);
+                    if (scaled != null)
+                        RenderTexture.ReleaseTemporary(scaled);
 
-                    if (shot != null)
-                        Object.Destroy(shot);
+                    // Both are unmanaged and neither is reclaimed by the collector. The full screen copy is
+                    // the one that matters: at 4K it is around twenty-five megabytes.
+                    if (full != null)
+                        Object.Destroy(full);
+
+                    if (small != null)
+                        Object.Destroy(small);
                 }
-            }, "This save has no preview picture. Nothing else is affected.");
+            }
         }
 
         /// <summary>Moves a save's picture when the save moves, so the two never come apart.</summary>

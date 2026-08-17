@@ -82,6 +82,17 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// </summary>
         private string format = string.Empty;
 
+        /// <summary>Which save has its delete armed, if any. See <see cref="SavesChrome.ArmedDelete"/>.</summary>
+        private readonly SavesChrome.ArmedDelete armedDelete = new SavesChrome.ArmedDelete();
+
+        /// <summary>
+        /// Why the last rename, move or delete did not happen, shown in the footer until something else does.
+        ///
+        /// In the window rather than as a message toast, for the same reason the folder window does it: a name
+        /// that is already taken is something to correct here, not to read after this has closed.
+        /// </summary>
+        private string problem;
+
         /// <summary>
         /// The selected save's preview picture, or null when it has none.
         ///
@@ -131,6 +142,10 @@ namespace Gideon.UIOverhaul.Features.Saves
             modScroll = Vector2.zero;
             format = string.Empty;
 
+            // A complaint about the last save stops applying the moment a different one is being looked at.
+            problem = null;
+            armedDelete.Disarm();
+
             ReleasePreview();
 
             if (file == null)
@@ -168,7 +183,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
 
             UIGuardedPanel.Draw("Saves.LoadDialog", inRect, () => Contents(inRect),
-                "The load window shows a failure notice. Close it and use the game's own load screen.");
+                "The load window could not finish drawing. Your saves are untouched.");
         }
 
         private void Contents(Rect inRect)
@@ -487,6 +502,17 @@ namespace Gideon.UIOverhaul.Features.Saves
                     y = frame.yMax + 8f;
                 }
 
+                // Under the picture and above the facts, because that is the reading order: this is the save
+                // (name, picture), here is what you can do to it, and here are the details if you want them.
+                y = DrawActions(new Rect(inner.x, y, inner.width, SavesChrome.ActionRowHeight), palette);
+
+                // <b>Deleting happens inside that row and clears the selection, mid-frame.</b> Everything below
+                // reads the selected save, so without this the next line dereferences null -- which is exactly
+                // what happened the first time somebody pressed the delete button. Returning leaves the pane
+                // blank for the rest of this frame and the next one draws the empty state properly.
+                if (selected == null)
+                    return;
+
                 Text.Font = GameFont.Tiny;
                 Text.WordWrap = true;
 
@@ -506,6 +532,117 @@ namespace Gideon.UIOverhaul.Features.Saves
                 Text.WordWrap = previousWrap;
                 Text.Font = previousFont;
             }
+        }
+
+        /// <summary>
+        /// Rename, Move and Delete for the selected save.
+        ///
+        /// The control itself lives in <see cref="SavesChrome"/> so the save window draws the identical thing;
+        /// what is here is only what each action means in this window.
+        /// </summary>
+        private float DrawActions(Rect row, UIColorPaletteDef palette)
+        {
+            string path = selected.FullName;
+            string name = Path.GetFileNameWithoutExtension(selected.Name);
+            FileInfo acting = selected;
+
+            switch (SavesChrome.ActionRow(row, path, name, armedDelete, palette,
+                        SaveActions.Blocked(selected)))
+            {
+                case SavesChrome.SaveAction.Rename:
+                    Find.WindowStack.Add(new Dialog_RenameSave(acting, Reselect));
+
+                    break;
+
+                case SavesChrome.SaveAction.Move:
+                    OpenMoveMenu(acting, name);
+
+                    break;
+
+                case SavesChrome.SaveAction.Delete:
+                    Remove(acting);
+
+                    break;
+            }
+
+            return row.yMax + 6f;
+        }
+
+        /// <summary>Where a save can be moved to, which is every folder it is not already in.</summary>
+        private void OpenMoveMenu(FileInfo file, string name)
+        {
+            string current = SaveFolders.FolderOf(file);
+
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+            if (current != null)
+            {
+                options.Add(new FloatMenuOption(SaveFolders.RootLabel,
+                    UIGuard.Wrap("Saves.MoveToRoot", () => MoveTo(file, null, name))));
+            }
+
+            foreach (string folder in SaveFolders.Names())
+            {
+                if (string.Equals(folder, current, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string captured = folder;
+
+                options.Add(new FloatMenuOption(captured,
+                    UIGuard.Wrap("Saves.MoveToFolder", () => MoveTo(file, captured, name))));
+            }
+
+            if (options.Count == 0)
+            {
+                // Said rather than shown as an empty menu, which reads as a broken control.
+                problem = "There is nowhere else to move it. Make a folder from the save window first.";
+
+                return;
+            }
+
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        private void MoveTo(FileInfo file, string folder, string name)
+        {
+            string failure;
+
+            problem = SaveActions.Move(file, folder, out failure) ? null : failure;
+
+            Reselect(name);
+        }
+
+        private void Remove(FileInfo file)
+        {
+            string failure;
+
+            if (SaveActions.Delete(file, out failure))
+            {
+                problem = null;
+
+                Refresh();
+                Select(null);
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+
+                return;
+            }
+
+            problem = failure;
+        }
+
+        /// <summary>
+        /// Rereads the list and keeps the same save selected under whatever name it now has.
+        ///
+        /// <b>Reselected by name rather than by holding the old <c>FileInfo</c>,</b> which now points at a path
+        /// that does not exist. Going through <see cref="Select"/> also rereads the header and reloads the
+        /// preview, and -- the part that matters -- releases the texture the old selection owned.
+        /// </summary>
+        private void Reselect(string name)
+        {
+            Refresh();
+
+            Select(name.NullOrEmpty() ? null : SaveFolders.Find(name));
         }
 
         /// <summary>
@@ -683,15 +820,20 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = palette.TextDisabled;
+
+            // A failed rename or delete outranks the ordinary sentence, since it is the only thing here that
+            // somebody has to act on.
+            GUI.color = problem.NullOrEmpty() ? palette.TextDisabled : palette.Danger;
 
             Rect said = new Rect(rect.x, rect.y + 8f, Mathf.Max(0f, cancel.x - rect.x - 12f), 30f);
 
             if (said.width >= 24f)
             {
-                Widgets.LabelEllipses(said, selected == null
-                    ? "Select a save."
-                    : why ?? "Loads " + Path.GetFileNameWithoutExtension(selected.Name) + ".");
+                Widgets.LabelEllipses(said, problem
+                                            ?? (selected == null
+                                                ? "Select a save."
+                                                : why ?? "Loads "
+                                                  + Path.GetFileNameWithoutExtension(selected.Name) + "."));
             }
 
             GUI.color = palette.TextPrimary;

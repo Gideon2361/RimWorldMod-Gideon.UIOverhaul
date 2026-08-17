@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using Verse;
@@ -53,8 +54,25 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             { "Growing_Zones_Plus.MapComponentGzp", typeof(MapComponentGzp) }
         };
 
-        [HarmonyPatch(typeof(BackCompatibility), nameof(BackCompatibility.GetBackCompatibleType))]
-        [HarmonyPatch(typeof(BackCompatibility), nameof(BackCompatibility.GetBackCompatibleTypeDirect))]
+        /// <summary>
+        /// Both resolution entry points, listed in code rather than in attributes.
+        ///
+        /// <b>Two <c>[HarmonyPatch]</c> attributes on one method do not patch two methods.</b> Harmony merges
+        /// every such attribute into one target description, so the second silently overwrites the first and
+        /// only the last name survives. That is exactly how this shipped, and the surviving name was
+        /// <c>GetBackCompatibleTypeDirect</c> -- while <c>ScribeExtractor.SaveableFromNode</c>, the thing that
+        /// actually resolves a save's classes, calls <c>GetBackCompatibleType</c>. The patch was applied to a
+        /// method the load never reaches, so every old zone was still dropped.
+        /// </summary>
+        [HarmonyTargetMethods]
+        public static IEnumerable<MethodBase> Targets()
+        {
+            yield return AccessTools.Method(typeof(BackCompatibility),
+                nameof(BackCompatibility.GetBackCompatibleType));
+            yield return AccessTools.Method(typeof(BackCompatibility),
+                nameof(BackCompatibility.GetBackCompatibleTypeDirect));
+        }
+
         [HarmonyPostfix]
         public static void Rename(string providedClassName, ref Type __result)
         {

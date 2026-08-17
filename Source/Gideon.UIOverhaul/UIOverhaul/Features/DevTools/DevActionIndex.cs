@@ -133,7 +133,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
                 actions = found;
                 Tabs = tabs;
-            }, "The developer palette is empty. The game's own developer menu is unaffected.");
+            }, "The developer palette has no actions to list.");
         }
 
         /// <summary>

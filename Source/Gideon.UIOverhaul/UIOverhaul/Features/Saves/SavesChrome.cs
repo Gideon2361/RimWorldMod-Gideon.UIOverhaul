@@ -100,6 +100,201 @@ namespace Gideon.UIOverhaul.Features.Saves
             return Widgets.ButtonInvisible(rect);
         }
 
+        /// <summary>Height of the per-save action row, in both windows.</summary>
+        internal const float ActionRowHeight = 26f;
+
+        /// <summary>
+        /// How long an armed delete stays armed with nothing happening.
+        ///
+        /// Long enough to read the name and move the mouse, short enough that walking away from the keyboard
+        /// never leaves a destructive button one click from being pressed.
+        /// </summary>
+        private const float ArmedSeconds = 4f;
+
+        /// <summary>
+        /// Which save a window has armed for deletion, and since when.
+        ///
+        /// <b>State per window rather than per row,</b> because only one save can be armed at a time and the
+        /// window is what owns "which one". Held by full path rather than by <c>FileInfo</c>, since the list is
+        /// rebuilt from disk and the instance a click armed will not be the instance drawn next frame.
+        /// </summary>
+        internal sealed class ArmedDelete
+        {
+            private string path;
+            private float since;
+
+            internal bool IsArmed(string forPath)
+            {
+                if (path == null || forPath == null)
+                    return false;
+
+                if (!string.Equals(path, forPath, StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                // Real time rather than game time, so this still expires while the game is paused -- which it
+                // always is, since these windows pause it.
+                if (Time.realtimeSinceStartup - since <= ArmedSeconds)
+                    return true;
+
+                path = null;
+
+                return false;
+            }
+
+            internal void Arm(string forPath)
+            {
+                path = forPath;
+                since = Time.realtimeSinceStartup;
+            }
+
+            internal void Disarm()
+            {
+                path = null;
+            }
+        }
+
+        /// <summary>What a save window's action row asked for this frame.</summary>
+        internal enum SaveAction
+        {
+            None,
+            Rename,
+            Move,
+            Delete
+        }
+
+        /// <summary>
+        /// Rename, Move and Delete for one save, with the delete confirming in place.
+        ///
+        /// <b>The armed state takes over the whole row and names the save.</b> That naming is the reason to
+        /// confirm at all: the risk worth guarding against is deleting the wrong save, not clicking by
+        /// accident, so a confirmation that does not say which one is barely a confirmation. Nothing moves and
+        /// no window opens, which is what makes it cheap enough to need no way of switching it off.
+        ///
+        /// <b>Shared between both windows on purpose.</b> The save and load windows are one feature with a mode
+        /// bar between them, and an earlier round of this code proved what happens when the same element is
+        /// written twice: the two copies disagree within a day.
+        /// </summary>
+        /// <param name="disabledWhy">Non-null disables all three and explains why instead.</param>
+        internal static SaveAction ActionRow(Rect rect, string savePath, string saveName, ArmedDelete armed,
+            UIColorPaletteDef palette, string disabledWhy)
+        {
+            if (!disabledWhy.NullOrEmpty())
+            {
+                GameFont previousFont = Text.Font;
+                TextAnchor previousAnchor = Text.Anchor;
+                Color previousColor = GUI.color;
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextDisabled;
+
+                if (rect.width >= 24f)
+                    Widgets.LabelEllipses(rect, disabledWhy);
+
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+
+                return SaveAction.None;
+            }
+
+            return armed.IsArmed(savePath)
+                ? DrawArmed(rect, saveName, armed, palette)
+                : DrawIdle(rect, savePath, armed, palette);
+        }
+
+        private static SaveAction DrawIdle(Rect rect, string savePath, ArmedDelete armed,
+            UIColorPaletteDef palette)
+        {
+            float width = Mathf.Min(96f, (rect.width - 12f) / 3f);
+
+            Rect rename = new Rect(rect.x, rect.y, width, rect.height);
+            Rect move = new Rect(rename.xMax + 6f, rect.y, width, rect.height);
+            Rect delete = new Rect(move.xMax + 6f, rect.y, width, rect.height);
+
+            if (width < 40f)
+                return SaveAction.None;
+
+            if (Small(rename, "Rename", palette, palette.TextPrimary))
+                return SaveAction.Rename;
+
+            if (Small(move, "Move", palette, palette.TextPrimary))
+                return SaveAction.Move;
+
+            // Tinted rather than filled. A permanently red button in a row somebody reads every time they open
+            // the window is alarm fatigue; the fill arrives once it is armed and means something.
+            if (Small(delete, "Delete", palette, palette.Danger))
+                armed.Arm(savePath);
+
+            return SaveAction.None;
+        }
+
+        private static SaveAction DrawArmed(Rect rect, string saveName, ArmedDelete armed,
+            UIColorPaletteDef palette)
+        {
+            Rect cancel = new Rect(rect.xMax - 76f, rect.y, 76f, rect.height);
+            Rect confirm = new Rect(cancel.x - 86f, rect.y, 80f, rect.height);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = palette.Danger;
+
+            Rect asked = new Rect(rect.x, rect.y, Mathf.Max(0f, confirm.x - rect.x - 8f), rect.height);
+
+            if (asked.width >= 24f)
+                Widgets.LabelEllipses(asked, "Delete " + saveName + "?");
+
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+
+            if (Small(cancel, "Cancel", palette, palette.TextSecondary))
+            {
+                armed.Disarm();
+
+                return SaveAction.None;
+            }
+
+            if (!Filled(confirm, "Delete", palette, palette.Danger))
+                return SaveAction.None;
+
+            armed.Disarm();
+
+            return SaveAction.Delete;
+        }
+
+        /// <summary>A quiet outlined button sized for an action row.</summary>
+        private static bool Small(Rect rect, string label, UIColorPaletteDef palette, Color text)
+        {
+            bool over = Mouse.IsOver(rect);
+
+            UIElementPainter.OutlineRounded(rect, over ? palette.BorderFocused : palette.Border,
+                palette.PanelBackground);
+
+            if (over)
+                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
+
+            Write(rect, label, text, GameFont.Tiny);
+
+            return Widgets.ButtonInvisible(rect);
+        }
+
+        private static bool Filled(Rect rect, string label, UIColorPaletteDef palette, Color fill)
+        {
+            UIElementPainter.FillRounded(rect, fill);
+
+            if (Mouse.IsOver(rect))
+                UIElementPainter.FillRounded(rect, palette.HoverOverlay);
+
+            Write(rect, label, palette.WindowBackground, GameFont.Tiny);
+
+            return Widgets.ButtonInvisible(rect);
+        }
+
         /// <summary>The strip a save window's actions sit on: a rule, and the panel colour behind it.</summary>
         internal static void Footer(Rect rect, UIColorPaletteDef palette)
         {

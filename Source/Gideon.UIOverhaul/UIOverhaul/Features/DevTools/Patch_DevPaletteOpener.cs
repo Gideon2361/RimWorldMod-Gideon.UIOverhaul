@@ -28,14 +28,15 @@ namespace Gideon.UIOverhaul.Features.DevTools
             if (opening || !(window is Dialog_Debug))
                 return true;
 
-            bool replaced = UIGuard.Try("DevTools.Redirect", () =>
+            UIGuard.Try("DevTools.Redirect", () =>
             {
-                // Already showing: let the request through so vanilla's own toggle behavior is unchanged.
+                // Already showing, so this press closes it. Vanilla stays suppressed either way, which is what
+                // makes the key behave as a toggle for our palette rather than opening the old menu on top.
                 if (Find.WindowStack.WindowOfType<Dialog_DevPalette>() != null)
                 {
                     Find.WindowStack.TryRemove(typeof(Dialog_DevPalette));
 
-                    return true;
+                    return;
                 }
 
                 opening = true;
@@ -48,13 +49,12 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 {
                     opening = false;
                 }
+            }, "The developer palette did not open.");
 
-                return true;
-            }, false, "The developer palette could not open, so the game's own menu was used instead.");
-
-            // False only when the replacement worked. A failure falls through to vanilla, which is the one
-            // outcome that must never leave the player with no developer menu at all.
-            return !replaced;
+            // Always. Vanilla's menu is never substituted for ours, including when ours failed to open: a
+            // silent swap to a different interface hides the defect that caused it, and a hidden defect is one
+            // that ships. See the same reasoning on the save dialog opener.
+            return false;
         }
     }
 }

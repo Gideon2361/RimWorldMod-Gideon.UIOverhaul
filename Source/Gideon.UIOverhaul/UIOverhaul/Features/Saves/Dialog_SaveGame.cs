@@ -66,6 +66,16 @@ namespace Gideon.UIOverhaul.Features.Saves
         private List<FileInfo> existing = new List<FileInfo>();
         private string problem;
 
+        /// <summary>
+        /// The existing save last clicked, which the action row acts on.
+        ///
+        /// Clicking a row already fills in the name and folder as an overwrite target, so the row that was
+        /// clicked is the one being talked about and needs no separate selection gesture.
+        /// </summary>
+        private FileInfo chosen;
+
+        private readonly SavesChrome.ArmedDelete armedDelete = new SavesChrome.ArmedDelete();
+
         public Dialog_SaveGame()
         {
             doCloseX = true;
@@ -122,7 +132,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
 
             UIGuardedPanel.Draw("Saves.SaveDialog", inRect, () => Contents(inRect),
-                "The save window shows a failure notice. Close it and use the game's own save screen.");
+                "The save window could not finish drawing. Nothing has been written.");
         }
 
         private void Contents(Rect inRect)
@@ -155,9 +165,13 @@ namespace Gideon.UIOverhaul.Features.Saves
                 y = DrawCompression(new Rect(inRect.x, y + 8f, inRect.width, RowHeight), palette);
 
                 float listTop = y + 12f;
+                float actionsTop = inRect.yMax - FooterHeight - SavesChrome.ActionRowHeight - 8f;
 
                 DrawExisting(new Rect(inRect.x, listTop, inRect.width,
-                    Mathf.Max(0f, inRect.yMax - listTop - FooterHeight - 6f)), palette);
+                    Mathf.Max(0f, actionsTop - listTop - 6f)), palette);
+
+                DrawActions(new Rect(inRect.x, actionsTop, inRect.width, SavesChrome.ActionRowHeight),
+                    palette);
 
                 DrawFooter(new Rect(inRect.x, inRect.yMax - FooterHeight, inRect.width, FooterHeight),
                     palette);
@@ -493,13 +507,154 @@ namespace Gideon.UIOverhaul.Features.Saves
                 return;
 
             // Clicking a save is how an overwrite is chosen: it takes both the name and the folder, so the
-            // footer immediately says it will overwrite and the file lands exactly where it already is.
+            // footer immediately says it will overwrite and the file lands exactly where it already is. It is
+            // also what the action row below acts on.
             Name.Text = saveName;
             folder = SaveFolders.FolderOf(file);
+            chosen = file;
+
+            // Both belong to whichever save was being looked at a moment ago.
+            armedDelete.Disarm();
+            problem = null;
 
             SoundDefOf.Click.PlayOneShotOnCamera();
         }
 
+
+        /// <summary>
+        /// Rename, Move and Delete for the save last clicked in the list.
+        ///
+        /// <b>The same control the load window draws,</b> from <see cref="SavesChrome"/>. Housekeeping belongs
+        /// here as much as there: the moment somebody notices nine autosaves eating a gigabyte is while they
+        /// are looking at this list deciding what to overwrite.
+        ///
+        /// <b>It acts on the clicked row rather than on the name in the box,</b> which is a real distinction.
+        /// The name box is where the *new* save is going and is freely edited; deleting whatever happens to
+        /// match what has been typed would be a trap.
+        /// </summary>
+        private void DrawActions(Rect row, UIColorPaletteDef palette)
+        {
+            if (chosen != null && !File.Exists(chosen.FullName))
+                chosen = null;
+
+            if (chosen == null)
+            {
+                GameFont previousFont = Text.Font;
+                TextAnchor previousAnchor = Text.Anchor;
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextDisabled;
+
+                if (row.width >= 24f)
+                    Widgets.LabelEllipses(row, "Click a save above to rename, move or delete it.");
+
+                GUI.color = palette.TextPrimary;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+
+                return;
+            }
+
+            string path = chosen.FullName;
+            string name = Path.GetFileNameWithoutExtension(chosen.Name);
+            FileInfo acting = chosen;
+
+            switch (SavesChrome.ActionRow(row, path, name, armedDelete, palette,
+                        SaveActions.Blocked(chosen)))
+            {
+                case SavesChrome.SaveAction.Rename:
+                    Find.WindowStack.Add(new Dialog_RenameSave(acting, After));
+
+                    break;
+
+                case SavesChrome.SaveAction.Move:
+                    OpenMoveMenu(acting, name);
+
+                    break;
+
+                case SavesChrome.SaveAction.Delete:
+                    Remove(acting);
+
+                    break;
+            }
+        }
+
+        private void OpenMoveMenu(FileInfo file, string name)
+        {
+            string current = SaveFolders.FolderOf(file);
+
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+            if (current != null)
+            {
+                options.Add(new FloatMenuOption(SaveFolders.RootLabel,
+                    UIGuard.Wrap("Saves.MoveToRoot", () => MoveTo(file, null, name))));
+            }
+
+            foreach (string folderName in SaveFolders.Names())
+            {
+                if (string.Equals(folderName, current, System.StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string captured = folderName;
+
+                options.Add(new FloatMenuOption(captured,
+                    UIGuard.Wrap("Saves.MoveToFolder", () => MoveTo(file, captured, name))));
+            }
+
+            if (options.Count == 0)
+            {
+                problem = "There is nowhere else to move it. Make a folder first.";
+
+                return;
+            }
+
+            Find.WindowStack.Add(new FloatMenu(options));
+        }
+
+        private void MoveTo(FileInfo file, string destination, string name)
+        {
+            string failure;
+
+            problem = SaveActions.Move(file, destination, out failure) ? null : failure;
+
+            After(name);
+        }
+
+        private void Remove(FileInfo file)
+        {
+            string failure;
+
+            if (SaveActions.Delete(file, out failure))
+            {
+                problem = null;
+                chosen = null;
+
+                Refresh();
+                SoundDefOf.Click.PlayOneShotOnCamera();
+
+                return;
+            }
+
+            problem = failure;
+        }
+
+        /// <summary>Rereads the list and keeps pointing at the same save under whatever name it now has.</summary>
+        private void After(string name)
+        {
+            Refresh();
+
+            chosen = name.NullOrEmpty() ? null : SaveFolders.Find(name);
+
+            // The name box follows a rename, since it was showing the old name as an overwrite target and that
+            // name no longer exists.
+            if (chosen != null)
+            {
+                Name.Text = Path.GetFileNameWithoutExtension(chosen.Name);
+                folder = SaveFolders.FolderOf(chosen);
+            }
+        }
 
         /// <summary>
         /// What is about to happen, and the button that does it.

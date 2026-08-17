@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -10,33 +11,39 @@ using Verse.Sound;
 namespace Gideon.UIOverhaul.Features.Saves
 {
     /// <summary>
-    /// Naming a new save folder.
+    /// Giving a save a new name.
     ///
-    /// A window of ours rather than <c>Dialog_Rename</c> or a text entry box, for the reason every text
-    /// input in this mod is: <see cref="UITextBoxControl"/> is what keeps the movement keys off the camera
-    /// while somebody types, and vanilla's entry dialogs do not.
+    /// <b>A window here, unlike the delete confirmation, and the difference is the point.</b> Deleting needed
+    /// no window because there was nothing to say: it arms in place and the second click does it. Renaming
+    /// needs somewhere to type, and a text field that appears inside a list row is a worse experience than a
+    /// small window that opens where you are looking -- particularly since it also has to report why a name was
+    /// refused.
     ///
-    /// <b>The failure is shown here rather than as a message toast.</b> A name that collides or that the
-    /// drive will not accept is something to correct in the box that is still open, not something to read
-    /// after the window has closed.
+    /// Modelled on <see cref="Dialog_NewSaveFolder"/> deliberately, down to the shape and the failure line, so
+    /// the two naming windows in this feature behave identically.
     /// </summary>
-    public class Dialog_NewSaveFolder : Window
+    public class Dialog_RenameSave : Window
     {
         /// <summary>The title row, which is also the only part of this window that drags it.</summary>
         private const float TitleHeight = 30f;
 
         private static readonly UITextBoxControl Name = new UITextBoxControl
         {
-            Placeholder = "Milestones",
-            MaxLength = 48
+            Placeholder = "Riverbend",
+            MaxLength = 64
         };
 
-        private readonly Action<string> onCreated;
+        private readonly FileInfo file;
+
+        /// <summary>Handed the new name, so the window behind can find the save again and keep it selected.</summary>
+        private readonly Action<string> onRenamed;
+
         private string problem;
 
-        public Dialog_NewSaveFolder(Action<string> created)
+        public Dialog_RenameSave(FileInfo save, Action<string> renamed)
         {
-            onCreated = created;
+            file = save;
+            onRenamed = renamed;
 
             doCloseX = true;
             forcePause = true;
@@ -46,7 +53,8 @@ namespace Gideon.UIOverhaul.Features.Saves
             closeOnCancel = true;
             draggable = true;
 
-            Name.Text = string.Empty;
+            // Seeded with the current name, since a rename is usually an edit rather than a fresh answer.
+            Name.Text = save == null ? string.Empty : Path.GetFileNameWithoutExtension(save.Name);
         }
 
         public override Vector2 InitialSize => new Vector2(420f, 172f);
@@ -55,8 +63,8 @@ namespace Gideon.UIOverhaul.Features.Saves
         {
             UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
 
-            UIGuardedPanel.Draw("Saves.NewFolder", inRect, () => Contents(inRect),
-                "The folder was not created. Nothing has changed.");
+            UIGuardedPanel.Draw("Saves.RenameSave", inRect, () => Contents(inRect),
+                "The save was not renamed. Nothing has changed.");
         }
 
         private void Contents(Rect inRect)
@@ -73,7 +81,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                 Text.Anchor = TextAnchor.UpperLeft;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 30f, TitleHeight), "New folder");
+                Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 30f, TitleHeight), "Rename save");
 
                 Text.Font = GameFont.Small;
 
@@ -84,16 +92,16 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                 Widgets.Label(new Rect(inRect.x, inRect.y + 72f, inRect.width, 34f),
                     problem.NullOrEmpty()
-                        ? "Created inside your Saves folder. You can also make one in Explorer."
+                        ? "Stays in the same folder. Save names are unique across all of them."
                         : problem);
 
-                Rect create = new Rect(inRect.xMax - 120f, inRect.yMax - 32f, 120f, 30f);
-                Rect cancel = new Rect(create.x - 96f, inRect.yMax - 32f, 90f, 30f);
+                Rect rename = new Rect(inRect.xMax - 120f, inRect.yMax - 32f, 120f, 30f);
+                Rect cancel = new Rect(rename.x - 96f, inRect.yMax - 32f, 90f, 30f);
 
                 if (SavesChrome.Button(cancel, "Cancel", palette))
                     Close();
 
-                if (SavesChrome.Button(create, "Create", palette, true))
+                if (SavesChrome.Button(rename, "Rename", palette, true))
                     Commit();
             }
             finally
@@ -109,7 +117,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             string wanted = GenFile.SanitizedFileName(Name.Text ?? string.Empty).Trim();
             string failure;
 
-            if (!SaveFolders.Create(wanted, out failure))
+            if (!SaveActions.Rename(file, wanted, out failure))
             {
                 problem = failure;
 
@@ -119,11 +127,10 @@ namespace Gideon.UIOverhaul.Features.Saves
             problem = null;
             SoundDefOf.Click.PlayOneShotOnCamera();
 
-            if (onCreated != null)
-                UIGuard.Try("Saves.FolderCreated", () => onCreated(wanted), null);
+            if (onRenamed != null)
+                UIGuard.Try("Saves.Renamed", () => onRenamed(wanted), null);
 
             Close();
         }
-
     }
 }

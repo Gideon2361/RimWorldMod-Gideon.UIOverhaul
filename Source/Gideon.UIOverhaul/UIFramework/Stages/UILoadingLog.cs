@@ -197,6 +197,10 @@ namespace Gideon.UIFramework.Stages
                 entries = new List<UILoadingLogEntry>();
                 dropped = 0;
                 clock.Reset();
+
+                // Released with the entries. This holds a reference per definition, which on a heavy mod list is
+                // tens of thousands, and keeping it after the console has been handed back is a leak.
+                defPaths.Clear();
             }
         }
 
@@ -283,6 +287,102 @@ namespace Gideon.UIFramework.Stages
         public static void RecordDef(string defName, string path)
         {
             Record(UILoadingLogKind.Def, defName.NullOrEmpty() ? "(unnamed def)" : defName, path);
+
+            if (defName.NullOrEmpty() || path == null)
+                return;
+
+            lock (Lock)
+            {
+                // Last writer wins, which is the right answer: a def defined twice is resolved by whichever
+                // file loaded last, so that is the file somebody looking for it should be sent to.
+                defPaths[defName] = path;
+            }
+        }
+
+        /// <summary>
+        /// Which file defined each definition, for messages that name one and no file.
+        ///
+        /// Kept as well as the log entries because looking a name up by walking thousands of entries, for every
+        /// message captured, is not a lookup. The paths are the same shared instances the entries hold, so this
+        /// costs the dictionary and no strings.
+        /// </summary>
+        private static readonly Dictionary<string, string> defPaths =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Shortest name this will match on.
+        ///
+        /// Four characters, because below that a defName stops being distinctive and starts colliding with
+        /// ordinary English. "Wall" is a real defName and would claim any message containing the word.
+        /// </summary>
+        private const int MinDefNameChars = 4;
+
+        /// <summary>
+        /// The file behind a definition named anywhere in <paramref name="text"/>, or null.
+        ///
+        /// <b>This is a deduction and is deliberately shaped to fail rather than mislead.</b> Plenty of messages
+        /// name a def and no file -- config errors are the whole category, and mods raise their own -- so the
+        /// only handle available is the name sitting in the text. Every identifier-shaped token is looked up and
+        /// nothing else is guessed at.
+        ///
+        /// <b>The longest match wins when several tokens are defNames,</b> which happens more often than it
+        /// sounds: "FactionDef DE_Mycelyss must have at least one pawnGroupMaker with kindDef 'Peaceful'" names
+        /// two, since <c>Peaceful</c> is itself a def. The longer name is the more specific one and, in
+        /// practice, the mod's rather than the base game's. It is a heuristic; it is also the difference between
+        /// an entry somebody can act on and one they cannot.
+        /// </summary>
+        public static string PathMentionedIn(string text)
+        {
+            if (text.NullOrEmpty())
+                return null;
+
+            string bestPath = null;
+            int bestLength = 0;
+
+            lock (Lock)
+            {
+                if (defPaths.Count == 0)
+                    return null;
+
+                int i = 0;
+
+                while (i < text.Length)
+                {
+                    if (!IsNameChar(text[i]))
+                    {
+                        i++;
+
+                        continue;
+                    }
+
+                    int start = i;
+
+                    while (i < text.Length && IsNameChar(text[i]))
+                        i++;
+
+                    int length = i - start;
+
+                    if (length < MinDefNameChars || length <= bestLength)
+                        continue;
+
+                    string token = text.Substring(start, length);
+                    string path;
+
+                    if (defPaths.TryGetValue(token, out path))
+                    {
+                        bestPath = path;
+                        bestLength = length;
+                    }
+                }
+            }
+
+            return bestPath;
+        }
+
+        /// <summary>What a defName is allowed to contain, which is what makes tokenising it possible.</summary>
+        private static bool IsNameChar(char c)
+        {
+            return c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
         }
 
         /// <summary>
@@ -385,10 +485,34 @@ namespace Gideon.UIFramework.Stages
         }
 
         /// <summary>
-        /// The first line of a logged message, for the panel's single-line rows.
+        /// The longest a row's text is allowed to be before this cuts it.
+        ///
+        /// <b>This bound is not cosmetic, it is what stops the game hanging.</b> Rows are drawn with
+        /// <c>Widgets.LabelEllipses</c>, and <c>Text.ClampTextWithEllipsis</c> shortens an over-wide string by
+        /// removing <i>one character at a time</i>, calling <c>CalcSize</c> on the whole remainder after each
+        /// one. That is quadratic in the length of the string, and RimWorld logs single-line messages that are
+        /// tens of thousands of characters long: "Could not find class X while resolving node li. Full node:"
+        /// is followed by the entire XML node, cells and all, with no newline anywhere in it.
+        ///
+        /// One such row is on the order of a hundred million character measurements per frame, plus a string
+        /// allocation per iteration. Twenty of them in view at once is a frozen main thread, which is exactly
+        /// what happened: scrolling the log down until the "Full node" errors came into view stopped the game
+        /// dead, with nothing in the player log because nothing had failed.
+        ///
+        /// 512 is far more than any row can display -- at three pixels a character, the narrowest plausible,
+        /// that is still fifteen hundred pixels of text -- so the cut is never the reason an ellipsis appears.
+        /// </summary>
+        private const int MaxRowChars = 512;
+
+        /// <summary>
+        /// The first line of a logged message, cut to something a row can actually draw.
         ///
         /// An error carries its whole stack trace, which is what makes it useful in the copied text and useless in
         /// a row. The full text is still in the entry.
+        ///
+        /// <b>Length is capped as well as the line being taken,</b> because a newline is not the only thing that
+        /// makes a message too long for a row and, on the messages that matter most, there is no newline at all.
+        /// See <see cref="MaxRowChars"/> for why an uncapped row is a hang rather than an untidy one.
         /// </summary>
         public static string FirstLine(string text)
         {
@@ -397,7 +521,9 @@ namespace Gideon.UIFramework.Stages
 
             int end = text.IndexOf('\n');
 
-            return end < 0 ? text : text.Substring(0, end).TrimEnd('\r');
+            string line = end < 0 ? text : text.Substring(0, end).TrimEnd('\r');
+
+            return line.Length <= MaxRowChars ? line : line.Substring(0, MaxRowChars);
         }
     }
 }

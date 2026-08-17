@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
@@ -86,11 +87,21 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
                 if (path.NullOrEmpty())
                     path = CrossRefPathFor(text);
 
-                // Last, because it is the broadest. Anything Scribe is reading -- a mod's settings, a save,
-                // a world -- has a file open for the whole of the read, so a failure inside it belongs to that
-                // file even though nothing about the message says so.
+                // Anything Scribe is reading -- a mod's settings, a save, a world -- has a file open for the
+                // whole of the read, so a failure inside it belongs to that file even though nothing about the
+                // message says so.
                 if (path.NullOrEmpty())
                     path = Patch_ScribeSources.CurrentFile;
+
+                // Messages that name a type or a patch element instead of a file. One of these is exact and the
+                // other narrow; both answer null instantly for anything that is not theirs.
+                if (path.NullOrEmpty())
+                    path = Patch_ModSources.PathFor(text);
+
+                // Last and broadest: any definition named anywhere in the message. This is a deduction over the
+                // whole text rather than a rule about one wording, so it goes after everything that knows.
+                if (path.NullOrEmpty())
+                    path = UILoadingLog.PathMentionedIn(text);
 
                 UILoadingLog.Record(kind, text, path);
             }
@@ -223,7 +234,6 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
     /// <c>Exception</c> is deliberate: a finalizer declared to return one <i>replaces</i> the exception, and
     /// returning null there would swallow Scribe failures wholesale.
     /// </summary>
-    [HarmonyPatch]
     public static class Patch_ScribeSources
     {
         [ThreadStatic] private static string currentFile;
@@ -231,37 +241,61 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
         /// <summary>The file Scribe is reading on this thread, or null.</summary>
         public static string CurrentFile => currentFile;
 
-        [HarmonyPatch(typeof(ScribeLoader), nameof(ScribeLoader.InitLoading))]
-        [HarmonyPatch(typeof(ScribeLoader), nameof(ScribeLoader.InitLoadingMetaHeaderOnly))]
-        [HarmonyPrefix]
-        public static void Opening(string filePath)
-        {
-            currentFile = UILoadingLog.Active ? filePath : null;
-        }
-
         /// <summary>
-        /// Clears the path again when the file never actually opened.
+        /// The two openers, which share both of their patches.
         ///
-        /// <b>Both openers log and then rethrow,</b> having called <c>ForceStop</c> first, so a failed open
-        /// leaves <c>Scribe.mode</c> at <c>Inactive</c> and never reaches a matching <c>FinalizeLoading</c>.
-        /// Without this the path would stay published for the rest of the thread's life and every later error in
-        /// the load would be blamed on a file that was never read. Testing the mode is what tells the two apart:
-        /// a successful open sets it to <c>LoadingVars</c>.
+        /// <b>Split into its own class because the targets have to be listed in code.</b> Two
+        /// <c>[HarmonyPatch]</c> attributes on one patch method are merged by Harmony into a single target
+        /// rather than producing two, so the version of this that carried one attribute per opener only ever
+        /// patched <c>InitLoadingMetaHeaderOnly</c> -- and <c>InitLoading</c>, the one that opens an actual
+        /// save, was never patched at all. The cost was Scribe errors during a real load having no file
+        /// attributed to them, which is the one thing this class exists to supply.
+        ///
+        /// <c>[HarmonyTargetMethods]</c> governs every patch method in its class, which is why the closer
+        /// below cannot sit in here: it targets a different method.
         /// </summary>
-        [HarmonyPatch(typeof(ScribeLoader), nameof(ScribeLoader.InitLoading))]
-        [HarmonyPatch(typeof(ScribeLoader), nameof(ScribeLoader.InitLoadingMetaHeaderOnly))]
-        [HarmonyFinalizer]
-        public static void OpeningFailed()
+        [HarmonyPatch]
+        public static class Patch_Openers
         {
-            if (Scribe.mode != LoadSaveMode.LoadingVars)
-                currentFile = null;
+            [HarmonyTargetMethods]
+            public static IEnumerable<MethodBase> Targets()
+            {
+                yield return AccessTools.Method(typeof(ScribeLoader), nameof(ScribeLoader.InitLoading));
+                yield return AccessTools.Method(typeof(ScribeLoader),
+                    nameof(ScribeLoader.InitLoadingMetaHeaderOnly));
+            }
+
+            [HarmonyPrefix]
+            public static void Opening(string filePath)
+            {
+                currentFile = UILoadingLog.Active ? filePath : null;
+            }
+
+            /// <summary>
+            /// Clears the path again when the file never actually opened.
+            ///
+            /// <b>Both openers log and then rethrow,</b> having called <c>ForceStop</c> first, so a failed open
+            /// leaves <c>Scribe.mode</c> at <c>Inactive</c> and never reaches a matching
+            /// <c>FinalizeLoading</c>. Without this the path would stay published for the rest of the thread's
+            /// life and every later error in the load would be blamed on a file that was never read. Testing
+            /// the mode is what tells the two apart: a successful open sets it to <c>LoadingVars</c>.
+            /// </summary>
+            [HarmonyFinalizer]
+            public static void OpeningFailed()
+            {
+                if (Scribe.mode != LoadSaveMode.LoadingVars)
+                    currentFile = null;
+            }
         }
 
         [HarmonyPatch(typeof(ScribeLoader), nameof(ScribeLoader.FinalizeLoading))]
-        [HarmonyPostfix]
-        public static void Closed()
+        public static class Patch_Closer
         {
-            currentFile = null;
+            [HarmonyPostfix]
+            public static void Closed()
+            {
+                currentFile = null;
+            }
         }
     }
 
