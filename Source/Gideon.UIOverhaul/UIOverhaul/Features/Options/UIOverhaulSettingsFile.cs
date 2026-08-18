@@ -7,7 +7,9 @@ using System.Xml;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.FloorLabels;
 using Gideon.UIOverhaul.Features.Notifications;
+using UnityEngine;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Options
@@ -23,6 +25,16 @@ namespace Gideon.UIOverhaul.Features.Options
     public class UIOverhaulSettingsFile
     {
         public const string FileName = "UIOverhaul_Settings.xml";
+
+        /// <summary>
+        /// Range the room label minimum is held to.
+        ///
+        /// Shared with the slider that sets it, so the control and the reader cannot drift apart -- a slider
+        /// offering a value the reader clamps away is a setting that silently will not stick.
+        /// </summary>
+        public const int MinimumRoomCellsFloor = 4;
+
+        public const int MinimumRoomCellsCeiling = 80;
 
         /// <summary>
         /// defName of the palette the player chose. Empty means the shipped default.
@@ -148,6 +160,46 @@ namespace Gideon.UIOverhaul.Features.Options
         /// a description, so it returns. See <c>ArchitectPanel.DrawDesignatorCard</c>.
         /// </summary>
         public bool showArchitectInfoPanel = true;
+
+        /// <summary>
+        /// Whether room and zone names are drawn onto the floor, and renameable.
+        ///
+        /// <b>On by default.</b> It is the whole point of the feature that it works before anybody configures
+        /// anything: RimWorld already decides what each room is for, and this shows that answer where you are
+        /// already looking. A feature that has to be switched on is one most people never see.
+        ///
+        /// <b>Off disables the drawing and the labels window, and nothing else.</b> Names already set are kept
+        /// in the save, so switching off and on again does not lose them. More importantly it does not disable
+        /// <c>Compat_LabelsOnFloor</c>, which exists to stop a save made with that mod losing components on
+        /// load -- that is save integrity rather than a feature, and a preference must not be able to turn it
+        /// into a broken colony.
+        /// </summary>
+        public bool roomNameLabels = true;
+
+        /// <summary>
+        /// Smallest room, in cells, that gets a label drawn on its floor.
+        ///
+        /// <b>A setting because how small is too small is not a fact about the room.</b> The same closet is
+        /// unreadable clutter to somebody who plays zoomed out and perfectly legible to somebody who does not.
+        /// Twelve is roughly a three by four room, which is where a name stops crowding the walls.
+        ///
+        /// Clamped where it is read rather than where it is written, so a hand-edited file with a silly number
+        /// gives odd labels instead of an exception.
+        /// </summary>
+        public int roomLabelMinimumCells = 12;
+
+        /// <summary>
+        /// Which typeface the floor labels are drawn in.
+        ///
+        /// <b>Oswald Bold by default because it is condensed.</b> A label is scaled down to fit the widest clear
+        /// run of floor in its room, so a narrow face survives a long room name at a readable size where a wide
+        /// one would shrink away. Hammersmith One is the wider, more geometric alternative, and the game font is
+        /// there for anybody who would rather the floor matched the interface.
+        ///
+        /// Both shipped faces are baked atlases under the mod's Fonts folder; see FloorLabelAtlas for why a
+        /// font file cannot simply be loaded.
+        /// </summary>
+        public FloorLabelFace roomLabelFace = FloorLabelFace.OswaldBold;
 
         /// <summary>
         /// Whether the save window's compression box is ticked when it opens.
@@ -432,6 +484,25 @@ namespace Gideon.UIOverhaul.Features.Options
             return fallback;
         }
 
+        /// <summary>
+        /// A face name from the file, falling back to the default rather than complaining.
+        ///
+        /// Same reasoning as the dock and clock parsers above: this file is meant to be readable and editable by
+        /// hand, and an unrecognized value should cost the setting rather than the launch.
+        /// </summary>
+        private static FloorLabelFace ParseFace(string value)
+        {
+            if (value.NullOrEmpty())
+                return FloorLabelFace.OswaldBold;
+
+            foreach (FloorLabelFace face in (FloorLabelFace[]) Enum.GetValues(typeof(FloorLabelFace)))
+            {
+                if (face.ToString().EqualsIgnoreCase(value))
+                    return face;
+            }
+
+            return FloorLabelFace.OswaldBold;
+        }
         private static UIOverhaulSettingsFile Load()
         {
             string path = FilePath;
@@ -520,6 +591,31 @@ namespace Gideon.UIOverhaul.Features.Options
 
                         case "hiddenPawnCategories":
                             settings.hiddenPawnCategories = value ?? string.Empty;
+                            break;
+
+                        // Absent means on, so a config file written before this existed gets the feature
+                        // rather than having it silently withheld.
+                        case "roomNameLabels":
+                            settings.roomNameLabels = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "roomLabelMinimumCells":
+                            int cells;
+
+                            // Invariant, like every other number in this file: a shared config must not
+                            // reparse differently because the machine writes digits another way.
+                            settings.roomLabelMinimumCells = int.TryParse(value, NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out cells)
+                                ? Mathf.Clamp(cells, MinimumRoomCellsFloor, MinimumRoomCellsCeiling)
+                                : 12;
+
+                            break;
+
+                        // Parsed by name and falling back rather than complaining, like the clock format: this
+                        // is a hand editable file and a misspelled font is not worth a popup on the way in.
+                        case "roomLabelFace":
+                            settings.roomLabelFace = ParseFace(value);
+
                             break;
 
                         // Both read "absent means off", which is what makes a config file written before
@@ -703,6 +799,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("favoritePlants", favoritePlants ?? string.Empty);
                     writer.WriteElementString("hiddenPawnCategories",
                         hiddenPawnCategories ?? string.Empty);
+                    writer.WriteElementString("roomNameLabels", roomNameLabels ? "true" : "false");
+                    writer.WriteElementString("roomLabelMinimumCells",
+                        roomLabelMinimumCells.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteElementString("roomLabelFace", roomLabelFace.ToString());
                     writer.WriteElementString("compressSaves", compressSaves ? "true" : "false");
                     writer.WriteElementString("compressAutosaves",
                         compressAutosaves ? "true" : "false");

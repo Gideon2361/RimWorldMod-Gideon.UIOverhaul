@@ -21,11 +21,11 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     /// <b>This is compatibility work, not appropriation.</b> Nothing here is copied from that mod: these are
     /// the scribe keys its saves contain, learned by reading the assembly, which is what any two programs
     /// that must exchange data have to agree on. The labels themselves are the player's own content. The
-    /// feature that draws them is ours and is written from scratch, and the mod carries no licence, so
+    /// feature that draws them is ours and is written from scratch, and the mod carries no license, so
     /// nothing of its implementation is reused.
     ///
     /// <b>The absorbers are transitional and say so.</b> They exist to read old data once. They keep no
-    /// behaviour of their own, and what they read is handed to <see cref="GameComponent_FloorLabels"/>,
+    /// behavior of their own, and what they read is handed to <see cref="GameComponent_FloorLabels"/>,
     /// which is where labels live from then on.
     /// </summary>
     public static class Compat_LabelsOnFloor
@@ -148,7 +148,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     /// <summary>
     /// Stands in for the components of that mod which stored nothing.
     ///
-    /// It needs no behaviour at all. Its entire job is to be a concrete class the save can name, so the
+    /// It needs no behavior at all. Its entire job is to be a concrete class the save can name, so the
     /// component list loads without a hole in it.
     /// </summary>
     public class Absorb_Inert : GameComponent

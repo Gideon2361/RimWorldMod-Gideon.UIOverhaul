@@ -1,11 +1,12 @@
 using System.Collections.Generic;
+using Gideon.UIOverhaul.Features.Options;
 using UnityEngine;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.FloorLabels
 {
     /// <summary>
-    /// One renamed room or zone: what it is called, and what colour it is drawn in.
+    /// One renamed room or zone: what it is called, and what color it is drawn in.
     ///
     /// <b>The field names are not ours to choose.</b> They match the scribe keys written by Labels on Floor,
     /// so a save made with that mod is read directly rather than migrated by a separate pass. See
@@ -16,7 +17,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// <summary>What the player renamed it to. Empty means the room keeps its own name.</summary>
         public string Label = string.Empty;
 
-        /// <summary>Null draws in the theme's colour, which is what an unrecoloured label wants.</summary>
+        /// <summary>Null draws in the theme's color, which is what an unrecolored label wants.</summary>
         public Color? CustomColor;
 
         /// <summary>
@@ -39,11 +40,11 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             // Written and read as a plain Color with white meaning "not set", which is the shape the older
             // data is already in. A nullable would not read that data back.
-            Color colour = CustomColor ?? Color.white;
-            Scribe_Values.Look(ref colour, "customColor", Color.white);
+            Color color = CustomColor ?? Color.white;
+            Scribe_Values.Look(ref color, "customColor", Color.white);
 
-            if (Scribe.mode == LoadSaveMode.LoadingVars && colour != Color.white)
-                CustomColor = colour;
+            if (Scribe.mode == LoadSaveMode.LoadingVars && color != Color.white)
+                CustomColor = color;
 
             Scribe_References.Look(ref Map, "map");
             Scribe_Values.Look(ref KeyCell, "keyCell");
@@ -77,6 +78,139 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
         internal static GameComponent_FloorLabels Current =>
             Verse.Current.Game == null ? null : Verse.Current.Game.GetComponent<GameComponent_FloorLabels>();
+
+        /// <summary>
+        /// Whether the feature is switched on. Everything that draws or edits a label must ask this first.
+        ///
+        /// <b>What it governs: drawing, and the labels window.</b> Nothing else, and the boundary is
+        /// deliberate.
+        ///
+        /// <b>What it must never govern is <see cref="Compat_LabelsOnFloor"/>.</b> Those absorbers exist so a
+        /// save written with Labels on Floor still loads once that mod is gone -- without them the save drops
+        /// components and leaves nulls in lists the whole game walks, which took out unrelated mods when it
+        /// happened for real. That is save integrity, not a feature, and no preference should be able to turn
+        /// a cleared checkbox into a broken colony.
+        ///
+        /// <b>Nor does it govern this store.</b> Names stay in the save while the feature is off, so switching
+        /// it off and on again gives them back rather than quietly discarding work.
+        /// </summary>
+        internal static bool Enabled => UIOverhaulSettingsFile.Current.roomNameLabels;
+
+        /// <summary>
+        /// The stored label for a room, found through the cell it was keyed on.
+        ///
+        /// <b>Matched by which room now contains the cell,</b> not by comparing cells. A wall moved inside a room
+        /// changes nothing about the label, and a wall that splits a room in two hands the label to whichever
+        /// half kept the cell -- which is the best answer available when rooms have no identity of their own.
+        /// </summary>
+        internal FloorLabel ForRoom(Map map, Room room)
+        {
+            if (map == null || room == null)
+                return null;
+
+            for (int i = 0; i < Rooms.Count; i++)
+            {
+                FloorLabel label = Rooms[i];
+
+                if (label == null || label.Map != map || !label.KeyCell.IsValid
+                    || !label.KeyCell.InBounds(map))
+                    continue;
+
+                Room at = label.KeyCell.GetRoom(map);
+
+                if (at != null && at.ID == room.ID)
+                    return label;
+            }
+
+            return null;
+        }
+
+        internal FloorLabel ForZone(int zoneId)
+        {
+            for (int i = 0; i < Zones.Count; i++)
+            {
+                FloorLabel label = Zones[i];
+
+                if (label != null && label.ZoneId == zoneId)
+                    return label;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Records a name and color for a room, or forgets it when both are absent.
+        ///
+        /// <b>An empty name with no color removes the entry rather than storing a blank one.</b> That is what
+        /// makes Reset mean "go back to what RimWorld calls it" instead of "call it nothing", and it keeps the
+        /// save from accumulating rows that say the default twice.
+        /// </summary>
+        internal void SetRoom(Map map, Room room, IntVec3 keyCell, string label, Color? color)
+        {
+            FloorLabel existing = ForRoom(map, room);
+            bool empty = label.NullOrEmpty() && !color.HasValue;
+
+            if (existing != null)
+            {
+                if (empty)
+                {
+                    Rooms.Remove(existing);
+
+                    return;
+                }
+
+                existing.Label = label ?? string.Empty;
+                existing.CustomColor = color;
+                existing.KeyCell = keyCell;
+                existing.Map = map;
+
+                return;
+            }
+
+            if (empty)
+                return;
+
+            Rooms.Add(new FloorLabel
+            {
+                Label = label ?? string.Empty,
+                CustomColor = color,
+                KeyCell = keyCell,
+                Map = map
+            });
+        }
+
+        internal void SetZone(Map map, int zoneId, string label, Color? color)
+        {
+            FloorLabel existing = ForZone(zoneId);
+            bool empty = label.NullOrEmpty() && !color.HasValue;
+
+            if (existing != null)
+            {
+                if (empty)
+                {
+                    Zones.Remove(existing);
+
+                    return;
+                }
+
+                existing.Label = label ?? string.Empty;
+                existing.CustomColor = color;
+                existing.Map = map;
+
+                return;
+            }
+
+            if (empty)
+                return;
+
+            Zones.Add(new FloorLabel
+            {
+                Label = label ?? string.Empty,
+                CustomColor = color,
+                ZoneId = zoneId,
+                Map = map
+            });
+        }
 
         public override void ExposeData()
         {

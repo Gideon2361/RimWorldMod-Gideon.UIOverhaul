@@ -799,25 +799,36 @@ namespace Gideon.UIOverhaul.Features.Pawns
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
 
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.WordWrap = false;
+            // Captured and restored in a finally, like the font and the anchor beside it. This used to set it
+            // back to a hardcoded true on the straight-line path, which is wrong twice over: it overwrites a
+            // caller who wanted it false, and anything throwing in between left it false for the rest of the
+            // frame -- which is what Text.StartOfOnGUI complains about, from somewhere with no clue who did it.
+            bool previousWrap = Text.WordWrap;
 
-            Rect line = new Rect(band.x + 8f, band.y, Mathf.Max(0f, band.width - 12f), band.height);
+            try
+            {
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
 
-            // The badge takes the colour and the label follows in it, so the two agree without either being
-            // told about the other. DrawLeading returns where the text starts, which is the only reason this
-            // cell never has to know how wide a badge is.
-            float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
+                Rect line = new Rect(band.x + 8f, band.y, Mathf.Max(0f, band.width - 12f), band.height);
 
-            GUI.color = summary.Color(palette);
+                // The badge takes the color and the label follows in it, so the two agree without either being
+                // told about the other. DrawLeading returns where the text starts, which is the only reason this
+                // cell never has to know how wide a badge is.
+                float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
 
-            Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
+                GUI.color = summary.Color(palette);
 
-            Text.WordWrap = true;
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
 
             if (Mouse.IsOver(band))
                 TooltipHandler.TipRegion(band, (TipSignal) summary.Detail);
@@ -938,19 +949,28 @@ namespace Gideon.UIOverhaul.Features.Pawns
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
 
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.WordWrap = false;
-            GUI.color = palette.TextSecondary;
+            try
+            {
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
+                GUI.color = palette.TextSecondary;
 
-            Rect textRect = new Rect(band.x + 8f, band.y, band.width - 12f, band.height);
-            Widgets.Label(textRect, report.Truncate(textRect.width));
-
-            Text.WordWrap = true;
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Rect textRect = new Rect(band.x + 8f, band.y, band.width - 12f, band.height);
+                Widgets.Label(textRect, report.Truncate(textRect.width));
+            }
+            finally
+            {
+                // Truncate measures the string to fit, so it is the sort of call that can fail on a rect this
+                // panel has resized to something unexpected. Restoring in a finally is what keeps that from
+                // leaving word wrap off for the rest of the frame.
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
 
             if (Mouse.IsOver(band))
                 TooltipHandler.TipRegion(band, (TipSignal) report);

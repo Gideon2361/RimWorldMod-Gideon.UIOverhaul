@@ -122,6 +122,8 @@ namespace Gideon.UIOverhaul.Features.Saves
         {
             base.PostOpen();
 
+            SavesChrome.CloseSettingsWindow();
+
             Refresh();
         }
 

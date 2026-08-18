@@ -29,7 +29,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// Width the thumbnail is rendered at, with height following the screen's shape.
         ///
         /// Rendered small rather than captured large and scaled down: the camera is being asked to draw the
-        /// scene either way, and asking for fewer pixels is the cheaper request. Large enough to recognise a
+        /// scene either way, and asking for fewer pixels is the cheaper request. Large enough to recognize a
         /// base by its shape, which is all this has to do.
         /// </summary>
         private const int Width = 512;
@@ -49,7 +49,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// finds in the scene, it issues <c>Graphics.DrawMesh</c> calls from <c>Map.MapUpdate</c> every frame.
         /// Those submissions belong to the frame that made them and are consumed by the normal render, so an
         /// extra <c>Render()</c> from inside <c>OnGUI</c> -- which runs after the frame has already been drawn
-        /// -- finds an empty queue and produces the clear colour and nothing else. The symptom was two saves
+        /// -- finds an empty queue and produces the clear color and nothing else. The symptom was two saves
         /// whose pictures were byte-for-byte the same size.
         ///
         /// <b>So the frame is taken rather than made.</b> A one-shot component on the camera reads the screen

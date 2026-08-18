@@ -321,7 +321,7 @@ namespace Gideon.UIFramework.Patches.Stages.LoadingScreen
 
                 foreach (Assembly loaded in mod.assemblies.loadedAssemblies)
                 {
-                    // The mod's folder, not the DLL: the folder is what somebody recognises and what they would
+                    // The mod's folder, not the DLL: the folder is what somebody recognizes and what they would
                     // go looking in, and an Assemblies subfolder adds nothing to that.
                     if (loaded != null && !owners.ContainsKey(loaded))
                         owners.Add(loaded, mod.RootDir);

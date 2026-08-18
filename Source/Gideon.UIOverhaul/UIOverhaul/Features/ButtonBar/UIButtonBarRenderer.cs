@@ -255,12 +255,15 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// categories whose def came from an official mod -- anything else is skipped with an "Unofficial
         /// OptionCategoryDef ... ignoring" line in the log -- so a mod cannot add one.
         /// </summary>
-        public static void OpenUIOptions()
+        /// <param name="pauseGame">
+        /// Passed to the window. Escape asks for a pause the way vanilla's menu did; this bar does not.
+        /// </param>
+        public static void OpenUIOptions(bool pauseGame = false)
         {
             if (Find.WindowStack.WindowOfType<Dialog_UIOptions>() != null)
                 return;
 
-            Find.WindowStack.Add(new Dialog_UIOptions());
+            Find.WindowStack.Add(new Dialog_UIOptions(pauseGame));
         }
     }
 

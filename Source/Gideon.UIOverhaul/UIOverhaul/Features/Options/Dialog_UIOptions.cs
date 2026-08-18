@@ -9,6 +9,7 @@ using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
 using Gideon.UIOverhaul.Features.DevTools;
 using Gideon.UIOverhaul.Features.Diagnostics;
+using Gideon.UIOverhaul.Features.FloorLabels;
 using Gideon.UIOverhaul.Features.Integrations;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
@@ -157,10 +158,32 @@ namespace Gideon.UIOverhaul.Features.Options
 
         protected override float Margin => 0f;
 
-        public Dialog_UIOptions()
+        /// <summary>
+        /// Opens the settings window.
+        /// </summary>
+        /// <param name="pauseGame">
+        /// Whether the colony stops while the window is up.
+        ///
+        /// <b>A parameter rather than a fixed value, because the two ways in want different answers.</b> Escape
+        /// pauses, because that is what Escape did when it opened RimWorld's menu and because the alternative is
+        /// a raid continuing behind a settings window the player opened to get away from it. The button on the
+        /// bar does not, because somebody adjusting a colour while the colony runs has not asked for time to
+        /// stop.
+        /// </param>
+        public Dialog_UIOptions(bool pauseGame = false)
         {
+            // Every open starts at the top of the list.
+            //
+            // The selection is static so that rebuilding the category objects cannot lose it, which is a
+            // different thing from carrying it across a close and a reopen. It was doing both, so the window
+            // came back wherever it was last left. That is the wrong first impression for a window that is now
+            // what Escape opens: Game Settings is pinned first and holds saving, loading and quitting, which is
+            // what somebody reaching for Escape came for.
+            selectedCategory = 0;
+            selectedChild = -1;
+
             doCloseX = false;
-            forcePause = false;
+            forcePause = pauseGame;
             absorbInputAroundWindow = true;
             closeOnClickedOutside = true;
             draggable = true;
@@ -620,7 +643,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 category.IconElement.Texture = category.Icon;
                 category.IconElement.Visible = category.Icon != null;
 
-                // Centred against the two lines of text rather than pinned to the top, so a square icon sits
+                // Centered against the two lines of text rather than pinned to the top, so a square icon sits
                 // level with the block it labels whichever of the two lines is longer.
                 category.IconElement.Bounds =
                     new Rect(0f, (CardLine * 2f - IconSize) * 0.5f, IconSize, IconSize);
@@ -743,10 +766,69 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Notifications", "Messages, letters and alerts", DrawNotificationSection),
                 MakeCategory("Mod Integrations", "Extras for other mods you have", DrawIntegrationSection),
                 MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
+                MakeCategory("Additional Features", "Extras beyond the restyling",
+                    DrawAdditionalFeaturesSection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
                 MakeCategory("Developer Tools", "For working on mods", DrawDeveloperToolsSection),
                 MakeModSettingsCategory()
             };
+
+            Order(categories);
+        }
+
+        /// <summary>
+        /// Puts the category list in reading order: Game Settings, Mod Settings, then everything else by name.
+        ///
+        /// <b>Two are pinned because they are not peers of the rest.</b> Game Settings is the one that changes
+        /// RimWorld rather than this mod, and Mod Settings is a doorway to other people's mods rather than a
+        /// page of its own. Everything between them is one of our own feature areas, and for a list that long
+        /// alphabetical beats an order that only made sense to whoever added them.
+        ///
+        /// Sorted here rather than by writing the list in order, so adding a category cannot put it in the wrong
+        /// place -- the next person to add one does not have to know about this rule for it to hold.
+        /// </summary>
+        private static void Order(List<Category> list)
+        {
+            Category game = Named(list, "Game Settings");
+            Category mods = Named(list, "Mod Settings");
+
+            List<Category> rest = new List<Category>();
+
+            foreach (Category category in list)
+            {
+                if (category != game && category != mods)
+                    rest.Add(category);
+            }
+
+            rest.Sort((a, b) => string.Compare(LabelOf(a), LabelOf(b), System.StringComparison.OrdinalIgnoreCase));
+
+            list.Clear();
+
+            // Either could be absent if it is ever renamed, and a missing pin should reorder the rest rather
+            // than throw or leave a hole.
+            if (game != null)
+                list.Add(game);
+
+            if (mods != null)
+                list.Add(mods);
+
+            list.AddRange(rest);
+        }
+
+        private static Category Named(List<Category> list, string label)
+        {
+            foreach (Category category in list)
+            {
+                if (string.Equals(LabelOf(category), label, System.StringComparison.OrdinalIgnoreCase))
+                    return category;
+            }
+
+            return null;
+        }
+
+        private static string LabelOf(Category category)
+        {
+            return category == null || category.Title == null ? string.Empty : category.Title.Text ?? string.Empty;
         }
 
         /// <summary>
@@ -892,7 +974,7 @@ namespace Gideon.UIOverhaul.Features.Options
         }
 
         /// <summary>
-        /// How this mod's own panels behave, as opposed to what colour they are.
+        /// How this mod's own panels behave, as opposed to what color they are.
         ///
         /// <b>Separate from Theme on purpose.</b> Theme answers "what does it look like"; this answers "what is
         /// on screen at all". They get confused with each other whenever they share a page, because a player
@@ -1266,7 +1348,7 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GroupLabel(view, ref y, palette, "Letters");
 
-            WidgetToggle(view, ref y, palette, settings, Indent, "Draw letters as labelled rows",
+            WidgetToggle(view, ref y, palette, settings, Indent, "Draw letters as labeled rows",
                 settings.restyleLetters, value => settings.restyleLetters = value,
                 "The stack of events waiting to be read. RimWorld draws these as icons and shows the label only "
                 + "when you point at one; rows show it outright.\n\nClearing this gives back the icons, and with "
@@ -1695,7 +1777,7 @@ namespace Gideon.UIOverhaul.Features.Options
             }, "The game did not quit. Use RimWorld's own menu.");
         }
 
-        /// <summary>A labelled volume slider, written back by the caller.</summary>
+        /// <summary>A labeled volume slider, written back by the caller.</summary>
         private float VolumeRow(Rect view, ref float y, UIColorPaletteDef palette, string label, float value)
         {
             Rect row = new Rect(Indent, y, view.width - Indent, RowHeight);
@@ -1724,7 +1806,7 @@ namespace Gideon.UIOverhaul.Features.Options
             return result;
         }
 
-        /// <summary>A labelled row whose value is a button opening a menu of choices.</summary>
+        /// <summary>A labeled row whose value is a button opening a menu of choices.</summary>
         private void ChoiceRow(Rect view, ref float y, UIColorPaletteDef palette, string label, string value,
             System.Action onClick)
         {
@@ -1948,6 +2030,188 @@ namespace Gideon.UIOverhaul.Features.Options
 
         /// <summary>Whether the row width has been dragged to somewhere that is not on disk yet.</summary>
         private static bool letterWidthUnsaved;
+
+        /// <summary>
+        /// Things this mod adds rather than restyles, grouped by where they appear.
+        ///
+        /// <b>Its own category, because none of the existing ones is a home for it.</b> An overlay drawn onto
+        /// the world is not a corner readout and not a panel preference, and wedging it into Desktop Widgets
+        /// would blur a category that currently means exactly one thing. The heading names a kind rather than a
+        /// feature so the next optional addition has somewhere to go.
+        /// </summary>
+        private void DrawAdditionalFeaturesSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Additional Features", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "Things this mod adds on top of restyling what RimWorld already has. Each can be switched off "
+                + "on its own, and switching one off never affects the rest.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Overlays");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Enable customizable room name labels",
+                settings.roomNameLabels, value => settings.roomNameLabels = value,
+                "Draws each room's name onto its floor, out on the map, so you can read a base at a glance "
+                + "without clicking into it.\n\nThe name starts as the one RimWorld already gives the room -- "
+                + "Bedroom, Barracks, Machining workshop -- and follows it if the room's use changes. Rooms too "
+                + "small to read are left blank. Growing zones and stockpiles get their own names the same "
+                + "way.\n\nRename or recolor any of them from the Floor labels window.\n\nSwitching this off "
+                + "stops the drawing and closes that window. Names you have already set are kept in the save, "
+                + "so turning it back on restores them.");
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Names you have set are kept either way, and old saves stay safe to load.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 6f;
+
+            DrawRoomLabelFace(view, ref y, palette, settings);
+            DrawRoomLabelMinimum(view, ref y, palette, settings);
+
+            if (SmallButton(new Rect(Indent, y, 200f, RowHeight), "Open Floor labels", palette))
+            {
+                Find.WindowStack.Add(new FloorLabels.Dialog_FloorLabels());
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 40f),
+                "Rename or recolor any room or zone, including ones too small to draw a label. Needs a colony "
+                + "loaded.");
+            GUI.color = palette.TextPrimary;
+
+            y += 44f;
+        }
+
+        /// <summary>
+        /// The typeface, with each choice drawn in itself.
+        ///
+        /// <b>Every option is previewed rather than named,</b> because the only reason to offer a choice here is
+        /// that the faces look different -- and a list of names in the interface font would show none of that. The
+        /// preview walks the same glyph metrics the map does, so what is shown is what will be drawn.
+        ///
+        /// Rows rather than a dropdown for the same reason: a float menu would hide two of the three behind a
+        /// click, which is exactly the comparison somebody is here to make.
+        /// </summary>
+        private void DrawRoomLabelFace(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight), "Typeface");
+
+            y += RowHeight + 2f;
+
+            foreach (FloorLabelFace face in (FloorLabelFace[]) System.Enum.GetValues(typeof(FloorLabelFace)))
+            {
+                Rect row = new Rect(Indent, y, Mathf.Min(420f, view.width - Indent - 10f), 38f);
+                bool chosen = settings.roomLabelFace == face;
+
+                if (chosen)
+                    UIElementPainter.OutlineRounded(row, palette.Accent, palette.SelectionOverlay);
+                else if (Mouse.IsOver(row))
+                    UIElementPainter.OutlineRounded(row, palette.Border, palette.HoverOverlay);
+                else
+                    UIElementPainter.OutlineRounded(row, palette.Border, palette.PanelBackground);
+
+                // The sample reads as a room name because that is what it will be, rather than the usual
+                // pangram: what matters here is how a short colony word looks at a glance.
+                FloorLabelPreview.Draw(new Rect(row.x + 10f, row.y + 5f, row.width - 130f, row.height - 10f),
+                    "Dining room", face, palette);
+
+                GameFont previousFont = Text.Font;
+                TextAnchor previousAnchor = Text.Anchor;
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = chosen ? palette.Accent : palette.TextDisabled;
+
+                Widgets.Label(new Rect(row.x, row.y, row.width - 10f, row.height), Named(face));
+
+                GUI.color = palette.TextPrimary;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+
+                if (Widgets.ButtonInvisible(row) && !chosen)
+                {
+                    settings.roomLabelFace = face;
+                    settings.Save();
+
+                    // Every cached mesh addresses the old atlas, so they go now rather than being noticed as
+                    // garbled letters on the next frame.
+                    FloorLabelMeshes.Clear();
+                    SoundDefOf.Click.PlayOneShotOnCamera();
+                }
+
+                y += 40f;
+            }
+
+            y += 4f;
+        }
+
+        private static string Named(FloorLabelFace face)
+        {
+            switch (face)
+            {
+                case FloorLabelFace.OswaldBold: return "Oswald Bold";
+                case FloorLabelFace.HammersmithOne: return "Hammersmith One";
+                default: return "Game font";
+            }
+        }
+
+        /// <summary>
+        /// The smallest room that gets a label.
+        ///
+        /// <b>Written when the drag ends, not on every frame of it,</b> the same way the letter row width is
+        /// handled: each save rewrites the whole settings file, and a slider raises a change per pixel of
+        /// movement. The flag is what separates "the value moved" from "the player has finished choosing".
+        ///
+        /// Bounds come from the settings class rather than being repeated here, so the slider cannot offer a
+        /// value the reader would clamp away -- which would look like a setting that refuses to stick.
+        /// </summary>
+        private void DrawRoomLabelMinimum(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            Color previous = GUI.color;
+
+            if (!settings.roomNameLabels)
+                GUI.color = palette.TextDisabled;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Smallest room to label: " + settings.roomLabelMinimumCells + " tiles");
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f),
+                settings.roomLabelMinimumCells, UIOverhaulSettingsFile.MinimumRoomCellsFloor,
+                UIOverhaulSettingsFile.MinimumRoomCellsCeiling, false, null, null, null, 1f);
+
+            GUI.color = previous;
+
+            y += 28f;
+
+            int rounded = Mathf.RoundToInt(chosen);
+
+            if (settings.roomNameLabels && rounded != settings.roomLabelMinimumCells)
+            {
+                settings.roomLabelMinimumCells = rounded;
+                roomMinimumUnsaved = true;
+            }
+
+            if (!roomMinimumUnsaved || Input.GetMouseButton(0))
+                return;
+
+            roomMinimumUnsaved = false;
+            settings.Save();
+        }
+
+        /// <summary>Whether the room label minimum has been dragged somewhere that is not on disk yet.</summary>
+        private bool roomMinimumUnsaved;
 
         /// <summary>
         /// A heading inside a section, for the two halves of the widget list.

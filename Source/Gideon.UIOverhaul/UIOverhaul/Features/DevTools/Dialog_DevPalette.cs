@@ -324,22 +324,27 @@ namespace Gideon.UIOverhaul.Features.DevTools
             TextAnchor previousAnchor = Text.Anchor;
             bool previousWrap = Text.WordWrap;
 
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.WordWrap = false;
-            GUI.color = chosen ? palette.TextPrimary : palette.TextSecondary;
-
-            Widgets.LabelEllipses(new Rect(rect.x + 12f, rect.y, rect.width - 50f, rect.height), label);
-
-            if (count >= 0)
+            try
             {
-                Text.Anchor = TextAnchor.MiddleRight;
-                GUI.color = palette.TextDisabled;
-                Widgets.Label(new Rect(rect.xMax - 34f, rect.y, 26f, rect.height), count.ToString());
-            }
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
+                GUI.color = chosen ? palette.TextPrimary : palette.TextSecondary;
 
-            Text.WordWrap = previousWrap;
-            Text.Anchor = previousAnchor;
-            GUI.color = previousColor;
+                Widgets.LabelEllipses(new Rect(rect.x + 12f, rect.y, rect.width - 50f, rect.height), label);
+
+                if (count >= 0)
+                {
+                    Text.Anchor = TextAnchor.MiddleRight;
+                    GUI.color = palette.TextDisabled;
+                    Widgets.Label(new Rect(rect.xMax - 34f, rect.y, 26f, rect.height), count.ToString());
+                }
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                Text.Anchor = previousAnchor;
+                GUI.color = previousColor;
+            }
 
             return Widgets.ButtonInvisible(rect);
         }
