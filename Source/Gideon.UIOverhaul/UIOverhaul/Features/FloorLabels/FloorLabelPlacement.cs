@@ -74,6 +74,15 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     /// <b>A building disqualifies a cell; a plant or an item does not.</b> Furniture is what a label must not
     /// cover, and it is also what stays put. Filth, corpses and dropped steel move constantly, and a label that
     /// jumped every time somebody dropped a rock would be worse than one sitting on a rock.
+    ///
+    /// <b>Unless there is nowhere else, in which case furniture is covered.</b> A small crowded room has no clear
+    /// run at all: a double bed with an end table on each side fills a four cell width, and one torch splits
+    /// whatever row is left into two pieces too short to hold a word. Under the absolute rule those rooms drew
+    /// nothing, and drew nothing silently, which is a worse answer than a faint watermark lying across a bed.
+    /// So placement runs twice and the second pass ignores buildings.
+    ///
+    /// It stays a fallback and never a preference: any room with somewhere clear to put its name still gets the
+    /// clear spot, so the rule holds everywhere it can hold. What changed is only what happens when it cannot.
     /// </summary>
     internal static class FloorLabelPlacement
     {
@@ -85,8 +94,13 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         ///
         /// <paramref name="taken"/> is the cells earlier labels already occupy, treated exactly as though
         /// something were built on them. Pass null when placing in isolation, such as for a preview.
+        ///
+        /// <paramref name="overFurniture"/> drops the no-building rule, which is the fallback pass described on
+        /// this class. Nothing else changes: fogged and out of bounds cells are still refused, and so are cells
+        /// another label has taken.
         /// </summary>
-        internal static FloorLabelSpot Find(IEnumerable<IntVec3> cells, Map map, HashSet<IntVec3> taken = null)
+        internal static FloorLabelSpot Find(IEnumerable<IntVec3> cells, Map map, HashSet<IntVec3> taken = null,
+            bool overFurniture = false)
         {
             FloorLabelSpot spot = new FloorLabelSpot();
 
@@ -101,7 +115,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             foreach (IntVec3 cell in cells)
             {
-                if (!Clear(cell, map) || (taken != null && taken.Contains(cell)))
+                if (!Clear(cell, map, overFurniture) || (taken != null && taken.Contains(cell)))
                     continue;
 
                 List<int> row;
@@ -209,12 +223,12 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// Fogged cells are excluded as well as built ones: a label stretched across unexplored floor would be
         /// telling somebody the shape of a room they have not seen.
         /// </summary>
-        private static bool Clear(IntVec3 cell, Map map)
+        private static bool Clear(IntVec3 cell, Map map, bool overFurniture)
         {
             if (!cell.InBounds(map) || cell.Fogged(map))
                 return false;
 
-            return cell.GetFirstBuilding(map) == null;
+            return overFurniture || cell.GetFirstBuilding(map) == null;
         }
     }
 }

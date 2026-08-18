@@ -202,6 +202,12 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
                     FloorLabelSpot spot = FloorLabelPlacement.Find(room.Cells, map, taken);
 
+                    // Second pass over furniture, only for a room that could not be given a clear run. See the
+                    // note on FloorLabelPlacement: a four cell bedroom has nowhere legal to put a word, and
+                    // silently drawing nothing was a worse answer than a watermark across the bed.
+                    if (!Placeable(spot))
+                        spot = FloorLabelPlacement.Find(room.Cells, map, taken, true);
+
                     if (!Placeable(spot))
                         continue;
 
@@ -226,6 +232,12 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                     continue;
 
                 FloorLabelSpot spot = FloorLabelPlacement.Find(zone.Cells, map, taken);
+
+                // Zones get the same fallback, for the same reason: a stockpile packed with shelves is exactly
+                // the crowded case, and a zone that could not name itself only because it is well used would be
+                // a strange rule to keep.
+                if (!Placeable(spot))
+                    spot = FloorLabelPlacement.Find(zone.Cells, map, taken, true);
 
                 if (!Placeable(spot))
                     continue;

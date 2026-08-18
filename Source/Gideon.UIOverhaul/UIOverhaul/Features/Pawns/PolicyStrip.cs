@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Integrations;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -123,6 +124,25 @@ namespace Gideon.UIOverhaul.Features.Pawns
                         Widen(Current.Game?.foodRestrictionDatabase?.AllFoodRestrictions),
                         chosen => pawn.foodRestriction.CurrentFoodPolicy = (FoodPolicy) chosen,
                         () => new Dialog_ManageFoodPolicies(pawn.foodRestriction.CurrentFoodPolicy))
+                });
+            }
+
+            // Taming food, from nercury's Assign Animal Food, and only when that mod is installed. Next to food
+            // because it is a food policy and the mod's own table groups it with the others; before drugs so the
+            // vanilla three stay in vanilla's order relative to each other.
+            //
+            // The picker offers RimWorld's own food policies and opens RimWorld's own manager, exactly as the FOOD
+            // slot above does. Only where the choice is stored differs, and that is the integration's business.
+            if (AssignAnimalFoodIntegration.Applies(pawn))
+            {
+                slots.Add(new Slot
+                {
+                    Caption = "TAMING FOOD",
+                    Label = NameOf(AssignAnimalFoodIntegration.Current(pawn)),
+                    Open = () => Menu(
+                        Widen(Current.Game?.foodRestrictionDatabase?.AllFoodRestrictions),
+                        chosen => AssignAnimalFoodIntegration.Set(pawn, (FoodPolicy) chosen),
+                        () => new Dialog_ManageFoodPolicies(AssignAnimalFoodIntegration.Current(pawn)))
                 });
             }
 

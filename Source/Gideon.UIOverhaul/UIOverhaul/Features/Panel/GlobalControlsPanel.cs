@@ -188,9 +188,25 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// beauty display, room stats and map search shortcuts in the same pass that draws the buttons, so not
         /// calling it takes three keyboard shortcuts away from anyone who switched the row off.
         /// </summary>
+        /// <summary>Whether the Global Controls tab is on screen, and therefore drawing these toggles itself.</summary>
+        private static bool TabOpen()
+        {
+            return UIGuard.Try("Panel.GlobalControlsTabOpen",
+                () => Find.WindowStack != null
+                      && Find.WindowStack.IsOpen(typeof(MainTabWindow_GlobalControls)), false, null);
+        }
+
         private static float DrawToggleRow(float y, UIOverhaulSettingsFile settings)
         {
-            bool show = settings == null || settings.showGlobalControlsWidget;
+            // Hidden while the tab is open, whatever the setting says, because the tab now draws in this very
+            // corner: its Right anchor puts it on top of the button bar, under these widgets, which is the space
+            // this row occupies. Two copies of the same toggles overlapping is worse than either alone, and the
+            // tab is the copy the player asked for by opening it.
+            //
+            // Hidden the same way as ever, by aiming the row off screen rather than skipping the call, for the
+            // reason in this method's summary: the corner keeps handling the three keyboard shortcuts even when
+            // none of it can be seen.
+            bool show = (settings == null || settings.showGlobalControlsWidget) && !TabOpen();
 
             if (!show)
             {

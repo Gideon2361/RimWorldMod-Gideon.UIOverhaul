@@ -1416,12 +1416,15 @@ namespace Gideon.UIOverhaul.Features.Options
             y += 44f;
             GUI.color = palette.TextPrimary;
 
+            // Quit sits directly under This game, because the two are the same subject: what you are doing with
+            // the colony currently loaded. Saving, then RimWorld's own preferences, follow. It was last, which
+            // put the whole of General, Graphics and Audio between a colony's actions and the way out of it.
             DrawGameActions(view, ref y, palette, playing);
+            DrawQuitGroup(view, ref y, palette, playing);
             DrawSavingGroup(view, ref y, palette, settings);
             DrawGeneralGroup(view, ref y, palette, playing);
             DrawGraphicsGroup(view, ref y, palette);
             DrawAudioGroup(view, ref y, palette);
-            DrawQuitGroup(view, ref y, palette, playing);
 
             y += 12f;
         }
