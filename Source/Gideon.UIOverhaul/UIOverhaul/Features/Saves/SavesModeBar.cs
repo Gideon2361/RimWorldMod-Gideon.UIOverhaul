@@ -130,12 +130,20 @@ namespace Gideon.UIOverhaul.Features.Saves
             bool over = available && Mouse.IsOver(rect);
 
             if (selected)
-                UIElementPainter.FillRounded(rect, palette.Accent);
+            {
+                // <b>A tab, not a button.</b> The selected segment used to be a filled accent pill, which put a
+                // bright blue block in the title row while the footer's action button was another one. Two of
+                // them at opposite ends of the same window read as two primary actions, and the player is left
+                // working out which of them commits. The accent survives as a two pixel rule under the label,
+                // which says "selected" without claiming to be the thing that acts.
+                UIElementPainter.FillRounded(rect, palette.PanelBackground);
+                Widgets.DrawBoxSolid(new Rect(rect.x, rect.yMax - 2f, rect.width, 2f), palette.Accent);
+            }
             else if (!available)
                 UIElementPainter.OutlineRounded(rect, palette.Border, palette.ControlBackgroundFaded);
             else
                 UIElementPainter.OutlineRounded(rect, palette.Border,
-                    over ? palette.SurfaceRaised : palette.PanelBackground);
+                    over ? palette.SurfaceRaised : palette.SurfaceSunken);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -143,11 +151,11 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = selected
-                ? palette.WindowBackground
-                : available
-                    ? palette.TextPrimary
-                    : palette.TextDisabled;
+            // Selected and unselected share one text color on purpose, which is the earlier decision this file
+            // already records: dimming the unselected half made it read as broken rather than as the other side
+            // of a choice. With the accent no longer filling the body, the rule underneath is what marks the
+            // selection, so the text does not have to. Only genuinely unavailable is faded.
+            GUI.color = available ? palette.TextPrimary : palette.TextDisabled;
 
             Widgets.Label(rect, label);
 

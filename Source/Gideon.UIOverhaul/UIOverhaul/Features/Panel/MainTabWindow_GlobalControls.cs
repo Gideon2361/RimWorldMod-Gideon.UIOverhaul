@@ -78,6 +78,20 @@ namespace Gideon.UIOverhaul.Features.Panel
         protected override float Margin => 0f;
 
         /// <summary>
+        /// Opens in the bottom right corner rather than the bottom left.
+        ///
+        /// <b>Vanilla's own anchor, not geometry of ours.</b> <c>MainTabWindow</c> already offers Left and Right and
+        /// does the arithmetic itself: Right sets x to the screen width less the panel's, and y sits the panel
+        /// directly on top of the button bar either way. So the toggles land under the date, weather and clock
+        /// widgets, in the corner RimWorld has always drawn them in, rather than across the map on the far side of
+        /// the screen from the button that opened them.
+        ///
+        /// This is also what makes the corner's own row stand down while the tab is open: the two would otherwise
+        /// occupy the same pixels. See <c>GlobalControlsPanel.DrawToggleRow</c>.
+        /// </summary>
+        public override MainTabWindowAnchor Anchor => MainTabWindowAnchor.Right;
+
+        /// <summary>
         /// Resizes the window when the measurement changes.
         ///
         /// <c>RequestedTabSize</c> is only read when the tab opens, so a panel that measured differently while it

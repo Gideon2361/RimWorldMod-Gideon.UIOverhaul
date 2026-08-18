@@ -145,6 +145,24 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             current = null;
         }
 
+        /// <summary>
+        /// Buttons removed from the bar outright, whatever the player's saved layout says.
+        ///
+        /// <b>Only the vanilla menu, and only because this mod replaced it.</b> Escape now opens our own
+        /// settings window, which carries saving, loading, options and quitting, so vanilla's menu button is a
+        /// second door into a room the player has already been shown.
+        ///
+        /// Suppressed rather than hidden by default, and the difference matters: hidden is the player's setting
+        /// to change, and a button whose window nothing opens any more should not be something they can put
+        /// back and then find inert. Checked everywhere <see cref="IsHidden"/> is, and in the editor's list of
+        /// available tabs, so it never appears as a row that can be dragged about to no effect.
+        /// </summary>
+        public static bool Suppressed(string defName)
+        {
+            return !defName.NullOrEmpty()
+                   && string.Equals(defName, "Menu", StringComparison.OrdinalIgnoreCase);
+        }
+
         public bool IsHidden(string defName)
         {
             if (defName.NullOrEmpty())
@@ -189,7 +207,8 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     bool anyChild = false;
                     foreach (UIButtonBarEntry child in entry.children)
                     {
-                        if (child.tab.NullOrEmpty() || child.Def == null || IsHidden(child.tab))
+                        if (child.tab.NullOrEmpty() || child.Def == null || IsHidden(child.tab)
+                            || Suppressed(child.tab))
                             continue;
 
                         placed.Add(child.tab);
@@ -217,7 +236,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     continue;
                 }
 
-                if (entry.Def == null || IsHidden(entry.tab))
+                if (entry.Def == null || IsHidden(entry.tab) || Suppressed(entry.tab))
                     continue;
 
                 // Marked placed either way, so the append pass below does not add a second copy of a slot that
@@ -228,7 +247,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             foreach (MainButtonDef def in DefDatabase<MainButtonDef>.AllDefsListForReading)
             {
-                if (placed.Contains(def.defName) || IsHidden(def.defName))
+                if (placed.Contains(def.defName) || IsHidden(def.defName) || Suppressed(def.defName))
                     continue;
 
                 result.Add(new UIButtonBarEntry { tab = def.defName });

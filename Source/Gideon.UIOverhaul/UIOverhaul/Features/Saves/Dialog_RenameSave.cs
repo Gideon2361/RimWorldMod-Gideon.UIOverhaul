@@ -19,7 +19,7 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// small window that opens where you are looking -- particularly since it also has to report why a name was
     /// refused.
     ///
-    /// Modelled on <see cref="Dialog_NewSaveFolder"/> deliberately, down to the shape and the failure line, so
+    /// Modeled on <see cref="Dialog_NewSaveFolder"/> deliberately, down to the shape and the failure line, so
     /// the two naming windows in this feature behave identically.
     /// </summary>
     public class Dialog_RenameSave : Window

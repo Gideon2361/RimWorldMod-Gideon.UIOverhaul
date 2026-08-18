@@ -45,9 +45,11 @@ namespace Gideon.UIOverhaul.Features.Saves
             // the old one could no longer be told apart from it.
             FileInfo existing = SaveFolders.Find(cleaned);
 
-            string replaced = existing != null
-                             && !string.Equals(existing.FullName, target,
-                                 System.StringComparison.OrdinalIgnoreCase)
+            // Canonicalized, never compared as written. The two sides are built differently -- target out of
+            // SaveFolders.Root, this one read off a FileInfo -- so one file can arrive in two spellings, and a
+            // comparison that wrongly says "different" turns an overwrite into a move that deletes the file the
+            // save just went into. SamePath resolves doubt as "same", which is the answer that cannot lose a save.
+            string replaced = existing != null && !SaveFolders.SamePath(existing.FullName, target)
                 ? existing.FullName
                 : null;
 
@@ -82,8 +84,36 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                     // Only once the new file is actually there. A move that deleted first and then failed to
                     // write would be the one bug in a save manager nobody ever forgives.
+                    // The audit line for the whole decision, gated behind debug logging like the rest of the
+                    // sentinels. A save that loses a file otherwise leaves nothing behind but a success message,
+                    // which is exactly the position the "Northern Hibum - LZMA" report left us in: no way to tell
+                    // which step removed it. These four facts identify the step.
+                    UIDebug.Log("Saves.Write: target=" + target
+                                + " folder=" + (folder ?? "<root>")
+                                + " existing=" + (existing == null ? "<none>" : existing.FullName)
+                                + " replaced=" + (replaced ?? "<none>")
+                                + " targetExists=" + File.Exists(target)
+                                + " targetBytes=" + (File.Exists(target) ? new FileInfo(target).Length : -1L));
+
                     if (replaced == null || !File.Exists(target) || !File.Exists(replaced))
                         return;
+
+                    // <b>Asked a second time, immediately before the delete.</b> The first test ran before the
+                    // write, against a path predicted from the chosen folder; this one runs against what is
+                    // actually on disk now. Anything that redirected the write elsewhere -- another patch on
+                    // FilePathForSavedGame, compression swapping the file in -- could have landed the new save on
+                    // the very path about to be removed. One redundant comparison is nothing next to the failure
+                    // it rules out, which is deleting the save the player just asked for.
+                    if (SaveFolders.SamePath(replaced, target))
+                        return;
+
+                    // The new file has to be a real save before the old one goes. A zero length target means the
+                    // write produced nothing, and the previous save is then the only copy that exists.
+                    if (new FileInfo(target).Length <= 0L)
+                        return;
+
+                    UIDebug.Warning("Saves.Write: removing the previous copy at " + replaced
+                                    + ", because the save moved to " + target);
 
                     File.Delete(replaced);
 

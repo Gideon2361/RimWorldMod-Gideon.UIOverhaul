@@ -1021,74 +1021,79 @@ namespace Gideon.UIFramework.Controls
             Color previousColor = GUI.color;
             bool previousWrap = Text.WordWrap;
 
-            Text.WordWrap = false;
-
-            // Grouped so headings and their bands clip to the heading row. When they lean, both reach past an
-            // edge: a band has to overhang the bottom to meet its column flush, and a long heading would
-            // otherwise be drawn over whatever is above the grid. Coordinates inside a group are local to it.
-            //
-            // With columns pinned the group does a second job: it is what stops a scrolling heading being drawn
-            // across the pinned strip beside it.
-            GUI.BeginGroup(header);
-
-            float x = startX;
-            int bandable = bandableOffset;
-
-            for (int i = firstColumn; i < Columns.Count && i < lastColumn; i++)
+            try
             {
-                UIDesignatorTabColumn column = Columns[i];
+                Text.WordWrap = false;
 
-                Rect cell = new Rect(x, 0f, column.Width, header.height);
-                x += column.Width;
+                // Grouped so headings and their bands clip to the heading row. When they lean, both reach past an
+                // edge: a band has to overhang the bottom to meet its column flush, and a long heading would
+                // otherwise be drawn over whatever is above the grid. Coordinates inside a group are local to it.
+                //
+                // With columns pinned the group does a second job: it is what stops a scrolling heading being drawn
+                // across the pinned strip beside it.
+                GUI.BeginGroup(header);
 
-                bool banded = AlternatingColumnBands && column.Bandable && bandable % 2 == 1;
-                if (column.Bandable)
-                    bandable++;
+                float x = startX;
+                int bandable = bandableOffset;
 
-                if (cell.xMax < 0f || cell.x > header.width)
-                    continue;
-
-                bool leaning = Leaning && column.RotateLabel;
-
-                // A band is only sheared when the heading actually leans. At 90 degrees the shear produces an
-                // upright stripe the width of the column -- which is the cell -- so vertical takes the same
-                // path as horizontal and fills it, rather than a rotated rect that would leave the top of the
-                // heading row unpainted for no reason.
-                bool sheared = leaning && HeaderLabelOrientation != UIHeaderAngle.Vertical;
-
-                if (banded)
+                for (int i = firstColumn; i < Columns.Count && i < lastColumn; i++)
                 {
-                    if (sheared)
-                        DrawLeaningBand(cell, header.width, palette);
-                    else
-                        Widgets.DrawBoxSolid(cell, palette.SurfaceSunken);
-                }
+                    UIDesignatorTabColumn column = Columns[i];
 
-                // A custom heading wins over the label, and is never rotated: whatever it draws is likely
-                // interactive, and something interactive under a rotated matrix takes its clicks in the wrong
-                // place.
-                if (column.DrawHeader != null)
-                    column.DrawHeader(cell, palette);
-                else if (!column.Label.NullOrEmpty())
-                {
-                    if (leaning)
-                        DrawLeaningLabel(cell, column.Label, palette);
-                    else
-                        DrawLevelLabel(cell, column.Label, palette);
-                }
+                    Rect cell = new Rect(x, 0f, column.Width, header.height);
+                    x += column.Width;
 
-                // Registered on the upright cell, never inside the rotation. A tooltip region is taken in
-                // screen space, so one registered under a rotated matrix sits where the pointer is not.
-                if (!column.Tooltip.NullOrEmpty() && Mouse.IsOver(cell))
-                    TooltipHandler.TipRegion(cell, (TipSignal) column.Tooltip);
+                    bool banded = AlternatingColumnBands && column.Bandable && bandable % 2 == 1;
+                    if (column.Bandable)
+                        bandable++;
+
+                    if (cell.xMax < 0f || cell.x > header.width)
+                        continue;
+
+                    bool leaning = Leaning && column.RotateLabel;
+
+                    // A band is only sheared when the heading actually leans. At 90 degrees the shear produces an
+                    // upright stripe the width of the column -- which is the cell -- so vertical takes the same
+                    // path as horizontal and fills it, rather than a rotated rect that would leave the top of the
+                    // heading row unpainted for no reason.
+                    bool sheared = leaning && HeaderLabelOrientation != UIHeaderAngle.Vertical;
+
+                    if (banded)
+                    {
+                        if (sheared)
+                            DrawLeaningBand(cell, header.width, palette);
+                        else
+                            Widgets.DrawBoxSolid(cell, palette.SurfaceSunken);
+                    }
+
+                    // A custom heading wins over the label, and is never rotated: whatever it draws is likely
+                    // interactive, and something interactive under a rotated matrix takes its clicks in the wrong
+                    // place.
+                    if (column.DrawHeader != null)
+                        column.DrawHeader(cell, palette);
+                    else if (!column.Label.NullOrEmpty())
+                    {
+                        if (leaning)
+                            DrawLeaningLabel(cell, column.Label, palette);
+                        else
+                            DrawLevelLabel(cell, column.Label, palette);
+                    }
+
+                    // Registered on the upright cell, never inside the rotation. A tooltip region is taken in
+                    // screen space, so one registered under a rotated matrix sits where the pointer is not.
+                    if (!column.Tooltip.NullOrEmpty() && Mouse.IsOver(cell))
+                        TooltipHandler.TipRegion(cell, (TipSignal) column.Tooltip);
+                }
             }
+            finally
+            {
+                GUI.EndGroup();
 
-            GUI.EndGroup();
-
-            Text.WordWrap = previousWrap;
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
         }
 
         private static void DrawLevelLabel(Rect cell, string label, UIColorPaletteDef palette)

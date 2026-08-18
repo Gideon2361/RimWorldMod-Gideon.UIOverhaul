@@ -234,26 +234,31 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             // Both lines are single lines by construction. The instructions in particular are long enough to
             // wrap at a narrow UI scale, and a wrapped second line has nowhere to go but over the column
             // headings below.
-            Text.WordWrap = false;
+            try
+            {
+                Text.WordWrap = false;
 
-            Text.Font = GameFont.Medium;
-            GUI.color = palette.TextPrimary;
-            float titleHeight = Text.LineHeight;
-            Widgets.Label(new Rect(r.x, r.y, r.width - 200f, titleHeight), "Edit Designator Tabs");
+                Text.Font = GameFont.Medium;
+                GUI.color = palette.TextPrimary;
+                float titleHeight = Text.LineHeight;
+                Widgets.Label(new Rect(r.x, r.y, r.width - 200f, titleHeight), "Edit Designator Tabs");
 
-            Text.Font = GameFont.Small;
-            GUI.color = palette.TextSecondary;
+                Text.Font = GameFont.Small;
+                GUI.color = palette.TextSecondary;
 
-            string instructions = assigningTo >= 0
-                ? "Pick a tab on the right to put inside the menu."
-                : "Drag a row to reorder it, onto a menu to put it inside, out of a menu to take it "
-                  + "back out, or onto the right to hide it.";
+                string instructions = assigningTo >= 0
+                    ? "Pick a tab on the right to put inside the menu."
+                    : "Drag a row to reorder it, onto a menu to put it inside, out of a menu to take it "
+                      + "back out, or onto the right to hide it.";
 
-            Rect instructionRect = new Rect(r.x, r.y + titleHeight + TextPad, r.width, Text.LineHeight);
-            Widgets.Label(instructionRect, instructions.Truncate(instructionRect.width));
-
-            GUI.color = palette.TextPrimary;
-            Text.WordWrap = previousWrap;
+                Rect instructionRect = new Rect(r.x, r.y + titleHeight + TextPad, r.width, Text.LineHeight);
+                Widgets.Label(instructionRect, instructions.Truncate(instructionRect.width));
+            }
+            finally
+            {
+                GUI.color = palette.TextPrimary;
+                Text.WordWrap = previousWrap;
+            }
         }
 
         // ---------------------------------------------------------------------------------------
@@ -771,17 +776,22 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 bool previousWrap = Text.WordWrap;
                 GameFont previousFont = Text.Font;
 
-                Text.WordWrap = false;
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = palette.TextSecondary;
+                try
+                {
+                    Text.WordWrap = false;
+                    Text.Font = GameFont.Small;
+                    Text.Anchor = TextAnchor.MiddleLeft;
+                    GUI.color = palette.TextSecondary;
 
-                Widgets.Label(descriptionRect, description.Truncate(descriptionRect.width));
-
-                GUI.color = palette.TextPrimary;
-                Text.Anchor = TextAnchor.UpperLeft;
-                Text.Font = previousFont;
-                Text.WordWrap = previousWrap;
+                    Widgets.Label(descriptionRect, description.Truncate(descriptionRect.width));
+                }
+                finally
+                {
+                    GUI.color = palette.TextPrimary;
+                    Text.Anchor = TextAnchor.UpperLeft;
+                    Text.Font = previousFont;
+                    Text.WordWrap = previousWrap;
+                }
 
                 TooltipHandler.TipRegion(descriptionRect, (TipSignal) description);
                 return;
@@ -1067,72 +1077,77 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             Color previousColor = GUI.color;
             bool previousWrap = Text.WordWrap;
 
-            float x = ContentLeft(band);
-
-            Texture2D icon = UIBarDefaultIcons.Resolve(entry, entry.Def);
-            if (icon != null)
+            try
             {
+                float x = ContentLeft(band);
+
+                Texture2D icon = UIBarDefaultIcons.Resolve(entry, entry.Def);
+                if (icon != null)
+                {
+                    GUI.color = palette.TextSecondary;
+                    GUI.DrawTexture(new Rect(x, band.y + (band.height - 24f) * 0.5f, 24f, 24f), icon,
+                        ScaleMode.ScaleToFit);
+                }
+
+                x += 24f + 8f;
+
+                MainButtonDef def = entry.Def;
+                UIBarWidgetDef widgetDef = entry.WidgetDef;
+
+                string name;
+                string source;
+
+                if (entry.IsMenu)
+                {
+                    name = entry.menu.NullOrEmpty() ? "Menu" : entry.menu;
+
+                    // A menu has no mod behind it, so it says so rather than showing a blank or claiming ours.
+                    source = "Menu you created";
+                }
+                else if (entry.IsWidget)
+                {
+                    name = widgetDef != null ? widgetDef.LabelCap.ToString() : entry.widget + " (missing)";
+
+                    // Named as a widget as well as by its mod, because the one thing a player needs to know about
+                    // this row is that it is not a tab and will not open anything.
+                    source = "Widget from " + (widgetDef?.modContentPack?.Name ?? "an uninstalled mod");
+                }
+                else
+                {
+                    // "(missing)" stays here, on the status line, for a tab whose mod is gone. It is deliberately
+                    // not in the name box below, where it would become part of the tab's name once typed after.
+                    name = def != null
+                        ? UIBarDefaultLabels.DefaultNameFor(entry, def)
+                        : entry.tab + " (missing)";
+                    source = def?.modContentPack?.Name ?? "Unknown source";
+                }
+
+                float width = Mathf.Max(0f, band.xMax - x - TextPad);
+
+                // One line each, cut with an ellipsis rather than wrapped. The band is sized for exactly two
+                // lines, so a name long enough to wrap would push the source line out of the card; truncating
+                // keeps the row the height the layout says it is.
+                Text.WordWrap = false;
+
+                // Each rect is exactly as tall as the line it holds, measured the same way HeaderBandHeight
+                // measured it. That is the whole point: the band and the text inside it read their heights from
+                // one place, so they cannot disagree about how much room a line needs.
+                Text.Font = GameFont.Small;
+                float nameHeight = Text.LineHeight;
+                GUI.color = palette.TextPrimary;
+                Widgets.Label(new Rect(x, band.y + TextPad, width, nameHeight), name.Truncate(width));
+
+                Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextSecondary;
-                GUI.DrawTexture(new Rect(x, band.y + (band.height - 24f) * 0.5f, 24f, 24f), icon,
-                    ScaleMode.ScaleToFit);
+                Widgets.Label(new Rect(x, band.y + TextPad + nameHeight + TextPad, width, Text.LineHeight),
+                    source.Truncate(width));
             }
-
-            x += 24f + 8f;
-
-            MainButtonDef def = entry.Def;
-            UIBarWidgetDef widgetDef = entry.WidgetDef;
-
-            string name;
-            string source;
-
-            if (entry.IsMenu)
+            finally
             {
-                name = entry.menu.NullOrEmpty() ? "Menu" : entry.menu;
-
-                // A menu has no mod behind it, so it says so rather than showing a blank or claiming ours.
-                source = "Menu you created";
+                Text.WordWrap = previousWrap;
+                Text.Font = previousFont;
+                GUI.color = previousColor;
             }
-            else if (entry.IsWidget)
-            {
-                name = widgetDef != null ? widgetDef.LabelCap.ToString() : entry.widget + " (missing)";
-
-                // Named as a widget as well as by its mod, because the one thing a player needs to know about
-                // this row is that it is not a tab and will not open anything.
-                source = "Widget from " + (widgetDef?.modContentPack?.Name ?? "an uninstalled mod");
-            }
-            else
-            {
-                // "(missing)" stays here, on the status line, for a tab whose mod is gone. It is deliberately
-                // not in the name box below, where it would become part of the tab's name once typed after.
-                name = def != null
-                    ? UIBarDefaultLabels.DefaultNameFor(entry, def)
-                    : entry.tab + " (missing)";
-                source = def?.modContentPack?.Name ?? "Unknown source";
-            }
-
-            float width = Mathf.Max(0f, band.xMax - x - TextPad);
-
-            // One line each, cut with an ellipsis rather than wrapped. The band is sized for exactly two
-            // lines, so a name long enough to wrap would push the source line out of the card; truncating
-            // keeps the row the height the layout says it is.
-            Text.WordWrap = false;
-
-            // Each rect is exactly as tall as the line it holds, measured the same way HeaderBandHeight
-            // measured it. That is the whole point: the band and the text inside it read their heights from
-            // one place, so they cannot disagree about how much room a line needs.
-            Text.Font = GameFont.Small;
-            float nameHeight = Text.LineHeight;
-            GUI.color = palette.TextPrimary;
-            Widgets.Label(new Rect(x, band.y + TextPad, width, nameHeight), name.Truncate(width));
-
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextSecondary;
-            Widgets.Label(new Rect(x, band.y + TextPad + nameHeight + TextPad, width, Text.LineHeight),
-                source.Truncate(width));
-
-            Text.WordWrap = previousWrap;
-            Text.Font = previousFont;
-            GUI.color = previousColor;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -1422,7 +1437,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             List<MainButtonDef> result = new List<MainButtonDef>();
             foreach (MainButtonDef def in DefDatabase<MainButtonDef>.AllDefsListForReading)
             {
-                if (!placed.Contains(def.defName))
+                // Suppressed as well as already placed. A tab this mod takes off the bar for good is not a
+                // choice the player has, so offering it here would be offering something inert.
+                if (!placed.Contains(def.defName) && !UIButtonBarConfig.Suppressed(def.defName))
                     result.Add(def);
             }
 
@@ -1485,19 +1502,28 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 Color previousColor = GUI.color;
                 bool previousWrap = Text.WordWrap;
 
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleRight;
-                Text.WordWrap = false;
-                GUI.color = palette.Danger;
-
+                // Outside the guarded block because the tooltip below is registered on it. A rect declared
+                // inside a try is out of scope after it, and the tooltip belongs after the text state is put
+                // back rather than inside the drawing.
                 float errorLeft = x + buttonWidth + 8f;
                 Rect errorRect = new Rect(errorLeft, r.y, Mathf.Max(0f, saveRect.x - errorLeft - 8f), 32f);
-                Widgets.Label(errorRect, nameError.Truncate(errorRect.width));
 
-                GUI.color = previousColor;
-                Text.WordWrap = previousWrap;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
+                try
+                {
+                    Text.Font = GameFont.Tiny;
+                    Text.Anchor = TextAnchor.MiddleRight;
+                    Text.WordWrap = false;
+                    GUI.color = palette.Danger;
+
+                    Widgets.Label(errorRect, nameError.Truncate(errorRect.width));
+                }
+                finally
+                {
+                    GUI.color = previousColor;
+                    Text.WordWrap = previousWrap;
+                    Text.Anchor = previousAnchor;
+                    Text.Font = previousFont;
+                }
 
                 TooltipHandler.TipRegion(errorRect, (TipSignal) nameError);
             }

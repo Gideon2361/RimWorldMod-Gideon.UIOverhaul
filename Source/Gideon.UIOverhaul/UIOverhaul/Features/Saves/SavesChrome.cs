@@ -1,6 +1,7 @@
 using System;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Options;
 using UnityEngine;
 using Verse;
 
@@ -16,6 +17,33 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// </summary>
     internal static class SavesChrome
     {
+        /// <summary>
+        /// Closes this mod's settings window, if it happens to be open.
+        ///
+        /// <b>Because it sits over the saving notice.</b> Saving runs as a long event that draws its own
+        /// centered message, and our settings window is drawn above it with the screen behind absorbed: the
+        /// player pressed Save, the notice was covered, and to them nothing at all happened. A game that is
+        /// busy looks identical to a game that has hung, and the second reading is the one people act on.
+        ///
+        /// Called from both save windows rather than from the buttons that open them, so it holds no matter how
+        /// they were reached, including Escape and the interception of vanilla's own save dialog.
+        /// </summary>
+        internal static void CloseSettingsWindow()
+        {
+            UIGuard.Try("Saves.CloseSettings", () =>
+            {
+                WindowStack stack = Find.WindowStack;
+
+                if (stack == null)
+                    return;
+
+                Window options = stack.WindowOfType<Dialog_UIOptions>();
+
+                if (options != null)
+                    stack.TryRemove(options, false);
+            }, "The settings window stays open behind this one.");
+        }
+
         /// <summary>Height of the action strip at the bottom of a save window.</summary>
         internal const float FooterHeight = 52f;
 
@@ -51,7 +79,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <summary>
         /// A button that cannot be pressed, in the palette's vocabulary for one.
         ///
-        /// Restores the anchor and colour to what it found rather than to a guess: <c>Text.StartOfOnGUI</c>
+        /// Restores the anchor and color to what it found rather than to a guess: <c>Text.StartOfOnGUI</c>
         /// checks that state each frame and complains once when it was left changed.
         /// </summary>
         internal static void Disabled(Rect rect, string label, UIColorPaletteDef palette)
@@ -65,7 +93,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// A drop-down field: a label on the left, a caret on the right.
         ///
         /// Reads as a picker rather than a button, which matters next to the name box it sits beside. A
-        /// centred label with no caret is a button, and a button does not say that a list will appear.
+        /// centered label with no caret is a button, and a button does not say that a list will appear.
         /// </summary>
         internal static bool Picker(Rect rect, string label, UIColorPaletteDef palette)
         {
@@ -159,6 +187,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             None,
             Rename,
             Move,
+            Sweep,
             Delete
         }
 
@@ -206,11 +235,12 @@ namespace Gideon.UIOverhaul.Features.Saves
         private static SaveAction DrawIdle(Rect rect, string savePath, ArmedDelete armed,
             UIColorPaletteDef palette)
         {
-            float width = Mathf.Min(96f, (rect.width - 12f) / 3f);
+            float width = Mathf.Min(96f, (rect.width - 18f) / 4f);
 
             Rect rename = new Rect(rect.x, rect.y, width, rect.height);
             Rect move = new Rect(rename.xMax + 6f, rect.y, width, rect.height);
-            Rect delete = new Rect(move.xMax + 6f, rect.y, width, rect.height);
+            Rect sweep = new Rect(move.xMax + 6f, rect.y, width, rect.height);
+            Rect delete = new Rect(sweep.xMax + 6f, rect.y, width, rect.height);
 
             if (width < 40f)
                 return SaveAction.None;
@@ -220,6 +250,10 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             if (Small(move, "Move", palette, palette.TextPrimary))
                 return SaveAction.Move;
+
+            // Sits before Delete rather than after it, so the destructive one stays last in the row.
+            if (Small(sweep, "Sweep", palette, palette.TextPrimary))
+                return SaveAction.Sweep;
 
             // Tinted rather than filled. A permanently red button in a row somebody reads every time they open
             // the window is alarm fatigue; the fill arrives once it is armed and means something.
@@ -295,7 +329,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             return Widgets.ButtonInvisible(rect);
         }
 
-        /// <summary>The strip a save window's actions sit on: a rule, and the panel colour behind it.</summary>
+        /// <summary>The strip a save window's actions sit on: a rule, and the panel color behind it.</summary>
         internal static void Footer(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.PanelBackground);

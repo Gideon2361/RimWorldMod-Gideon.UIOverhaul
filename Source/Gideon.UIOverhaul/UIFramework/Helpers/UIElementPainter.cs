@@ -300,9 +300,21 @@ namespace Gideon.UIFramework.Helpers
         {
             palette = palette ?? UIColorPaletteDef.Active;
 
-            // Every color is multiplied by the ambient one, which is how vanilla's checkbox textures behaved:
-            // they were drawn at GUI.color, so a caller that dimmed a whole row dimmed its checkbox with it.
-            // Painting at full strength instead would leave a bright box on a greyed-out row.
+            // <b>The ambient color tints nothing here but transparency.</b> This used to multiply every channel by
+            // GUI.color, imitating vanilla's checkbox textures, which were drawn at whatever the ambient color
+            // happened to be. The cost was that a switch never showed its own color: a caller that tinted a row for
+            // any reason of its own restated that tint on the control, and the state colors stopped being
+            // recognizable. Partial is the case that showed it, since #CCA633 shifted far enough under a tint to
+            // read as green rather than as the warning amber it is.
+            //
+            // Alpha still comes through, because that is a different question. A window mid-fade lowers the ambient
+            // alpha and everything in it has to fade together, or the switches float over a dissolving panel. Hue
+            // and value do not work that way: those say what the control means, and they are not the caller's to
+            // change.
+            //
+            // Nothing is lost in the dimming case that motivated the multiply. A switch that cannot be used is told
+            // so through the disabled parameter, which picks its own colors for exactly that, rather than inheriting
+            // a shade and hoping it reads as unavailable.
             Color ambient = GUI.color;
             Color previous = ambient;
 
@@ -317,7 +329,8 @@ namespace Gideon.UIFramework.Helpers
             // Rounded, at the shared radius. On a track this short the radius clamps to half its height, so it
             // comes out very close to a capsule -- which is what a switch should look like anyway, and it means
             // the switch, the buttons and the window it sits in are all rounded by the same rule.
-            OutlineRounded(frame, BorderColor(state, track, palette, disabled) * ambient, track * ambient);
+            OutlineRounded(frame, Opacity(BorderColor(state, track, palette, disabled), ambient),
+                Opacity(track, ambient));
 
             GUI.color = previous;
 
@@ -348,9 +361,20 @@ namespace Gideon.UIFramework.Helpers
 
             // The knob is square, so the shared radius clamps to half its size and it comes out a disc. That is
             // the right answer for a switch and it costs no special case.
-            FillRounded(knob, KnobColor(state, palette, disabled) * ambient);
+            FillRounded(knob, Opacity(KnobColor(state, palette, disabled), ambient));
 
             GUI.color = previous;
+        }
+
+        /// <summary>
+        /// A color at its own hue and value, carrying only the ambient alpha.
+        ///
+        /// The seam between "this control means something" and "this whole panel is fading", which are the two
+        /// things the old multiply had conflated.
+        /// </summary>
+        private static Color Opacity(Color color, Color ambient)
+        {
+            return new Color(color.r, color.g, color.b, color.a * ambient.a);
         }
 
         /// <summary>
@@ -369,17 +393,14 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>
         /// The rim around the track.
         ///
-        /// <b>An unlit switch takes <c>Border</c> instead of a multiple of its own fill,</b> and that is a fix
-        /// rather than a preference. The reference art multiplies both states -- the unchecked track #2F3337
-        /// carries #1F2124 -- but the art was drawn against a mid-grey mockup background, and #1F2124 is darker
-        /// than <c>PanelBackground</c> #1B1F23 is light. On a real panel the edge vanished, the track sat barely
-        /// twenty levels above the surface behind it, and an off switch read as a pale knob floating in a smudge
-        /// with no control around it. Nobody could see it was a switch, let alone which end the knob was parked at.
+        /// <b>An unlit switch takes <c>SurfaceSunken</c> rather than a multiple of its own fill.</b> Multiplying
+        /// works for the lit states, where a bright track has contrast to spare, but the unlit track is now
+        /// <c>Border</c> #2F3337 itself: 0.65 of that is #1F2124, which is darker than the #1B1F23 panel is light,
+        /// so the edge disappeared into the surface behind it and the switch read as a knob floating in a smudge.
         ///
-        /// <c>Border</c> is the existing role for exactly this -- the edge of a control -- so the unlit switch now
-        /// reads as an empty slot with a defined outline, and no new palette entry was needed to say it. The lit
-        /// states keep the derived rim: a bright track has all the contrast it needs, and <c>Border</c>'s blue
-        /// would fight the amber of Partial.
+        /// <c>SurfaceSunken</c> #0E1013 is the darkest surface in the ramp and reads as a recess, which is exactly
+        /// what an empty slot should look like. It also cannot collide with the track, which naming <c>Border</c>
+        /// here now would: that became the track's own color when the unlit state moved to it.
         /// </summary>
         private static Color BorderColor(MultiCheckboxState state, Color track, UIColorPaletteDef palette,
             bool disabled)
@@ -388,7 +409,7 @@ namespace Gideon.UIFramework.Helpers
                 return new Color(track.r * SwitchBorderFactor, track.g * SwitchBorderFactor,
                     track.b * SwitchBorderFactor, track.a);
 
-            Color edge = palette.Border;
+            Color edge = palette.SurfaceSunken;
 
             // Dimmed rather than dropped. A disabled switch still has to look like a switch, or it becomes the
             // same unreadable smudge for a different reason.
@@ -440,15 +461,22 @@ namespace Gideon.UIFramework.Helpers
         /// </summary>
         private static Color TrackColor(MultiCheckboxState state, UIColorPaletteDef palette, bool disabled)
         {
-            if (disabled)
-                return palette.SurfaceRaised;
+            // <b>Border, not SurfaceRaised and not ControlBackgroundFaded, and both of those were tried.</b>
+            //
+            // SurfaceRaised came first and vanished: this ramp's raised surface is #15191D, the same value as the
+            // window behind it, so an unlit switch had no visible extent at all. ControlBackgroundFaded replaced it
+            // in 14089 and fixed the visibility by overshooting -- #434A53 is a light blue grey, near enough the
+            // accent's own hue that on and off became two brightnesses of one blue rather than lit and unlit. A
+            // whole column of disallowed items read as allowed.
+            //
+            // Border #2F3337 is the neutral in the middle: a clear step up from the #1B1F23 panel, so the slot is
+            // plainly there, and no hue of its own, so nothing about it suggests the switch is doing something. It
+            // is also the role whose job this is -- the extent of a control -- and it is the value the reference
+            // art used for the unchecked track before the palette moved that number onto Border.
+            if (disabled || state == MultiCheckboxState.Off)
+                return palette.Border;
 
-            switch (state)
-            {
-                case MultiCheckboxState.On: return palette.Accent;
-                case MultiCheckboxState.Partial: return palette.Warning;
-                default: return palette.ControlBackgroundFaded;
-            }
+            return state == MultiCheckboxState.On ? palette.Accent : palette.Warning;
         }
 
         /// <summary>

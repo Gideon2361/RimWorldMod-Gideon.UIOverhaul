@@ -46,6 +46,24 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <summary>How much taller an expanded row is: the schedule strip plus room to breathe around it.</summary>
         private const float ScheduleStripHeight = 54f;
 
+        /// <summary>
+        /// How much taller this pawn's row becomes when it is opened: the schedule, and the policies under it.
+        ///
+        /// <b>Measured per pawn rather than fixed.</b> Neither band applies to everybody -- an animal has no
+        /// timetable and no policies, a guest has no configurable food -- and a row charged for a band that then
+        /// draws nothing opens onto empty background. Each part answers for its own height, so a pawn who has
+        /// neither simply does not grow.
+        /// </summary>
+        private static float ExpansionHeightFor(Pawn pawn)
+        {
+            return ScheduleHeightFor(pawn) + PolicyStrip.HeightFor(pawn);
+        }
+
+        private static float ScheduleHeightFor(Pawn pawn)
+        {
+            return pawn?.timetable == null ? 0f : ScheduleStripHeight;
+        }
+
         private static readonly UICardControl RowCard = new UICardControl { Padding = 0f, AccentWidth = 3f };
 
         private static readonly UIDesignatorTabControl Grid = new UIDesignatorTabControl
@@ -520,10 +538,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     Grid.Rows.Add(new UIDesignatorTabRow
                     {
                         Payload = pawn,
-                        Height = open ? RowHeight + ScheduleStripHeight : (float?) null,
+                        Height = open ? RowHeight + ExpansionHeightFor(pawn) : (float?) null,
                         DrawBackground = DrawRowBackground,
                         DrawOverlay = open ? (System.Action<Rect, UIDesignatorTabRow, UIColorPaletteDef>)
-                            DrawScheduleStrip : null
+                            DrawExpansion : null
                     });
                 }
             }
@@ -799,25 +817,36 @@ namespace Gideon.UIOverhaul.Features.Pawns
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
 
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.WordWrap = false;
+            // Captured and restored in a finally, like the font and the anchor beside it. This used to set it
+            // back to a hardcoded true on the straight-line path, which is wrong twice over: it overwrites a
+            // caller who wanted it false, and anything throwing in between left it false for the rest of the
+            // frame -- which is what Text.StartOfOnGUI complains about, from somewhere with no clue who did it.
+            bool previousWrap = Text.WordWrap;
 
-            Rect line = new Rect(band.x + 8f, band.y, Mathf.Max(0f, band.width - 12f), band.height);
+            try
+            {
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
 
-            // The badge takes the colour and the label follows in it, so the two agree without either being
-            // told about the other. DrawLeading returns where the text starts, which is the only reason this
-            // cell never has to know how wide a badge is.
-            float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
+                Rect line = new Rect(band.x + 8f, band.y, Mathf.Max(0f, band.width - 12f), band.height);
 
-            GUI.color = summary.Color(palette);
+                // The badge takes the color and the label follows in it, so the two agree without either being
+                // told about the other. DrawLeading returns where the text starts, which is the only reason this
+                // cell never has to know how wide a badge is.
+                float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
 
-            Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
+                GUI.color = summary.Color(palette);
 
-            Text.WordWrap = true;
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
 
             if (Mouse.IsOver(band))
                 TooltipHandler.TipRegion(band, (TipSignal) summary.Detail);
@@ -938,19 +967,28 @@ namespace Gideon.UIOverhaul.Features.Pawns
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
 
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.WordWrap = false;
-            GUI.color = palette.TextSecondary;
+            try
+            {
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
+                GUI.color = palette.TextSecondary;
 
-            Rect textRect = new Rect(band.x + 8f, band.y, band.width - 12f, band.height);
-            Widgets.Label(textRect, report.Truncate(textRect.width));
-
-            Text.WordWrap = true;
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Rect textRect = new Rect(band.x + 8f, band.y, band.width - 12f, band.height);
+                Widgets.Label(textRect, report.Truncate(textRect.width));
+            }
+            finally
+            {
+                // Truncate measures the string to fit, so it is the sort of call that can fail on a rect this
+                // panel has resized to something unexpected. Restoring in a finally is what keeps that from
+                // leaving word wrap off for the rest of the frame.
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
 
             if (Mouse.IsOver(band))
                 TooltipHandler.TipRegion(band, (TipSignal) report);
@@ -1008,29 +1046,52 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         // ---------------------------------------------------------------------------------------
-        // The schedule strip
+        // The expanded row: schedule, then policies
         // ---------------------------------------------------------------------------------------
 
         /// <summary>
-        /// The hour-by-hour schedule for one pawn, revealed under its row.
+        /// Everything revealed under an opened row: the day, then the standing orders.
         ///
-        /// Drawn as an overlay rather than as a column because it spans the whole grid: 24 hours will not fit in
-        /// any one column, and splitting it across columns would tie the schedule's layout to the column widths.
+        /// Drawn as an overlay rather than as columns because both span the whole grid. 24 hours will not fit in
+        /// any one column, and splitting either across columns would tie its layout to the column widths.
+        ///
+        /// <b>The two are laid out here and drawn elsewhere.</b> This owns only where each band sits under the
+        /// row; what goes in them belongs to <see cref="ScheduleStrip"/> and <see cref="PolicyStrip"/>, both of
+        /// which are also used away from this tab.
+        /// </summary>
+        private static void DrawExpansion(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = data.Payload as Pawn;
+
+            if (pawn == null)
+                return;
+
+            Rect area = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
+                row.width - RowCard.AccentWidth - 16f, ExpansionHeightFor(pawn));
+
+            float schedule = ScheduleHeightFor(pawn);
+
+            DrawScheduleStrip(new Rect(area.x, area.y, area.width, schedule), pawn, palette);
+
+            // Offset by what the schedule actually took, not by the constant. A pawn with no timetable still
+            // has policies, and an arrangement that assumed the schedule was always there would have left them
+            // floating below a gap -- or, in the earlier shape of this method, skipped them entirely.
+            PolicyStrip.Draw(new Rect(area.x, area.y + schedule, area.width, PolicyStrip.HeightFor(pawn)),
+                pawn, palette);
+        }
+
+        /// <summary>
+        /// The hour-by-hour schedule for one pawn.
         ///
         /// The strip itself, the brush picker and the painting all live in <see cref="ScheduleStrip"/>, because the
         /// template manager edits a day the same way and two copies of a paintable strip would be two copies that
-        /// could drift apart. What stays here is the part that is about a pawn's row: where it sits under the row,
-        /// which pawn it reads, and that painting invalidates that pawn's cached readings.
+        /// could drift apart. What stays here is the part that is about a pawn's row: which pawn it reads, and
+        /// that painting invalidates that pawn's cached readings.
         /// </summary>
-        private static void DrawScheduleStrip(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        private static void DrawScheduleStrip(Rect strip, Pawn pawn, UIColorPaletteDef palette)
         {
-            Pawn pawn = (Pawn) data.Payload;
-
             if (pawn.timetable == null)
                 return;
-
-            Rect strip = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
-                row.width - RowCard.AccentWidth - 16f, ScheduleStripHeight);
 
             const float gap = 8f;
 

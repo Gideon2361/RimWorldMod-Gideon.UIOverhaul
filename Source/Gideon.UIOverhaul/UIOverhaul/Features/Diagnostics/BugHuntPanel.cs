@@ -242,15 +242,20 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             Color previousColor = GUI.color;
             bool previousWrap = Text.WordWrap;
 
-            Text.Font = GameFont.Small;
-            Text.WordWrap = true;
-            GUI.color = color;
+            try
+            {
+                Text.Font = GameFont.Small;
+                Text.WordWrap = true;
+                GUI.color = color;
 
-            Widgets.Label(rect.ContractedBy(10f), message);
-
-            Text.WordWrap = previousWrap;
-            GUI.color = previousColor;
-            Text.Font = previousFont;
+                Widgets.Label(rect.ContractedBy(10f), message);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
 
             return true;
         }

@@ -87,6 +87,28 @@ namespace Gideon.UIOverhaul.Features.Saves
             draggable = true;
 
             Name.Text = DefaultName();
+
+            // <b>The folder follows the name the box was given, and this is a data loss fix.</b>
+            //
+            // DefaultName is the colony's name, which is very often the name of a save that already exists. The
+            // folder used to open on the Saves root regardless. So for anyone keeping their saves in a folder, the
+            // window opened already describing a MOVE: overwrite Northern Hibum, and take it out of "Aaron and
+            // Andrew" on the way. The footer said so and the button still read Overwrite, and pressing it wrote the
+            // new file to the root and removed the original from the folder. To somebody looking at that folder,
+            // their save had been deleted.
+            //
+            // Resolving the folder from the existing save makes the opening state an overwrite in place, which is
+            // what the pre-filled name means. Moving a save is still possible and still stated in the footer; it
+            // just has to be asked for now by choosing a different folder.
+            //
+            // Only where no such save exists does the last folder apply, since then there is nothing to follow.
+            FileInfo existing = SaveFolders.Find(Name.Text);
+
+            folder = existing != null
+                ? SaveFolders.FolderOf(existing)
+                : SaveFolders.LastFolder.NullOrEmpty()
+                    ? null
+                    : SaveFolders.LastFolder;
         }
 
         public override Vector2 InitialSize =>
@@ -96,7 +118,19 @@ namespace Gideon.UIOverhaul.Features.Saves
         {
             base.PostOpen();
 
+            SavesChrome.CloseSettingsWindow();
+
             Refresh();
+        }
+
+        public override void PostClose()
+        {
+            base.PostClose();
+
+            // Recorded on the way out rather than at every place the folder changes: there are five of those in
+            // this window -- the picker's two options, a new folder, clicking a save to overwrite, and following a
+            // rename -- and one of them would eventually be added without a matching line here.
+            SaveFolders.LastFolder = folder ?? string.Empty;
         }
 
         /// <summary>
@@ -570,6 +604,11 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                 case SavesChrome.SaveAction.Move:
                     OpenMoveMenu(acting, name);
+
+                    break;
+
+                case SavesChrome.SaveAction.Sweep:
+                    Find.WindowStack.Add(new Dialog_SaveSweep(acting));
 
                     break;
 

@@ -68,20 +68,25 @@ namespace Gideon.UIFramework.Controls
             bool previousWrap = Verse.Text.WordWrap;
             Color previousColor = GUI.color;
 
-            Verse.Text.Font = Font;
-            Verse.Text.Anchor = Anchor;
-            Verse.Text.WordWrap = WrapText;
-            GUI.color = Color ?? palette.TextPrimary;
+            try
+            {
+                Verse.Text.Font = Font;
+                Verse.Text.Anchor = Anchor;
+                Verse.Text.WordWrap = WrapText;
+                GUI.color = Color ?? palette.TextPrimary;
 
-            if (Ellipses && !WrapText)
-                Widgets.LabelEllipses(rect, Text);
-            else
-                Widgets.Label(rect, Text);
-
-            GUI.color = previousColor;
-            Verse.Text.WordWrap = previousWrap;
-            Verse.Text.Anchor = previousAnchor;
-            Verse.Text.Font = previousFont;
+                if (Ellipses && !WrapText)
+                    Widgets.LabelEllipses(rect, Text);
+                else
+                    Widgets.Label(rect, Text);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Verse.Text.WordWrap = previousWrap;
+                Verse.Text.Anchor = previousAnchor;
+                Verse.Text.Font = previousFont;
+            }
         }
     }
 
