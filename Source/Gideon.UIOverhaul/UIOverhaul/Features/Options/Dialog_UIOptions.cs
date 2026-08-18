@@ -1058,6 +1058,14 @@ namespace Gideon.UIOverhaul.Features.Options
         private void DrawMinimapOptions(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings, float indent)
         {
+            WidgetToggle(view, ref y, palette, settings, indent, "Show enemy pings",
+                settings.showMinimapEnemies, value => settings.showMinimapEnemies = value,
+                "Marks hostiles on the minimap in red.\n\nIt only ever shows what your colony can already "
+                + "see: anything standing in unexplored ground is not drawn, so this is not information the "
+                + "base game keeps from you.\n\nIt is still a far easier read than scanning the map yourself, "
+                + "and if that feels too generous you can switch it off and keep the rest of the minimap. "
+                + "Colonists, animals and downed pawns are unaffected.");
+
             ChoiceRow(view, ref y, palette, "Corner", CornerLabel(settings.minimapCorner), () =>
             {
                 List<FloatMenuOption> options = new List<FloatMenuOption>();

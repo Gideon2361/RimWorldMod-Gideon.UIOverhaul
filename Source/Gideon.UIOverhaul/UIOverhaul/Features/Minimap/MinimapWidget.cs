@@ -44,7 +44,6 @@ namespace Gideon.UIOverhaul.Features.Minimap
     internal static class MinimapWidget
     {
         private const float HeaderHeight = 24f;
-        private const float FooterHeight = 18f;
         private const float Inset = 6f;
 
         /// <summary>How far the panel sits from the screen edges it is docked against.</summary>
@@ -108,7 +107,7 @@ namespace Gideon.UIOverhaul.Features.Minimap
         {
             float side = SideOf(settings.minimapSize);
             float width = side + Inset * 2f;
-            float height = HeaderHeight + (collapsed ? 0f : side + Inset * 2f + FooterHeight);
+            float height = HeaderHeight + (collapsed ? 0f : side + Inset * 2f);
 
             bool right = settings.minimapCorner == MinimapCorner.BottomRight
                          || settings.minimapCorner == MinimapCorner.TopRight;
@@ -248,12 +247,15 @@ namespace Gideon.UIOverhaul.Features.Minimap
             if (collapsed)
                 return;
 
-            Rect body = new Rect(panel.x + Inset, header.yMax,
-                panel.width - Inset * 2f, panel.height - HeaderHeight - FooterHeight - Inset);
+            // Exactly the map, with an even inset all round. The panel used to carry a footer saying "click
+            // to jump", which told you once what the panel teaches you the first time you click it, and cost
+            // eighteen pixels of every frame after that.
+            // Derived from the panel rather than from the size setting, so the two cannot disagree: the panel
+            // is already an inset either side of the map, which makes its width the map's own.
+            Rect body = new Rect(panel.x + Inset, header.yMax + Inset,
+                panel.width - Inset * 2f, panel.width - Inset * 2f);
 
-            DrawMap(body, map, palette);
-
-            DrawFooter(new Rect(panel.x, panel.yMax - FooterHeight, panel.width, FooterHeight), palette);
+            DrawMap(body, map, palette, settings);
         }
 
         private static void DrawHeader(Rect header, Map map, UIColorPaletteDef palette)
@@ -307,7 +309,8 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// landed in. Handing the job to ScaleToFit would letterbox the texture somewhere this code could not
         /// see, and the dots would sit next to the colony instead of on it.
         /// </summary>
-        private static void DrawMap(Rect body, Map map, UIColorPaletteDef palette)
+        private static void DrawMap(Rect body, Map map, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
         {
             Texture2D texture = MinimapImage.For(map);
 
@@ -353,14 +356,24 @@ namespace Gideon.UIOverhaul.Features.Minimap
             Widgets.DrawBox(fitted);
             GUI.color = previousColor;
 
-            DrawMarkers(fitted, map, size);
+            DrawMarkers(fitted, map, size, settings);
             DrawViewRect(fitted, size);
             HandleClicks(fitted, map, size);
         }
 
-        private static void DrawMarkers(Rect fitted, Map map, IntVec3 size)
+        /// <summary>
+        /// The people, over the ground.
+        ///
+        /// <b>Hostiles are filtered here rather than left out of the cache.</b> The marker list is rebuilt four
+        /// times a second, so filtering at the source would leave the switch taking up to a quarter of a second
+        /// to visibly do anything. Filtering at the draw makes it immediate, and costs one comparison per
+        /// marker.
+        /// </summary>
+        private static void DrawMarkers(Rect fitted, Map map, IntVec3 size, UIOverhaulSettingsFile settings)
         {
             List<MinimapMarker> markers = MinimapMarkers.For(map);
+
+            bool enemies = settings.showMinimapEnemies;
 
             // Never smaller than two pixels. On a 400 cell map inside a 220 pixel panel one cell is half a
             // pixel, and a colonist drawn at true scale would be invisible -- which is the one thing a marker
@@ -370,6 +383,9 @@ namespace Gideon.UIOverhaul.Features.Minimap
             for (int i = 0; i < markers.Count; i++)
             {
                 MinimapMarker marker = markers[i];
+
+                if (!enemies && marker.Kind == MinimapMarkerKind.Hostile)
+                    continue;
 
                 Vector2 point = CellToPixel(fitted, size, marker.X, marker.Z);
 
@@ -485,39 +501,6 @@ namespace Gideon.UIOverhaul.Features.Minimap
             int z = Mathf.FloorToInt((fitted.yMax - point.y) / fitted.height * size.z);
 
             return new IntVec3(Mathf.Clamp(x, 0, size.x - 1), 0, Mathf.Clamp(z, 0, size.z - 1));
-        }
-
-        private static void DrawFooter(Rect footer, UIColorPaletteDef palette)
-        {
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleLeft;
-
-                int hostiles = MinimapMarkers.VisibleHostiles;
-
-                GUI.color = hostiles > 0 ? palette.Danger : palette.TextDisabled;
-
-                Rect label = new Rect(footer.x + 8f, footer.y, Mathf.Max(0f, footer.width - 16f),
-                    footer.height);
-
-                if (label.width >= 24f)
-                {
-                    Widgets.LabelEllipses(label, hostiles == 0
-                        ? "click to jump"
-                        : hostiles == 1 ? "1 hostile in sight" : hostiles + " hostiles in sight");
-                }
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
         }
 
         /// <summary>Drops everything held, for a game ending.</summary>

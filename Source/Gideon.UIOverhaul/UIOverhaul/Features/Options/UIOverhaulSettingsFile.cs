@@ -182,6 +182,20 @@ namespace Gideon.UIOverhaul.Features.Options
         public MinimapSize minimapSize = MinimapSize.Medium;
 
         /// <summary>
+        /// Whether hostiles are marked on the minimap.
+        ///
+        /// <b>On by default, and switchable because it is a fair thing to disagree about.</b> The minimap only
+        /// ever shows what the colony can already see -- anything under unexplored fog is not drawn and not
+        /// listed -- so this is not information the base game withholds. It is still a much easier read than
+        /// scanning the map yourself, and a player who finds that too generous should be able to turn it off
+        /// rather than give up the minimap.
+        ///
+        /// Colonists, animals and downed pawns are unaffected: the question is about reading the enemy, not
+        /// about reading your own colony.
+        /// </summary>
+        public bool showMinimapEnemies = true;
+
+        /// <summary>
         /// Where the player dragged the minimap to, in screen pixels, or negative for "wherever the corner
         /// puts it".
         ///
@@ -687,6 +701,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.minimapSize = ParseEnum(value, MinimapSize.Medium);
                             break;
 
+                        // Absent means on, so a config written before this existed keeps showing hostiles
+                        // rather than silently hiding them from somebody who never asked.
+                        case "showMinimapEnemies":
+                            settings.showMinimapEnemies = !value.EqualsIgnoreCase("false");
+                            break;
+
                         // Invariant, like letterRowWidth above and for the same reason: a position written on
                         // a machine that uses a comma for the decimal point should still parse here.
                         case "minimapX":
@@ -918,6 +938,8 @@ namespace Gideon.UIOverhaul.Features.Options
                         showMinimapWidget ? "true" : "false");
                     writer.WriteElementString("minimapCorner", minimapCorner.ToString());
                     writer.WriteElementString("minimapSize", minimapSize.ToString());
+                    writer.WriteElementString("showMinimapEnemies",
+                        showMinimapEnemies ? "true" : "false");
                     writer.WriteElementString("minimapX",
                         minimapX.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("minimapY",
