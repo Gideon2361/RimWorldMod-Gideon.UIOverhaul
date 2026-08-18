@@ -67,7 +67,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         ///
         /// <b>Worked out at selection, not while drawing.</b> This used to be a call to
         /// <c>LoadedModsMatchesActiveModsNoInfo()</c> in the middle of the paint, which reads static fields
-        /// describing whichever save was inspected last -- and at the main menu, no save at all. The panel
+        /// describing whichever save was inspected last, and at the main menu, no save at all. The panel
         /// therefore announced a mod mismatch for every save in the list.
         /// </summary>
         private SaveModDiff mods = new SaveModDiff();
@@ -567,6 +567,11 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                     break;
 
+                case SavesChrome.SaveAction.Sweep:
+                    Find.WindowStack.Add(new Dialog_SaveSweep(acting));
+
+                    break;
+
                 case SavesChrome.SaveAction.Delete:
                     Remove(acting);
 
@@ -644,7 +649,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         ///
         /// <b>Reselected by name rather than by holding the old <c>FileInfo</c>,</b> which now points at a path
         /// that does not exist. Going through <see cref="Select"/> also rereads the header and reloads the
-        /// preview, and -- the part that matters -- releases the texture the old selection owned.
+        /// preview and, the part that matters, releases the texture the old selection owned.
         /// </summary>
         private void Reselect(string name)
         {
@@ -723,7 +728,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// Which mods differ, by name.
         ///
         /// <b>Scrollable, because this list has no natural size.</b> A save from a heavily modded colony can
-        /// be missing dozens, and the alternative -- showing the first few and a count -- hides exactly the
+        /// be missing dozens, and the alternative of showing the first few and a count hides exactly the
         /// entries somebody opened this panel to read.
         ///
         /// <b>Names as the save recorded them for what is missing.</b> A package id is not what anybody
@@ -871,7 +876,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         ///
         /// <b>The mod mismatch dialog is suppressed for this call and only this call.</b> Everything it would
         /// have said is already on screen, beside the save, where it could still have changed the decision.
-        /// The version confirmation is untouched -- in fact it now appears in a case vanilla skips it, since
+        /// The version confirmation is untouched. In fact it now appears in a case vanilla skips it, since
         /// vanilla returns after raising the mod dialog and never reaches the version check. See
         /// <see cref="Patch_ModMismatchDialog"/>.
         ///

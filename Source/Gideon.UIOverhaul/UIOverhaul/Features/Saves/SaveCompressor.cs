@@ -15,8 +15,8 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// feeding it a document the game is still pushing out needs a second thread and a pipe between them. The
     /// alternative is buffering the whole save in memory to hand over at the end, which on a large colony is
     /// fifty megabytes of XML held beside the game's own copy of it. Letting vanilla write the file and then
-    /// rewriting it costs one extra pass over the disk and keeps <c>SafeSaver</c> -- which writes to a
-    /// temporary file and swaps it in only on success -- exactly as it was.
+    /// rewriting it costs one extra pass over the disk and keeps <c>SafeSaver</c>, which writes to a
+    /// temporary file and swaps it in only on success, exactly as it was.
     ///
     /// <b>Nothing is replaced until the result has been read back.</b> A compressor that silently produces a
     /// corrupt file does not announce itself at save time; it announces itself weeks later when a colony will
@@ -39,7 +39,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <c>GameDataSaveLoader.SaveGame</c> and are indistinguishable there, and they want different
         /// answers: a save the player is waiting on can afford a few seconds, whereas an autosave firing
         /// mid-raid cannot. <see cref="SaveWriter"/> arms this and clears it in a finally, exactly as it does
-        /// with <c>SaveFolders.Redirect</c> and for the same reason -- a value left standing would apply the
+        /// with <c>SaveFolders.Redirect</c> and for the same reason: a value left standing would apply the
         /// dialog's choice to every autosave for the rest of the session.
         /// </summary>
         internal static bool? Requested;
@@ -160,26 +160,75 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <b><c>File.Replace</c> first, because it never leaves the save absent.</b> Deleting and then moving
         /// has a window, however short, in which the colony exists only as a file named <c>.compressing</c>,
         /// and a power cut inside that window is unrecoverable for anybody who does not know to rename it.
-        /// Replace is the operation that has no such window. It is not available on every filesystem, so the
-        /// delete-and-move path stays as the fallback rather than as the plan.
+        /// Replace is the operation that has no such window. It is not available on every filesystem, so a fallback
+        /// is needed. But the fallback must not be delete-then-move.
+        ///
+        /// <b>The old fallback lost a colony.</b> It ran <c>File.Delete(path)</c> and then <c>File.Move</c>, so if
+        /// the move failed for any reason the save existed nowhere at all: the original was already gone and the
+        /// working file was still under its own name. Compression had verified its output and reported success by
+        /// then, so the log showed a clean save and the file was missing. Reported by Aaron 2026-08-18 for a save
+        /// named "Northern Hibum - LZMA", which vanished entirely.
+        ///
+        /// <b>Now the old save is moved aside rather than removed,</b> and only deleted once the new one is in
+        /// place. At no instant do zero copies exist, and if the second move fails the original is put back where
+        /// it was. Nothing is deleted before something else is known to be readable.
         /// </summary>
         private static void Swap(string working, string path)
         {
+            UIDebug.Log("Saves.Swap: putting " + working + " in place of " + path);
+
             try
             {
                 File.Replace(working, path, null);
+                UIDebug.Log("Saves.Swap: File.Replace succeeded");
 
                 return;
             }
-            catch (PlatformNotSupportedException)
+            catch (PlatformNotSupportedException ex)
             {
+                UIDebug.Log("Saves.Swap: File.Replace unsupported here, falling back: " + ex.Message);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                UIDebug.Log("Saves.Swap: File.Replace failed, falling back: " + ex.Message);
             }
 
-            File.Delete(path);
-            File.Move(working, path);
+            // Named beside the save rather than in a temp folder, so it is on the same volume and the move is a
+            // rename rather than a copy. A rename cannot half succeed.
+            string aside = path + ".previous";
+
+            Discard(aside);
+
+            bool movedAside = false;
+
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Move(path, aside);
+                    movedAside = true;
+                    UIDebug.Log("Saves.Swap: moved the previous save aside to " + aside);
+                }
+
+                File.Move(working, path);
+                UIDebug.Log("Saves.Swap: moved the compressed copy into place");
+            }
+            catch (Exception ex)
+            {
+                UIDebug.Warning("Saves.Swap: fallback failed: " + ex.Message);
+
+                // Put it back. This is the whole reason the old save was moved instead of deleted, and it runs
+                // before the exception is allowed to continue so the restore happens even though the save failed.
+                if (movedAside && !File.Exists(path) && File.Exists(aside))
+                {
+                    File.Move(aside, path);
+                    UIDebug.Warning("Saves.Swap: restored the previous save, which is unchanged");
+                }
+
+                throw;
+            }
+
+            Discard(aside);
         }
 
         private static void Discard(string working)

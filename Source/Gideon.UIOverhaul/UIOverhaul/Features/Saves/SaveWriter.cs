@@ -84,6 +84,17 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                     // Only once the new file is actually there. A move that deleted first and then failed to
                     // write would be the one bug in a save manager nobody ever forgives.
+                    // The audit line for the whole decision, gated behind debug logging like the rest of the
+                    // sentinels. A save that loses a file otherwise leaves nothing behind but a success message,
+                    // which is exactly the position the "Northern Hibum - LZMA" report left us in: no way to tell
+                    // which step removed it. These four facts identify the step.
+                    UIDebug.Log("Saves.Write: target=" + target
+                                + " folder=" + (folder ?? "<root>")
+                                + " existing=" + (existing == null ? "<none>" : existing.FullName)
+                                + " replaced=" + (replaced ?? "<none>")
+                                + " targetExists=" + File.Exists(target)
+                                + " targetBytes=" + (File.Exists(target) ? new FileInfo(target).Length : -1L));
+
                     if (replaced == null || !File.Exists(target) || !File.Exists(replaced))
                         return;
 
@@ -100,6 +111,9 @@ namespace Gideon.UIOverhaul.Features.Saves
                     // write produced nothing, and the previous save is then the only copy that exists.
                     if (new FileInfo(target).Length <= 0L)
                         return;
+
+                    UIDebug.Warning("Saves.Write: removing the previous copy at " + replaced
+                                    + ", because the save moved to " + target);
 
                     File.Delete(replaced);
 

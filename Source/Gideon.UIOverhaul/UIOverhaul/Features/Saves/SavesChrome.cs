@@ -187,6 +187,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             None,
             Rename,
             Move,
+            Sweep,
             Delete
         }
 
@@ -234,11 +235,12 @@ namespace Gideon.UIOverhaul.Features.Saves
         private static SaveAction DrawIdle(Rect rect, string savePath, ArmedDelete armed,
             UIColorPaletteDef palette)
         {
-            float width = Mathf.Min(96f, (rect.width - 12f) / 3f);
+            float width = Mathf.Min(96f, (rect.width - 18f) / 4f);
 
             Rect rename = new Rect(rect.x, rect.y, width, rect.height);
             Rect move = new Rect(rename.xMax + 6f, rect.y, width, rect.height);
-            Rect delete = new Rect(move.xMax + 6f, rect.y, width, rect.height);
+            Rect sweep = new Rect(move.xMax + 6f, rect.y, width, rect.height);
+            Rect delete = new Rect(sweep.xMax + 6f, rect.y, width, rect.height);
 
             if (width < 40f)
                 return SaveAction.None;
@@ -248,6 +250,10 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             if (Small(move, "Move", palette, palette.TextPrimary))
                 return SaveAction.Move;
+
+            // Sits before Delete rather than after it, so the destructive one stays last in the row.
+            if (Small(sweep, "Sweep", palette, palette.TextPrimary))
+                return SaveAction.Sweep;
 
             // Tinted rather than filled. A permanently red button in a row somebody reads every time they open
             // the window is alarm fatigue; the fill arrives once it is armed and means something.
