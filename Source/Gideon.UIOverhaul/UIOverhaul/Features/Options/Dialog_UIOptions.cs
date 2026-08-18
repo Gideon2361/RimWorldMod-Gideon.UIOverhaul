@@ -11,6 +11,7 @@ using Gideon.UIOverhaul.Features.DevTools;
 using Gideon.UIOverhaul.Features.Diagnostics;
 using Gideon.UIOverhaul.Features.FloorLabels;
 using Gideon.UIOverhaul.Features.Integrations;
+using Gideon.UIOverhaul.Features.Minimap;
 using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Panel;
 using Gideon.UIOverhaul.Features.Saves;
@@ -1015,6 +1016,118 @@ namespace Gideon.UIOverhaul.Features.Options
             GUI.color = palette.TextPrimary;
 
             y += RowHeight + 12f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "The minimap and its corner, size and position are with the other widgets, under Desktop "
+                + "Widgets.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 12f;
+        }
+
+        /// <summary>
+        /// The minimap: whether it is drawn, where, and how big.
+        ///
+        /// Corner and size are pickers rather than a slider and four radio buttons, because both are short
+        /// closed lists and a picker states the current answer in the row rather than making it be read off a
+        /// control.
+        /// </summary>
+        /// <summary>
+        /// The minimap's own settings, under its switch in the widget list.
+        ///
+        /// <b>Here rather than on the UI Preferences page, and only in one place.</b> Every other "is this
+        /// widget drawn" switch lives in Desktop Widgets, which is where somebody goes to turn one off; a
+        /// second copy of the same control on another page would be two ways to set one value, which is the
+        /// arrangement that leaves people unsure which one won.
+        ///
+        /// Drawn only while the widget is on, so the page does not offer a corner for a panel that is not
+        /// being drawn.
+        /// </summary>
+        private void DrawMinimapOptions(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings, float indent)
+        {
+            ChoiceRow(view, ref y, palette, "Corner", CornerLabel(settings.minimapCorner), () =>
+            {
+                List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                foreach (MinimapCorner corner in (MinimapCorner[]) System.Enum.GetValues(typeof(MinimapCorner)))
+                {
+                    MinimapCorner captured = corner;
+
+                    options.Add(new FloatMenuOption(CornerLabel(captured),
+                        UIGuard.Wrap("Options.MinimapCorner", () =>
+                        {
+                            settings.minimapCorner = captured;
+                            settings.Save();
+                        })));
+                }
+
+                Find.WindowStack.Add(new FloatMenu(options));
+            });
+
+            ChoiceRow(view, ref y, palette, "Size", SizeLabel(settings.minimapSize), () =>
+            {
+                List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                foreach (MinimapSize size in (MinimapSize[]) System.Enum.GetValues(typeof(MinimapSize)))
+                {
+                    MinimapSize captured = size;
+
+                    options.Add(new FloatMenuOption(SizeLabel(captured),
+                        UIGuard.Wrap("Options.MinimapSize", () =>
+                        {
+                            settings.minimapSize = captured;
+                            settings.Save();
+                        })));
+                }
+
+                Find.WindowStack.Add(new FloatMenu(options));
+            });
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(indent, y, view.width - indent, RowHeight),
+                settings.minimapX >= 0f && settings.minimapY >= 0f
+                    ? "Moved by hand. Drag its title bar to move it again."
+                    : "Drag its title bar to move it anywhere on screen.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 2f;
+
+            // Only offered once there is something to undo. A reset that does nothing is a control that
+            // teaches somebody the button is broken.
+            if (settings.minimapX >= 0f && settings.minimapY >= 0f
+                && SmallButton(new Rect(indent, y, 200f, RowHeight), "Reset position", palette))
+            {
+                settings.minimapX = -1f;
+                settings.minimapY = -1f;
+                settings.Save();
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 12f;
+        }
+
+        private static string CornerLabel(MinimapCorner corner)
+        {
+            switch (corner)
+            {
+                case MinimapCorner.BottomRight: return "Bottom right";
+                case MinimapCorner.TopLeft: return "Top left";
+                case MinimapCorner.TopRight: return "Top right";
+                default: return "Bottom left";
+            }
+        }
+
+        private static string SizeLabel(MinimapSize size)
+        {
+            switch (size)
+            {
+                case MinimapSize.Small: return "Small";
+                case MinimapSize.Large: return "Large";
+                default: return "Medium";
+            }
         }
 
         private void DrawThemeSection(Rect view, ref float y, UIColorPaletteDef palette,
@@ -1257,6 +1370,27 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "be.\n\nSwitching this on adds whatever more is actually known: the exact incident where the "
                 + "storyteller only ever fires one, and the category otherwise. Some players will consider that "
                 + "a spoiler, which is why it is off.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Minimap",
+                settings.showMinimapWidget, value =>
+                {
+                    settings.showMinimapWidget = value;
+
+                    // Switched off means gone, not hidden. The baked pictures are a texture per loaded map, and
+                    // somebody turning this off to use a different minimap mod should not still be paying for
+                    // ours in video memory.
+                    if (!value)
+                        MinimapWidget.Clear();
+                },
+                "A picture of the whole map in a corner of the screen, with your colonists, animals and any "
+                + "hostiles the colony can see.\n\nClick or drag on it to move the view, and drag its title "
+                + "bar to move the panel itself. The rectangle shows where you are looking now.\n\nUnexplored "
+                + "ground is drawn as nothing and anybody standing in it is not shown, so it never tells you "
+                + "something your colony has not seen.\n\nSwitch it off if you would rather use another mod's "
+                + "minimap; nothing else in this mod depends on it.");
+
+            if (settings.showMinimapWidget)
+                DrawMinimapOptions(view, ref y, palette, settings, indent * 2f);
 
             GroupLabel(view, ref y, palette, "RimWorld's corner");
 

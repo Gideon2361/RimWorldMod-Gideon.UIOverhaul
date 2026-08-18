@@ -8,6 +8,7 @@ using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
 using Gideon.UIOverhaul.Features.FloorLabels;
+using Gideon.UIOverhaul.Features.Minimap;
 using Gideon.UIOverhaul.Features.Notifications;
 using UnityEngine;
 using Verse;
@@ -159,6 +160,42 @@ namespace Gideon.UIOverhaul.Features.Options
         /// separator is unambiguous.
         /// </summary>
         public string favoritePlants = string.Empty;
+
+        /// <summary>
+        /// Whether the minimap is drawn in a corner of the map view.
+        ///
+        /// <b>On by default, like the other corner widgets.</b> It is the largest thing this mod puts on screen
+        /// unasked, which is an argument for defaulting it off -- but a minimap nobody can see is a minimap
+        /// nobody knows to switch on, and it collapses to a title bar in one click.
+        /// </summary>
+        public bool showMinimapWidget = true;
+
+        /// <summary>
+        /// Which corner the minimap docks against.
+        ///
+        /// Bottom left by default, because it is the emptiest corner of RimWorld's screen: the resource readout
+        /// owns the top left, and the letters, alerts and this mod's own widgets share the right.
+        /// </summary>
+        public MinimapCorner minimapCorner = MinimapCorner.BottomRight;
+
+        /// <summary>How large the minimap is drawn. Medium is 220 pixels square.</summary>
+        public MinimapSize minimapSize = MinimapSize.Medium;
+
+        /// <summary>
+        /// Where the player dragged the minimap to, in screen pixels, or negative for "wherever the corner
+        /// puts it".
+        ///
+        /// <b>Negative rather than a nullable pair,</b> to match how everything else in this file is written:
+        /// the reader is a switch over element names taking each one's text, and a nullable would be the only
+        /// shape in here needing its own parsing. A negative screen coordinate is never a real position, so it
+        /// is an unambiguous way to say "not set".
+        ///
+        /// <b>Both are checked together</b> wherever they are read, so a hand-edited file with only one of
+        /// them falls back to the corner rather than parking the panel against an edge.
+        /// </summary>
+        public float minimapX = -1f;
+
+        public float minimapY = -1f;
 
         /// <summary>
         /// Whether the architect draws the detail strip under the build grid.
@@ -483,6 +520,43 @@ namespace Gideon.UIOverhaul.Features.Options
         /// worth a warning popup on the way into the game. The fallback is the surface's own default, which is
         /// where RimWorld would have put it.
         /// </summary>
+        /// <summary>
+        /// An enum value from the file, falling back rather than complaining.
+        ///
+        /// Generic because there are now three of these and a fourth would have been a fourth copy of the same
+        /// six lines. <see cref="ParseDock"/> stays as it is: it is called from three places and reads better
+        /// named than parameterised.
+        /// </summary>
+        /// <summary>
+        /// A number from the file, in the invariant culture.
+        ///
+        /// Invariant is the point: a settings file is shared and hand-edited, and a value written with a
+        /// decimal point should not stop parsing because the game is running in a language that writes it with
+        /// a comma.
+        /// </summary>
+        private static float ParseFloat(string value, float fallback)
+        {
+            float parsed;
+
+            return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed)
+                ? parsed
+                : fallback;
+        }
+
+        private static T ParseEnum<T>(string value, T fallback) where T : struct
+        {
+            if (value.NullOrEmpty())
+                return fallback;
+
+            foreach (T candidate in (T[]) Enum.GetValues(typeof(T)))
+            {
+                if (candidate.ToString().EqualsIgnoreCase(value))
+                    return candidate;
+            }
+
+            return fallback;
+        }
+
         private static NotificationDock ParseDock(string value, NotificationDock fallback)
         {
             if (value.NullOrEmpty())
@@ -596,6 +670,31 @@ namespace Gideon.UIOverhaul.Features.Options
                         // already had rather than silently taking it away.
                         case "showArchitectInfoPanel":
                             settings.showArchitectInfoPanel = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showMinimapWidget":
+                            settings.showMinimapWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // Both fall back to their default rather than complaining, like the docks and the clock
+                        // format above: this is a hand-editable file and a misspelled corner is not worth a
+                        // warning on the way into the game.
+                        case "minimapCorner":
+                            settings.minimapCorner = ParseEnum(value, MinimapCorner.BottomRight);
+                            break;
+
+                        case "minimapSize":
+                            settings.minimapSize = ParseEnum(value, MinimapSize.Medium);
+                            break;
+
+                        // Invariant, like letterRowWidth above and for the same reason: a position written on
+                        // a machine that uses a comma for the decimal point should still parse here.
+                        case "minimapX":
+                            settings.minimapX = ParseFloat(value, -1f);
+                            break;
+
+                        case "minimapY":
+                            settings.minimapY = ParseFloat(value, -1f);
                             break;
 
                         case "favoritePlants":
@@ -815,6 +914,14 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("showStuffDetails", showStuffDetails ? "true" : "false");
                     writer.WriteElementString("showArchitectInfoPanel",
                         showArchitectInfoPanel ? "true" : "false");
+                    writer.WriteElementString("showMinimapWidget",
+                        showMinimapWidget ? "true" : "false");
+                    writer.WriteElementString("minimapCorner", minimapCorner.ToString());
+                    writer.WriteElementString("minimapSize", minimapSize.ToString());
+                    writer.WriteElementString("minimapX",
+                        minimapX.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteElementString("minimapY",
+                        minimapY.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("favoritePlants", favoritePlants ?? string.Empty);
                     writer.WriteElementString("hiddenPawnCategories",
                         hiddenPawnCategories ?? string.Empty);
