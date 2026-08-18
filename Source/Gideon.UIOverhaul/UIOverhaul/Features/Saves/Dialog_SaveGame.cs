@@ -86,6 +86,9 @@ namespace Gideon.UIOverhaul.Features.Saves
             closeOnCancel = true;
             draggable = true;
 
+            // Where the last window was left. Empty means the Saves root, which is this window's null.
+            folder = SaveFolders.LastFolder.NullOrEmpty() ? null : SaveFolders.LastFolder;
+
             Name.Text = DefaultName();
         }
 
@@ -99,6 +102,16 @@ namespace Gideon.UIOverhaul.Features.Saves
             SavesChrome.CloseSettingsWindow();
 
             Refresh();
+        }
+
+        public override void PostClose()
+        {
+            base.PostClose();
+
+            // Recorded on the way out rather than at every place the folder changes: there are five of those in
+            // this window -- the picker's two options, a new folder, clicking a save to overwrite, and following a
+            // rename -- and one of them would eventually be added without a matching line here.
+            SaveFolders.LastFolder = folder ?? string.Empty;
         }
 
         /// <summary>

@@ -39,6 +39,22 @@ namespace Gideon.UIOverhaul.Features.Saves
         internal static string Redirect;
 
         /// <summary>
+        /// The folder the player last had chosen in a save or load window, so the next one opens where they left
+        /// off.
+        ///
+        /// Three states, and they are not the same: <c>null</c> means nothing has been chosen yet, an empty string
+        /// means the Saves root itself, and anything else is a folder. The two windows read the same field and
+        /// resolve it their own way, because their idea of "no folder" differs -- the save window has to write
+        /// somewhere and treats no folder as the root, while the load window can show everything at once.
+        ///
+        /// <b>Held here rather than in the settings file.</b> It is a position, not a preference: writing it to
+        /// disk would mean a settings write on every folder click, and a file whose contents change when nobody
+        /// asked for a setting to change. It lasts as long as the game is running, which is what "the next time
+        /// they open it" means in practice.
+        /// </summary>
+        internal static string LastFolder;
+
+        /// <summary>
         /// Every folder under Saves, by name, alphabetically.
         ///
         /// One level deep on purpose. A tree would need a tree control, a move-into-parent gesture and a
@@ -88,9 +104,24 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                 DirectoryInfo root = new DirectoryInfo(Root);
 
-                return string.Equals(parent.FullName.TrimEnd(Path.DirectorySeparatorChar),
-                    root.FullName.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)
-                    ? null
+                string here = parent.FullName.TrimEnd(Path.DirectorySeparatorChar);
+                string top = root.FullName.TrimEnd(Path.DirectorySeparatorChar);
+
+                if (string.Equals(here, top, StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                // <b>The whole path below Saves, not just the immediate parent's name.</b> AllSaves enumerates
+                // with SearchOption.AllDirectories, so a save can legitimately sit two or more levels down --
+                // and returning only "B" for Saves\A\B meant PathFor rebuilt it as Saves\B. That made an
+                // overwrite look like a different file to SaveWriter, which then wrote the shallow path and
+                // deleted the original as though the save had been moved. The player saw their save disappear.
+                //
+                // Combine takes a relative path with separators in it without complaint, so rebuilding is exact
+                // at any depth and the round trip through FolderOf and PathFor lands on the same file.
+                return here.Length > top.Length
+                       && here.StartsWith(top, StringComparison.OrdinalIgnoreCase)
+                    ? here.Substring(top.Length).TrimStart(Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar)
                     : parent.Name;
             }, null, null);
         }
@@ -180,6 +211,29 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>The existing save with this name, wherever it is, or null.</summary>
+        /// <summary>
+        /// Whether two paths name the same file on disk.
+        ///
+        /// <b>Never compare save paths as raw strings.</b> One side of a comparison is typically built by
+        /// <see cref="PathFor"/> out of <see cref="Root"/>, and the other read back off a <c>FileInfo</c>; the two
+        /// can describe one file in two spellings -- separator style, a relative segment, casing, a junction in
+        /// the middle. A comparison that says "different" about one file is what lets a delete meant for the old
+        /// copy land on the new one.
+        ///
+        /// <b>Doubt resolves to same.</b> If either path cannot be canonicalized the answer is true, because every
+        /// caller uses this to decide whether removing a file is safe, and the safe answer when we do not know is
+        /// that it is the file we just wrote.
+        /// </summary>
+        internal static bool SamePath(string first, string second)
+        {
+            if (first.NullOrEmpty() || second.NullOrEmpty())
+                return true;
+
+            return UIGuard.Try("Saves.SamePath",
+                () => string.Equals(Path.GetFullPath(first), Path.GetFullPath(second),
+                    StringComparison.OrdinalIgnoreCase), true, null);
+        }
+
         internal static FileInfo Find(string saveName)
         {
             if (saveName.NullOrEmpty())

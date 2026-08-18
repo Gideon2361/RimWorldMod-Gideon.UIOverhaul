@@ -113,6 +113,10 @@ namespace Gideon.UIOverhaul.Features.Saves
             closeOnCancel = true;
             draggable = true;
             resizeable = true;
+
+            // Null here means every folder at once, which is also what null means in the shared field before
+            // anything has been chosen, so this needs no translation the way the save window's does.
+            filter = SaveFolders.LastFolder;
         }
 
         public override Vector2 InitialSize =>
@@ -178,6 +182,8 @@ namespace Gideon.UIOverhaul.Features.Saves
             base.PostClose();
 
             ReleasePreview();
+
+            SaveFolders.LastFolder = filter;
         }
 
         public override void DoWindowContents(Rect inRect)
