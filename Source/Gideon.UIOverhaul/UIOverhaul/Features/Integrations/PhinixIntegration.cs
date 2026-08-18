@@ -52,6 +52,16 @@ namespace Gideon.UIOverhaul.Features.Integrations
         /// <summary>Whether the event was actually bound, as opposed to merely attempted.</summary>
         private static bool subscribed;
 
+        /// <summary>
+        /// Announced messages the player has not looked at yet.
+        ///
+        /// <b>Not behind the lock, unlike <see cref="pending"/>, and that is correct rather than an oversight.</b>
+        /// The queue is written by Phinix's network thread and so has to be guarded. This is only ever touched on
+        /// the main thread: raised in the drain and cleared in the draw path, both of which are the game's own
+        /// update. Locking it would suggest a cross-thread story that does not exist.
+        /// </summary>
+        private static int unread;
+
         // Resolved once from Phinix's own assembly. Null means that piece was not found, and every read of them
         // below treats that as "skip this check" rather than "fail".
         private static Type clientType;
@@ -277,6 +287,11 @@ namespace Gideon.UIOverhaul.Features.Integrations
         /// <summary>
         /// Raises whatever has queued up, and only while a colony is being played. Main thread only; called from
         /// <see cref="Patch_UIRootUpdate_PhinixChat"/>.
+        ///
+        /// <b>This is also where the unread count is kept,</b> because the count has to mean the same thing the
+        /// notifications mean. Incrementing it anywhere else -- in the network handler, say -- would count
+        /// messages that were then dropped for being our own, from a blocked sender, or received at the menu,
+        /// and the badge would claim unread mail that was never announced and can never be cleared by reading.
         /// </summary>
         internal static void Drain()
         {
@@ -292,7 +307,24 @@ namespace Gideon.UIOverhaul.Features.Integrations
             // it is a collection read that belongs on the main thread.
             if (!InAGame || LongEventHandler.AnyEventNowOrWaiting)
             {
-                Forget();
+                Forget("no colony is being played");
+                MarkRead();
+
+                return;
+            }
+
+            // <b>Tested before the queue is taken, and that ordering is the fix.</b> The earlier version read
+            // the queue first and returned when it was empty, so this ran only on frames a message happened to
+            // arrive on. Opening the tab on a quiet frame therefore left the badge sitting there. The tab being
+            // open is a state to answer every frame, not an event to catch.
+            //
+            // Anything queued is dropped rather than held: the message is already on screen in the tab being
+            // looked at, and holding it would mean a pile of notifications for messages already read the moment
+            // the player switched away.
+            if (ChatTabOpen())
+            {
+                Forget("the chat tab is open");
+                MarkRead();
 
                 return;
             }
@@ -308,18 +340,13 @@ namespace Gideon.UIOverhaul.Features.Integrations
                 pending.Clear();
             }
 
-            // Dropped rather than held while the chat tab is open: the message is already on screen in the tab
-            // the player is looking at, and queuing it to announce later would mean a pile of notifications for
-            // messages they have already read the moment they switch away.
-            if (ChatTabOpen())
-            {
-                UIDebug.Log("Phinix chat notification(s) skipped: the chat tab is open.");
-
-                return;
-            }
-
             foreach (string text in ready)
             {
+                // Counted outside the guard, so a notification that fails to draw still leaves the badge
+                // saying something arrived. The message is unread either way, and a silent failure that also
+                // hid the badge would lose it completely.
+                unread++;
+
                 UIGuard.Try("Integrations.PhinixNotify",
                     () => Messages.Message(text, MessageTypeDefOf.SilentInput, false),
                     "One chat notification was not shown.");
@@ -327,21 +354,47 @@ namespace Gideon.UIOverhaul.Features.Integrations
         }
 
         /// <summary>
-        /// Throws away anything queued, because it is no longer a colony's business.
+        /// How many announced messages have not been read yet, for the badge on the Chat tab.
         ///
-        /// Normally a no-op: the handler already refuses to queue outside a colony, so this only has work to do
-        /// on the frame after the player left one. Kept anyway, because the alternative is a message surviving
-        /// in the queue until the next colony loads and announcing itself there.
+        /// Read from the bar's draw path every frame, so it is a plain field read and nothing more.
         /// </summary>
-        private static void Forget()
+        internal static int Unread => unread;
+
+        /// <summary>
+        /// The defName of the main button Phinix adds.
+        ///
+        /// Named once rather than written at each use: the badge lookup and the tab-open test have to agree
+        /// about which button this is, and two string literals is how they stop agreeing.
+        /// </summary>
+        internal const string ChatTabDefName = "Chat";
+
+        /// <summary>
+        /// Marks everything read.
+        ///
+        /// <b>Called from the draw path every frame the tab is open, not from an "opened" event.</b> There is no
+        /// reliable hook for a tab being opened -- it can happen through a click on our bar, through vanilla's,
+        /// through a keyboard shortcut, or through another mod calling SetCurrentTab -- and a missed hook leaves
+        /// a badge that cannot be cleared. Answering the state continuously cannot miss.
+        /// </summary>
+        private static void MarkRead()
+        {
+            unread = 0;
+        }
+
+        /// <summary>
+        /// Throws away anything queued, saying which rule dropped it.
+        ///
+        /// <paramref name="why"/> is passed in rather than assumed, because the two callers drop for different
+        /// reasons and a log line naming the wrong one sends somebody looking in the wrong place.
+        /// </summary>
+        private static void Forget(string why)
         {
             lock (Lock)
             {
                 if (pending.Count == 0)
                     return;
 
-                UIDebug.Log("Discarded " + pending.Count
-                            + " queued Phinix chat notification(s): no colony is being played.");
+                UIDebug.Log("Discarded " + pending.Count + " queued Phinix chat notification(s): " + why + ".");
 
                 pending.Clear();
             }
@@ -350,14 +403,14 @@ namespace Gideon.UIOverhaul.Features.Integrations
         /// <summary>
         /// Whether the player is already looking at the chat.
         ///
-        /// <c>Chat</c> is the defName of the main button Phinix adds. A notification for a message that is
-        /// already visible is noise, and this is the one check that stops the feature being annoying to anybody
-        /// who actually uses the chat window.
+        /// A notification for a message that is already visible is noise, and this is the one check that stops
+        /// the feature being annoying to anybody who actually uses the chat window. It is also what clears the
+        /// unread badge.
         /// </summary>
         private static bool ChatTabOpen()
         {
             return UIGuard.Try("Integrations.ChatTabCheck",
-                () => Find.MainTabsRoot?.OpenTab?.defName == "Chat", false, null);
+                () => Find.MainTabsRoot?.OpenTab?.defName == ChatTabDefName, false, null);
         }
 
         private static string OwnUuid()

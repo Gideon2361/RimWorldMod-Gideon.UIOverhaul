@@ -1834,6 +1834,15 @@ namespace Gideon.UIOverhaul.Features.Options
                     + "map is easy to miss entirely. This is the visible half, and it stays silent because the "
                     + "sound is already theirs.\n\nMessages from you, from anyone you have blocked, and any that "
                     + "arrive while the chat tab is open are left alone.");
+
+                WidgetToggle(view, ref y, palette, settings, Indent, "Suppress information logging",
+                    settings.suppressPhinixInfoLog, value => settings.suppressPhinixInfoLog = value,
+                    "Throws away the running commentary Phinix writes to the log: logins, logouts, name "
+                    + "changes, created trades and every chat message received.\n\nOn a busy server that is a "
+                    + "constant stream, and the cost is not the lines themselves but everything else they push "
+                    + "out of a log you opened to look into something else.\n\nPhinix's warnings and errors are "
+                    + "never suppressed, so nothing that reports a real problem is hidden. Clearing this shows "
+                    + "their information lines again immediately, with no restart.");
             }
 
             if (anything)

@@ -131,7 +131,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             bool clicked = UIButtonBarRenderer.Draw(slot,
                 UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                 Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
-                worker?.ButtonBarPercent ?? 0f, palette);
+                worker?.ButtonBarPercent ?? 0f, palette, UIBarBadges.For(def));
 
             if (clicked)
                 worker?.InterfaceTryActivate();
@@ -165,7 +165,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             // than looking untouched while the tab it contains is on screen.
             bool clicked = UIButtonBarRenderer.Draw(slot,
                 UIButtonBarRenderer.LabelFor(entry, null), UIButtonBarRenderer.IconFor(entry, null),
-                anyOpen, false, 0f, palette);
+                anyOpen, false, 0f, palette, UIBarBadges.Format(UIBarBadges.CountFor(entry)));
 
             if (!clicked)
                 return;

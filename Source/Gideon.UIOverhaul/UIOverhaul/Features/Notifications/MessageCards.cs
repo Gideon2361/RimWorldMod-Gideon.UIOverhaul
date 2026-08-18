@@ -46,6 +46,15 @@ namespace Gideon.UIOverhaul.Features.Notifications
         /// </summary>
         private const float MaxTextWidth = 420f;
 
+        /// <summary>
+        /// Pixels held back from the text when it has to be shortened, so the ellipsis lands inside the card.
+        ///
+        /// Only applied when the message does not fit. Taking it off every message would shorten ones that fit
+        /// perfectly well, which is a visible change to every notification in the game for the sake of the few
+        /// that are too long.
+        /// </summary>
+        private const float EllipsisRoom = 4f;
+
         private static readonly UINotificationCard Card = new UINotificationCard();
 
         /// <summary>
@@ -184,14 +193,37 @@ namespace Gideon.UIOverhaul.Features.Notifications
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
 
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.MiddleLeft;
 
+            // <b>Wrapping off, because a card is one line by construction.</b> Its height comes from
+            // Card.HeightFor(1), so there is nowhere for a second line to go: IMGUI would lay one out and the
+            // rect would cut it in half, which reads as a message that has overflowed rather than one that was
+            // shortened. With wrapping off the text is clipped instead, and Truncate below means it does not come
+            // to that. This is the same guard every other single-line label in this mod uses; message cards were
+            // the one surface missing it, and a long Phinix chat line is what found that.
+            Text.WordWrap = false;
+
+            // Shortened only when it genuinely does not fit, and then with room kept back for the dots.
+            //
+            // Truncate stops as soon as the text plus "..." measures within the width it was given, so asking
+            // for the full width leaves the result flush with the edge, and any disagreement between CalcSize and
+            // what IMGUI lays out clips the dots themselves. An ellipsis that is cut off is worse than none: it
+            // stops saying "there is more" and starts looking like a rendering fault.
+            //
+            // The fits-already test is what keeps that margin off the common case.
+            string body = message.text ?? string.Empty;
+            string shown = Text.CalcSize(body).x <= text.width
+                ? body
+                : body.Truncate(Mathf.Max(0f, text.width - EllipsisRoom));
+
             // Text at full strength against the card's own fade, so the last thing to disappear is the words.
             GUI.color = new Color(palette.TextPrimary.r, palette.TextPrimary.g, palette.TextPrimary.b, alpha);
-            Widgets.Label(text, (message.text ?? string.Empty).Truncate(text.width));
+            Widgets.Label(text, shown);
 
+            Text.WordWrap = previousWrap;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
             GUI.color = previousColor;

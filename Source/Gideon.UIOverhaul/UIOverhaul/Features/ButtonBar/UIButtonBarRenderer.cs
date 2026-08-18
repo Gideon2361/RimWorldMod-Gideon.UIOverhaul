@@ -25,6 +25,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         private const float IconPad = 4f;
         private const float ProgressHeight = 3f;
 
+        /// <summary>Air between a label and the unread badge to its right, so the two do not read as one word.</summary>
+        private const float BadgeGap = 5f;
+
         /// <summary>Path to the icon on our own bar button.</summary>
         private const string OptionsIconPath = "UIOverhaul/UI/OptionsUIOverhaul";
 
@@ -98,7 +101,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         }
 
         public static bool Draw(Rect rect, string label, Texture2D icon, bool selected, bool disabled,
-            float barPercent, UIColorPaletteDef palette)
+            float barPercent, UIColorPaletteDef palette, string badge = null)
         {
             bool over = !disabled && Mouse.IsOver(rect);
             bool held = over && Input.GetMouseButton(0);
@@ -131,6 +134,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             bool hasLabel = !label.NullOrEmpty();
 
+            // Measured before anything is laid out, because the badge takes its width out of the label's.
+            // At Tiny: a bar button is 40 pixels tall at minimum and a Small badge on it touches both edges.
+            bool hasBadge = !badge.NullOrEmpty();
+            float badgeWidth = 0f;
+
+            if (hasBadge)
+            {
+                Text.Font = GameFont.Tiny;
+                badgeWidth = UITagControl.WidthFor(badge);
+            }
+
             if (icon != null)
             {
                 // Tinted from the palette on the same three-state ramp as the label below, so an icon and
@@ -158,8 +172,32 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     : selected ? palette.TextPrimary : palette.TextSecondary;
 
                 float textX = icon != null ? rect.x + IconPad * 2f + 24f : rect.x;
-                Rect textRect = new Rect(textX, rect.y, rect.xMax - textX - IconPad, rect.height);
-                Widgets.Label(textRect, label);
+                float reserved = hasBadge ? badgeWidth + BadgeGap : 0f;
+                Rect textRect = new Rect(textX, rect.y,
+                    Mathf.Max(0f, rect.xMax - textX - IconPad - reserved), rect.height);
+
+                // Ellipsized only when a badge is squeezing it. Without one the rect is the whole slot and
+                // Widgets.Label is what every other tab has always used; switching unconditionally would put an
+                // ellipsis on labels that fit today. LabelEllipses also refuses to draw below 13 pixels and
+                // throws out of Substring under that, which a narrow slot with a three digit badge can reach.
+                if (hasBadge && textRect.width >= 24f)
+                    Widgets.LabelEllipses(textRect, label);
+                else if (!hasBadge)
+                    Widgets.Label(textRect, label);
+            }
+
+            // Drawn outside the label block on purpose: an icon-only tab, which is what a minimized slot is,
+            // has no label to sit beside and still needs to say that something is waiting.
+            if (hasBadge)
+            {
+                Text.Font = GameFont.Tiny;
+
+                Rect badgeRect = new Rect(rect.xMax - IconPad - badgeWidth, rect.y, badgeWidth, rect.height);
+
+                // Danger from the palette rather than a literal red, so a theme restating what danger looks
+                // like carries here. Purely decorative: the whole slot stays one click target below, so the
+                // badge cannot swallow the press that opens the tab.
+                UITagControl.Draw(badgeRect, badge, palette.Danger, palette);
             }
 
             GUI.color = previousColor;
@@ -338,7 +376,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 bool clicked = UIButtonBarRenderer.Draw(row,
                     UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                     Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
-                    worker?.ButtonBarPercent ?? 0f, palette);
+                    worker?.ButtonBarPercent ?? 0f, palette, UIBarBadges.For(def));
 
                 if (clicked)
                 {

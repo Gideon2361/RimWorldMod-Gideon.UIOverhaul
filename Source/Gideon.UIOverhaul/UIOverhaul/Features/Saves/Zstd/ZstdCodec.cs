@@ -110,11 +110,39 @@ namespace Gideon.UIOverhaul.Features.Saves.Zstd
         }
 
         /// <summary>
+        /// Up to <paramref name="maxBytes"/> of the decompressed start of a zstd file.
+        ///
+        /// <b>For reading a save's header without decompressing the save.</b> Selecting a save in the load window
+        /// used to pay for the whole colony to be decompressed so that a few hundred bytes of meta element could
+        /// be read, which is most of a second on a large save. This asks the decoder for a prefix and lets it stop
+        /// there.
+        ///
+        /// A short file is returned whole, since there is nothing to bound.
+        /// </summary>
+        internal static Stream OpenReadPrefix(string path, int maxBytes)
+        {
+            byte[] source = File.ReadAllBytes(path);
+
+            long stated = ZstdDecompressor.GetDecompressedSize(source, source.Length);
+
+            // Nothing to gain from bounding a file that is already smaller than the bound.
+            if (stated >= 0 && stated <= maxBytes)
+                return new MemoryStream(Decompress(source), false);
+
+            byte[] destination = new byte[maxBytes];
+            int written = ZstdDecompressor.Decompress(destination, maxBytes, source, source.Length, true);
+
+            return new MemoryStream(destination, 0, written, false);
+        }
+
+        /// <summary>
         /// Decompresses a file into a readable stream.
         ///
         /// Whole-buffer rather than streaming, because the decoder needs the entire window available for back
         /// references and a save is read once, immediately, into a document that is far larger than either
         /// buffer. Streaming would add complexity to save memory that the XML reader is about to spend anyway.
+        ///
+        /// See <see cref="OpenReadPrefix"/> for the bounded form, which is what reading a header uses.
         /// </summary>
         internal static Stream OpenRead(string path)
         {

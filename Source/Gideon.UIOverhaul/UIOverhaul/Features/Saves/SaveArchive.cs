@@ -45,6 +45,16 @@ namespace Gideon.UIOverhaul.Features.Saves
         private const int SniffLength = 4;
 
         /// <summary>
+        /// How much plain XML a header read is allowed to decompress.
+        ///
+        /// One megabyte, which is generous on purpose. The meta element is a version string, a timestamp and a
+        /// mod list, and even a three hundred mod list is tens of kilobytes; the budget is set well clear of that
+        /// so the fallback to a full read stays a genuine edge case rather than a routine second pass. A megabyte
+        /// of LZMA or zstd is a few milliseconds against most of a second for a whole colony.
+        /// </summary>
+        private const int HeaderBudget = 1024 * 1024;
+
+        /// <summary>
         /// What this file is, from its leading bytes.
         ///
         /// <b>Order matters.</b> zstd and gzip have real multi-byte magic numbers and are tested first. LZMA
@@ -123,6 +133,49 @@ namespace Gideon.UIOverhaul.Features.Saves
                 return new StreamReader(path);
 
             return new StreamReader(OpenDecompressed(path, format), Encoding.UTF8);
+        }
+
+        /// <summary>
+        /// A reader over enough of a save's start to find its meta element, and no more.
+        ///
+        /// <b>Reading a header used to cost decompressing the colony.</b> The meta element sits in the first few
+        /// kilobytes of the XML; the game node behind it is tens of megabytes. <see cref="OpenReader"/> hands back
+        /// the whole thing, so selecting a save in the load window paid most of a second to read a version string
+        /// and a mod list. This asks each codec for a prefix instead.
+        ///
+        /// <b>gzip, deflate and plain XML need nothing:</b> all three are already streams that read on demand, so
+        /// the reader stops pulling as soon as the caller stops asking. Only LZMA and zstd buffer whole, and both
+        /// take a limit.
+        ///
+        /// <b>The result is a truncated document</b> and is only safe for a caller that reads a prefix and stops.
+        /// A caller must also be ready for the element it wants to be missing, since a save with an unusually
+        /// large mod list could in principle run past the budget. See <c>SaveHeader</c>, which falls back to a
+        /// full read in exactly that case rather than reporting an empty header.
+        /// </summary>
+        internal static StreamReader OpenHeaderReader(string path)
+        {
+            SaveFormat format = DetectFile(path);
+
+            switch (format)
+            {
+                case SaveFormat.Lzma:
+                {
+                    MemoryStream plain = new MemoryStream();
+
+                    using (FileStream file = File.OpenRead(path))
+                        LzmaCodec.Decompress(file, plain, HeaderBudget);
+
+                    plain.Position = 0;
+
+                    return new StreamReader(plain, Encoding.UTF8);
+                }
+
+                case SaveFormat.Zstd:
+                    return new StreamReader(ZstdCodec.OpenReadPrefix(path, HeaderBudget), Encoding.UTF8);
+
+                default:
+                    return OpenReader(path);
+            }
         }
 
         private static Stream OpenDecompressed(string path, SaveFormat format)

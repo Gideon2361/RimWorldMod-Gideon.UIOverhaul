@@ -99,6 +99,19 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool notifyPhinixChat = true;
 
         /// <summary>
+        /// Whether Phinix's routine information logging is thrown away.
+        ///
+        /// <b>On by default, which is unusual for something that hides information, and is right here.</b>
+        /// Phinix logs every login, logout, name change, trade and received chat message as it happens. That is
+        /// a steady stream on a populated server, and its cost is not the lines themselves but everything else
+        /// they push out of a log somebody opened to investigate something unrelated.
+        ///
+        /// <b>Only their information lines.</b> Warnings and errors are never touched, so nothing that reports a
+        /// real fault is hidden by this. See <c>Features.Integrations.PhinixLogSilencer</c>.
+        /// </summary>
+        public bool suppressPhinixInfoLog = true;
+
+        /// <summary>
         /// Whether an open main tab can be dragged to a different size.
         ///
         /// On by default. RimWorld gives every tab one fixed size chosen by whoever wrote it, and the one that
@@ -537,6 +550,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.notifyPhinixChat = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Absent means on, matching the default: a config written before this existed gets the
+                        // quiet log rather than silently keeping the noisy one.
+                        case "suppressPhinixInfoLog":
+                            settings.suppressPhinixInfoLog = !value.EqualsIgnoreCase("false");
+                            break;
+
                         // The notification settings. The three restyle switches read "absent means on", so a
                         // config written before they existed keeps the drawing the player already had.
                         case "restyleMessages":
@@ -707,6 +726,8 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("compressAutosaves",
                         compressAutosaves ? "true" : "false");
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
+                    writer.WriteElementString("suppressPhinixInfoLog",
+                        suppressPhinixInfoLog ? "true" : "false");
 
                     writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");
                     writer.WriteElementString("restyleLetters", restyleLetters ? "true" : "false");

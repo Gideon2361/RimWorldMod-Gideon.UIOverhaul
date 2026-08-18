@@ -82,17 +82,46 @@ namespace Gideon.UIOverhaul.Features.Saves.Zstd
         /// </summary>
         internal static int Decompress(byte[] dst, int dstLen, byte[] src, int srcLen)
         {
+            return Decompress(dst, dstLen, src, srcLen, false);
+        }
+
+        /// <summary>
+        /// As above, optionally keeping whatever was produced when the output buffer fills.
+        ///
+        /// <b>For reading a save's header without decompressing the save.</b> zstd output is written strictly
+        /// forwards, and a match copy can only reference bytes already written, so the buffer is final up to the
+        /// point the decoder stopped. Handing back a prefix is therefore returning real output rather than
+        /// salvaging a half-finished one.
+        ///
+        /// <b>Only the entry point knows about this.</b> The frame, block, sequence and Huffman code below is a
+        /// verified port and is not touched: the flag turns one exception it already raises into a normal return,
+        /// and nothing about how bytes are produced changes.
+        /// </summary>
+        /// <param name="allowTruncation">
+        /// True to return the bytes produced so far when the buffer is exhausted, instead of failing. False keeps
+        /// the original behaviour, where too small a buffer is an error the caller retries with a larger one.
+        /// </param>
+        internal static int Decompress(byte[] dst, int dstLen, byte[] src, int srcLen, bool allowTruncation)
+        {
             if (dst == null || src == null)
                 throw new ArgumentNullException(dst == null ? "dst" : "src");
 
             IStream inStream = IO_make_istream(src, 0, srcLen);
             OStream outStream = IO_make_ostream(dst, 0, dstLen);
 
-            decode_frame(outStream, inStream);
+            try
+            {
+                decode_frame(outStream, inStream);
+            }
+            catch (InvalidDataException) when (allowTruncation && outStream.Pos > 0)
+            {
+                // Ran out of room, which is the expected way a bounded read ends. Anything else that throws
+                // with nothing written is a real fault and still propagates.
+                return outStream.Pos;
+            }
 
             return outStream.Pos;
         }
-
         /******* TYPES ***********************************************************/
 
         /// <summary>

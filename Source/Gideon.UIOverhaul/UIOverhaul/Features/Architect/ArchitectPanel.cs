@@ -170,6 +170,25 @@ namespace Gideon.UIOverhaul.Features.Architect
         private static readonly List<Designator> Shown = new List<Designator>();
 
         /// <summary>
+        /// How long a built list is trusted before it is built again.
+        ///
+        /// Ten seconds, asked for deliberately. Everything a player does that changes the list is detected by
+        /// comparison instead, so this interval only governs how late a newly researched building appears in a
+        /// menu that is already open. Shortening it buys nothing anybody would notice and gives back the cost
+        /// this cache exists to remove.
+        /// </summary>
+        private const float RecollectSeconds = 10f;
+
+        // What the contents of Shown were built for. Compared every frame in Stale; any difference rebuilds.
+        private static ArchitectCategoryTab collectedFor;
+        private static bool collectedAllStuff;
+        private static string collectedFilter;
+        private static bool collectedGodMode;
+
+        /// <summary>Negative infinity so the first frame always builds.</summary>
+        private static float collectedAt = float.NegativeInfinity;
+
+        /// <summary>
         /// The window's category list. Private in vanilla, and worth reading anyway rather than building
         /// our own: these are the instances vanilla's own selectedDesPanel, tutorial hooks and search
         /// state refer to, so a second set would drift from them.
@@ -483,7 +502,28 @@ namespace Gideon.UIOverhaul.Features.Architect
 
             Widgets.BeginScrollView(grid, ref designatorScroll, view);
 
-            for (int i = 0; i < Shown.Count; i++)
+            // <b>Only the rows actually on screen are drawn.</b> This used to run over the whole of Shown,
+            // which is harmless for one category and ruinous for the combined view: a heavily modded list is
+            // several hundred cards, and each one resolves its designator's icon through DrawIcon, lays out two
+            // labels and paints card chrome. Doing that every frame for cards scrolled far out of sight is what
+            // took this tab to single figure frame rates.
+            //
+            // <b>The scroll view is still told the full height above,</b> so the bar and its travel do not
+            // change and neither does what scrolling reaches. Only the drawing is skipped.
+            //
+            // Nothing else needs the skipped cards. Hover, activation and the right-click menu can only concern
+            // the card under the cursor, and the cursor cannot be over one that is not on screen. Hotkeys are
+            // the one thing that must see every entry, and HandleHotKeys walks Shown itself, outside this loop.
+            float pitch = DesignatorCardHeight + DesignatorCardGap;
+
+            int firstRow = Mathf.Max(0, Mathf.FloorToInt(designatorScroll.y / pitch));
+            int lastRow = Mathf.Min(rows - 1, Mathf.FloorToInt((designatorScroll.y + grid.height) / pitch));
+
+            // A row of padding either side, so a card halfway off the edge is drawn rather than popping in.
+            int first = Mathf.Max(0, (firstRow - 1) * columns);
+            int last = Mathf.Min(Shown.Count - 1, (lastRow + 2) * columns - 1);
+
+            for (int i = first; i <= last; i++)
             {
                 Designator designator = Shown[i];
 
@@ -969,9 +1009,35 @@ namespace Gideon.UIOverhaul.Features.Architect
             Text.Font = previousFont;
         }
 
-        /// <summary>Fills <see cref="Shown"/> with the designators the grid should draw.</summary>
+        /// <summary>
+        /// Fills <see cref="Shown"/> with the designators the grid should draw, reusing the last result while it
+        /// is still good.
+        ///
+        /// <b>Why this is cached at all.</b> Building the list walks every designator in the category, or in the
+        /// whole game for the combined view, asking each one whether it is visible. <c>Designator_Build.Visible</c>
+        /// is a handful of compares plus a research check, which is nothing on its own and is several hundred of
+        /// them on a heavily modded list, every frame, for an answer that changes a few times per session.
+        ///
+        /// <b>Anything the player can change is compared, not timed.</b> The filter, the open category, the
+        /// combined view and god mode all rebuild on the very next frame, because each of them is a thing
+        /// somebody just did and expects to see. A timer alone would make the search box feel broken for up to
+        /// ten seconds, which would be a far worse bug than the one this is fixing.
+        ///
+        /// <b>The timer covers only what changes on its own:</b> research completing, a faction's tech level
+        /// moving, the monolith advancing. Those are worth picking up without being worth a check every frame,
+        /// and ten seconds late is imperceptible for a build menu.
+        /// </summary>
         private static void Collect(ArchitectCategoryTab open)
         {
+            if (!Stale(open))
+                return;
+
+            collectedFor = open;
+            collectedAllStuff = allStuffOpen;
+            collectedFilter = filter ?? string.Empty;
+            collectedGodMode = DebugSettings.godMode;
+            collectedAt = UnityEngine.Time.realtimeSinceStartup;
+
             Shown.Clear();
 
             if (allStuffOpen)
@@ -990,6 +1056,42 @@ namespace Gideon.UIOverhaul.Features.Architect
 
                 Shown.Add(designator);
             }
+        }
+
+        /// <summary>
+        /// Whether the built list no longer describes what should be on screen.
+        ///
+        /// Ordered cheapest first, and every one of these runs on every frame the tab is open, so none of them
+        /// may do real work. The four comparisons are a reference, two bools and a string; the string is the only
+        /// one with any cost and it is a filter nobody types more than a few characters into.
+        ///
+        /// <b>Real time, and not a frame count or a tick count.</b> Both of the alternatives are tied to how fast
+        /// the game is running. Ticks are the obvious trap: RimWorld implements game speed as more ticks per
+        /// frame through TickRateMultiplier, so a tick based interval would rebuild three times as often at 3x
+        /// and faster still on superspeed, which is precisely backwards. A frame count is quieter about it but
+        /// drifts with frame rate for the same reason. Ten seconds means ten seconds at every speed.
+        ///
+        /// It also keeps working while paused, which matters: the architect is used while paused more than at
+        /// any other time, and a clock tied to the simulation would leave the list frozen for exactly the
+        /// players most likely to have just finished a research project.
+        /// </summary>
+        private static bool Stale(ArchitectCategoryTab open)
+        {
+            if (!ReferenceEquals(open, collectedFor))
+                return true;
+
+            if (allStuffOpen != collectedAllStuff)
+                return true;
+
+            // Toggling god mode changes what every Designator_Build reports, so it is the one debug setting
+            // worth a per-frame compare rather than leaving to the timer.
+            if (DebugSettings.godMode != collectedGodMode)
+                return true;
+
+            if (!string.Equals(filter ?? string.Empty, collectedFilter ?? string.Empty, StringComparison.Ordinal))
+                return true;
+
+            return UnityEngine.Time.realtimeSinceStartup - collectedAt >= RecollectSeconds;
         }
 
         /// <summary>

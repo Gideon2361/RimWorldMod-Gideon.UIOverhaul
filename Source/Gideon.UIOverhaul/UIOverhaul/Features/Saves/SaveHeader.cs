@@ -40,6 +40,20 @@ namespace Gideon.UIOverhaul.Features.Saves
         internal bool Read;
 
         /// <summary>
+        /// Headers already read, keyed by full path.
+        ///
+        /// Unbounded, which is safe here: one entry per save the player has actually clicked, each a version
+        /// string and two mod lists. A folder of a hundred saves that were all inspected is tens of kilobytes.
+        /// </summary>
+        private static readonly Dictionary<string, SaveHeader> Cached =
+            new Dictionary<string, SaveHeader>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>What the file looked like when this header was read, so a rewrite invalidates it.</summary>
+        private DateTime stampedAt;
+
+        private long stampedLength;
+
+        /// <summary>
         /// Reads one save's header, or returns a header marked unread.
         ///
         /// Never throws: a save that cannot be parsed is a save the panel describes as unknown, not an
@@ -52,20 +66,55 @@ namespace Gideon.UIOverhaul.Features.Saves
             if (path.NullOrEmpty() || !File.Exists(path))
                 return header;
 
+            // Re-reading the same save on every visit is the other half of the lag: comparing two colonies means
+            // clicking back and forth, and each click paid the parse again. Stamped with write time and length
+            // together, so a save overwritten between visits is read again rather than described from a stale
+            // entry.
+            FileInfo file = new FileInfo(path);
+            SaveHeader remembered;
+
+            if (Cached.TryGetValue(path, out remembered) && remembered != null
+                && remembered.stampedAt == file.LastWriteTimeUtc
+                && remembered.stampedLength == file.Length)
+                return remembered;
+
             UIGuard.Try("Saves.ReadHeader", () => Fill(path, header),
                 "That save's version and mod list could not be read.");
+
+            // Remembered even when the read failed, so an unparseable file is not re-attempted on every click.
+            // The stamp means repairing that file still gets it read again.
+            header.stampedAt = file.LastWriteTimeUtc;
+            header.stampedLength = file.Length;
+            Cached[path] = header;
 
             return header;
         }
 
         private static void Fill(string path, SaveHeader header)
         {
-            using (StreamReader stream = SaveArchive.OpenReader(path))
+            // Bounded, so reading a header does not decompress the colony behind it. A save with an unusually
+            // large mod list could in principle run past that budget, which is why the result is checked and a
+            // full read tried rather than reporting a header nobody could read.
+            if (FillFrom(SaveArchive.OpenHeaderReader(path), header))
+                return;
+
+            FillFrom(SaveArchive.OpenReader(path), header);
+        }
+
+        /// <summary>
+        /// Reads the meta element out of one reader, and says whether it found one.
+        ///
+        /// Takes the reader rather than the path so the bounded and unbounded attempts share every line of the
+        /// parsing. The reader is disposed here either way.
+        /// </summary>
+        private static bool FillFrom(StreamReader source, SaveHeader header)
+        {
+            using (StreamReader stream = source)
             using (XmlTextReader reader = new XmlTextReader(stream))
             {
                 // Vanilla's own seek, so this finds the meta element wherever it finds it.
                 if (!ScribeMetaHeaderUtility.ReadToMetaElement(reader))
-                    return;
+                    return false;
 
                 XmlDocument document = new XmlDocument();
 
@@ -77,12 +126,14 @@ namespace Gideon.UIOverhaul.Features.Saves
                 XmlNode root = document.DocumentElement;
 
                 if (root == null)
-                    return;
+                    return false;
 
                 header.GameVersion = Text(root, "gameVersion");
                 header.ModIds = List(root, "modIds");
                 header.ModNames = List(root, "modNames");
                 header.Read = true;
+
+                return true;
             }
         }
 
