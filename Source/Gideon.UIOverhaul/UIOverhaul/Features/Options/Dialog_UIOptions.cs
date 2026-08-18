@@ -394,9 +394,14 @@ namespace Gideon.UIOverhaul.Features.Options
         ///
         /// <b>Input follows the matrix.</b> Unity transforms <c>Event.current.mousePosition</c> by it, so clicks,
         /// drags and <c>Mouse.IsOver</c> all land where they look like they should, and tooltips register against
-        /// the rects the page actually drew. The thing to watch is anything that captures a coordinate here and
-        /// uses it after this returns, once the matrix is back -- that is worth a look on a real page rather than
-        /// an assurance from me.
+        /// the rects the page actually drew. RimWorld's own UI scale is this mechanism and nothing else, which is
+        /// where the confidence comes from: <c>UI.ApplyUIScale</c> is a single <c>GUI.matrix</c> assignment.
+        ///
+        /// <b>What does not follow it is anything converting a coordinate back out.</b> That was the open question
+        /// here and it had a real answer. <c>Mouse.IsOver</c> ends in <c>WindowStack.MouseObscuredNow</c>, which
+        /// converts the cursor to screen space on the assumption that RimWorld's is the only transform in play, so
+        /// under ours it asks about the wrong point. Every tooltip in a hosted page was destroying itself on that.
+        /// See <see cref="Patch_WindowStack_MouseObscured"/>, switched on below for exactly this call.
         ///
         /// <b>Guarded, and this is the one place in this window where that is not a formality.</b> Everything
         /// else drawn here is ours; this is arbitrary code from another author running inside our window every
@@ -468,6 +473,11 @@ namespace Gideon.UIOverhaul.Features.Options
                         GUI.matrix = previous * Matrix4x4.TRS(new Vector3(rect.x, rect.y, 0f),
                             Quaternion.identity, new Vector3(scale, scale, 1f));
 
+                        // Hover tests inside this call have to read the real cursor rather than convert one back
+                        // through the matrix just installed, or a tooltip's own window reads as covering the
+                        // control that raised it and the tip destroys itself. See Patch_WindowStack_MouseObscured.
+                        Patch_WindowStack_MouseObscured.Transformed = true;
+
                         Rect page = new Rect(0f, 0f, authored.x, authored.y);
 
                         if (hosting)
@@ -477,6 +487,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     }
                     finally
                     {
+                        Patch_WindowStack_MouseObscured.Transformed = false;
                         GUI.matrix = previous;
                     }
                 },
