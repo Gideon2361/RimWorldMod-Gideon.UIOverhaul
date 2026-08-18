@@ -46,6 +46,24 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <summary>How much taller an expanded row is: the schedule strip plus room to breathe around it.</summary>
         private const float ScheduleStripHeight = 54f;
 
+        /// <summary>
+        /// How much taller this pawn's row becomes when it is opened: the schedule, and the policies under it.
+        ///
+        /// <b>Measured per pawn rather than fixed.</b> Neither band applies to everybody -- an animal has no
+        /// timetable and no policies, a guest has no configurable food -- and a row charged for a band that then
+        /// draws nothing opens onto empty background. Each part answers for its own height, so a pawn who has
+        /// neither simply does not grow.
+        /// </summary>
+        private static float ExpansionHeightFor(Pawn pawn)
+        {
+            return ScheduleHeightFor(pawn) + PolicyStrip.HeightFor(pawn);
+        }
+
+        private static float ScheduleHeightFor(Pawn pawn)
+        {
+            return pawn?.timetable == null ? 0f : ScheduleStripHeight;
+        }
+
         private static readonly UICardControl RowCard = new UICardControl { Padding = 0f, AccentWidth = 3f };
 
         private static readonly UIDesignatorTabControl Grid = new UIDesignatorTabControl
@@ -520,10 +538,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     Grid.Rows.Add(new UIDesignatorTabRow
                     {
                         Payload = pawn,
-                        Height = open ? RowHeight + ScheduleStripHeight : (float?) null,
+                        Height = open ? RowHeight + ExpansionHeightFor(pawn) : (float?) null,
                         DrawBackground = DrawRowBackground,
                         DrawOverlay = open ? (System.Action<Rect, UIDesignatorTabRow, UIColorPaletteDef>)
-                            DrawScheduleStrip : null
+                            DrawExpansion : null
                     });
                 }
             }
@@ -1028,29 +1046,52 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         // ---------------------------------------------------------------------------------------
-        // The schedule strip
+        // The expanded row: schedule, then policies
         // ---------------------------------------------------------------------------------------
 
         /// <summary>
-        /// The hour-by-hour schedule for one pawn, revealed under its row.
+        /// Everything revealed under an opened row: the day, then the standing orders.
         ///
-        /// Drawn as an overlay rather than as a column because it spans the whole grid: 24 hours will not fit in
-        /// any one column, and splitting it across columns would tie the schedule's layout to the column widths.
+        /// Drawn as an overlay rather than as columns because both span the whole grid. 24 hours will not fit in
+        /// any one column, and splitting either across columns would tie its layout to the column widths.
+        ///
+        /// <b>The two are laid out here and drawn elsewhere.</b> This owns only where each band sits under the
+        /// row; what goes in them belongs to <see cref="ScheduleStrip"/> and <see cref="PolicyStrip"/>, both of
+        /// which are also used away from this tab.
+        /// </summary>
+        private static void DrawExpansion(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = data.Payload as Pawn;
+
+            if (pawn == null)
+                return;
+
+            Rect area = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
+                row.width - RowCard.AccentWidth - 16f, ExpansionHeightFor(pawn));
+
+            float schedule = ScheduleHeightFor(pawn);
+
+            DrawScheduleStrip(new Rect(area.x, area.y, area.width, schedule), pawn, palette);
+
+            // Offset by what the schedule actually took, not by the constant. A pawn with no timetable still
+            // has policies, and an arrangement that assumed the schedule was always there would have left them
+            // floating below a gap -- or, in the earlier shape of this method, skipped them entirely.
+            PolicyStrip.Draw(new Rect(area.x, area.y + schedule, area.width, PolicyStrip.HeightFor(pawn)),
+                pawn, palette);
+        }
+
+        /// <summary>
+        /// The hour-by-hour schedule for one pawn.
         ///
         /// The strip itself, the brush picker and the painting all live in <see cref="ScheduleStrip"/>, because the
         /// template manager edits a day the same way and two copies of a paintable strip would be two copies that
-        /// could drift apart. What stays here is the part that is about a pawn's row: where it sits under the row,
-        /// which pawn it reads, and that painting invalidates that pawn's cached readings.
+        /// could drift apart. What stays here is the part that is about a pawn's row: which pawn it reads, and
+        /// that painting invalidates that pawn's cached readings.
         /// </summary>
-        private static void DrawScheduleStrip(Rect row, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        private static void DrawScheduleStrip(Rect strip, Pawn pawn, UIColorPaletteDef palette)
         {
-            Pawn pawn = (Pawn) data.Payload;
-
             if (pawn.timetable == null)
                 return;
-
-            Rect strip = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
-                row.width - RowCard.AccentWidth - 16f, ScheduleStripHeight);
 
             const float gap = 8f;
 
