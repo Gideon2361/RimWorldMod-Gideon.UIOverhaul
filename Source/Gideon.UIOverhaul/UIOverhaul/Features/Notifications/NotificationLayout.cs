@@ -84,6 +84,20 @@ namespace Gideon.UIOverhaul.Features.Notifications
         }
 
         /// <summary>
+        /// The top of this mod's corner panel, for anything that wants to sit above the widgets.
+        ///
+        /// <b>Exposed rather than left private because the minimap needs the same answer the letters do.</b>
+        /// The panel's height depends on which readouts are on, how many conditions are running and what other
+        /// mods have added to it, so it can only be reported after it draws. Anything guessing at a number here
+        /// would sit on top of the widgets the first time somebody switched one on.
+        ///
+        /// Falls back the same way <see cref="BaseOf"/> does, so a frame where the panel has not reported --
+        /// it retires itself on its first failure, after which vanilla draws the corner and nothing reports at
+        /// all -- gives a usable anchor rather than zero.
+        /// </summary>
+        internal static float BottomRightTop => BaseOf(NotificationDock.BottomRight);
+
+        /// <summary>
         /// The screen edge a surface docked here grows away from, before anything else is stacked against it.
         ///
         /// The bottom right falls back to a computed anchor when the corner panel has not reported one for two
