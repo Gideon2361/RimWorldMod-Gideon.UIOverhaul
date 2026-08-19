@@ -290,10 +290,17 @@ namespace Gideon.UIOverhaul.Features.Saves
                 free == 0 ? "none" : free.ToString(), Bytes(Reason("Mothballed world pawns")), free == 0,
                 "changes the colony");
 
+            int loose = report.RemovableDeadPawns.Count;
+
             y = Row(inRect, y, palette, ref options.RemoveDeadPawns,
-                "Dead pawn records",
-                "Kept for memorials, relations and resurrection",
-                Count("pawnsDead"), Size("pawnsDead"), false, null);
+                "Dead pawn records no corpse still holds",
+                loose == 0
+                    ? "None qualify. All " + report.DeadPawnsHeld + " are the body inside a corpse on one of your "
+                      + "maps, and a corpse whose body has gone cannot be placed on the map at all"
+                    : loose + " of " + Count("pawnsDead") + " are kept only for memorials, relations and "
+                      + "resurrection. The other " + report.DeadPawnsHeld + " are bodies inside corpses and stay",
+                loose == 0 ? "none" : loose.ToString(), Bytes(Reason("Dead pawn records")), loose == 0,
+                "changes the colony");
 
             y = Row(inRect, y, palette, ref options.RemoveHistory,
                 "History graphs and the play log",
@@ -577,13 +584,6 @@ namespace Gideon.UIOverhaul.Features.Saves
             SaveSweepFinding finding = Finding(list);
 
             return finding == null ? "" : finding.Count.ToString();
-        }
-
-        private string Size(string list)
-        {
-            SaveSweepFinding finding = Finding(list);
-
-            return finding == null ? "" : SavesChrome.Size(finding.Bytes);
         }
 
         private SaveSweepFinding Finding(string list)

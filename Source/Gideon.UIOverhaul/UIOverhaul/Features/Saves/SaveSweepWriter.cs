@@ -31,7 +31,12 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// </summary>
         internal bool RepairDangling = true;
 
-        /// <summary>Remove dead pawn records.</summary>
+        /// <summary>
+        /// Remove dead pawn records.
+        ///
+        /// Which ones qualify is decided by the scan, not here, because a corpse on a map holds its body by
+        /// reference rather than containing it: see <see cref="SaveSweepReport.RemovableDeadPawns"/>.
+        /// </summary>
         internal bool RemoveDeadPawns;
 
         /// <summary>
@@ -431,17 +436,28 @@ namespace Gideon.UIOverhaul.Features.Saves
                         }
                     }
 
-                    // A mothballed pawn nothing refers to. Which ones qualify was decided by the scan, which is the
+                    // A world pawn the scan cleared for removal. Which ones qualify is decided there, which is the
                     // only place that can know: whether anything names this pawn depends on the whole file.
-                    if (stack.Count > 0 && name == "id" && !closing && options.RemoveMothballed)
+                    if (stack.Count > 0 && name == "id" && !closing)
                     {
                         Frame owner = stack[stack.Count - 1];
 
-                        if (depth == owner.Depth + 1 && owner.List == "pawnsMothballed" && !owner.Drop
-                            && report.RemovableMothballed.Contains(SaveSweepXml.Value(line) ?? string.Empty))
+                        if (depth == owner.Depth + 1 && !owner.Drop)
                         {
-                            owner.Drop = true;
-                            owner.Reason = "Mothballed world pawns";
+                            string pawn = SaveSweepXml.Value(line) ?? string.Empty;
+
+                            if (options.RemoveMothballed && owner.List == "pawnsMothballed"
+                                && report.RemovableMothballed.Contains(pawn))
+                            {
+                                owner.Drop = true;
+                                owner.Reason = "Mothballed world pawns";
+                            }
+                            else if (options.RemoveDeadPawns && owner.List == "pawnsDead"
+                                     && report.RemovableDeadPawns.Contains(pawn))
+                            {
+                                owner.Drop = true;
+                                owner.Reason = "Dead pawn records";
+                            }
                         }
                     }
 
@@ -510,16 +526,14 @@ namespace Gideon.UIOverhaul.Features.Saves
             if (list == null || !SaveSweepXml.TryDefKind(list, out string kind))
                 return null;
 
-            bool dead = list == "pawnsDead" && options.RemoveDeadPawns;
-
+            // A dead pawn record is not judged here. Whether it can go depends on whether a corpse somewhere still
+            // holds it, which only the scan knows, so the decision waits for the record's own id line.
             return new Frame
             {
                 Depth = depth,
                 Name = name,
                 List = list,
-                Kind = kind,
-                Drop = dead,
-                Reason = dead ? "Dead pawn records" : null
+                Kind = kind
             };
         }
 

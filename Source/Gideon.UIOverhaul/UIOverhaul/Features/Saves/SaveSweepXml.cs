@@ -185,6 +185,35 @@ namespace Gideon.UIOverhaul.Features.Saves
             return list != null && DefKinds.TryGetValue(list, out kind);
         }
 
+        /// <summary>The load id namespace records under this list element belong to, or null when it is not one.</summary>
+        internal static bool TryNamespace(string list, out string space)
+        {
+            space = null;
+
+            return list != null && Namespaces.TryGetValue(list, out space);
+        }
+
+        /// <summary>
+        /// Whether this line is a container naming one of the things it holds.
+        ///
+        /// <b>A <c>ThingOwner</c> written in reference mode is the one place an <c>li</c> is certainly a load id.</b>
+        /// Its contents go out as one id per line under <c>innerList</c>, and nothing else in a save uses that
+        /// element name, so the parent alone settles it. That narrowness is what makes this safe when
+        /// <see cref="CanReference"/> has to refuse every other <c>li</c> in the file.
+        ///
+        /// <b>Why it matters more than the other references.</b> A corpse holds its pawn this way, because the pawn
+        /// itself is saved among the dead world pawns. Clear that reference or remove what it names and
+        /// <c>Corpse.Bugged</c> is true, at which point <c>SpawnSetup</c> logs and returns before the corpse is
+        /// registered on the map at all. Unlike a relationship or a combat log entry, this reference is not optional.
+        /// </summary>
+        internal static bool IsContentsReference(string name, int depth, string[] ancestors)
+        {
+            if (name != "li" || ancestors == null || depth < 1 || depth - 1 >= ancestors.Length)
+                return false;
+
+            return ancestors[depth - 1] == "innerList";
+        }
+
         /// <summary>How many tabs the line is indented by, which is its depth in the document.</summary>
         internal static int Depth(string line)
         {
@@ -379,6 +408,12 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <c>li</c> as a reference produced 431 that resolved against 70,988 that did not, every one of the latter
         /// a false alarm. A dangling reference sitting inside a list therefore goes unrepaired, which is the safe
         /// direction to be wrong in.
+        ///
+        /// <b>One family of <c>li</c> is recognised elsewhere, and deliberately not here.</b> A container's contents
+        /// list is unambiguously load ids, so <see cref="IsContentsReference"/> reads it to learn what a container
+        /// still holds. It is kept out of this test because knowing a reference exists and being willing to
+        /// overwrite it are different questions: writing <c>null</c> into a <c>ThingOwner</c> would leave the owner
+        /// holding nothing, which for a corpse is the very state this is trying to avoid.
         /// </summary>
         internal static bool CanReference(string name)
         {

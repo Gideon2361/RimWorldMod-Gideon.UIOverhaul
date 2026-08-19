@@ -97,6 +97,10 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// quest, an ideo, a memory, a corpse. A pawn nothing names cannot be missed by anything. That also makes it
         /// conservative in the right direction, since a clique of mothballed pawns referring only to each other
         /// keeps all of them.
+        ///
+        /// The corpse in that list is found separately, through <see cref="SaveSweepXml.IsContentsReference"/>,
+        /// because a container names its contents with an <c>li</c> and the general reference sweep cannot read
+        /// those. Before that was added the claim above was false for exactly the case it mattered most in.
         /// </summary>
         internal HashSet<string> RemovableMothballed = new HashSet<string>(StringComparer.Ordinal);
 
@@ -104,6 +108,26 @@ namespace Gideon.UIOverhaul.Features.Saves
         internal int MothballedReferenced;
 
         internal int MothballedPlayer;
+
+        /// <summary>
+        /// Dead world pawns that no container on any map still holds.
+        ///
+        /// <b>A corpse does not contain its pawn, it points at it.</b> <c>Corpse.innerContainer</c> is a
+        /// <c>ThingOwner</c> in reference mode, so the body itself lives among the dead world pawns and the corpse
+        /// names it. Remove the record and the corpse loads holding nothing, <c>Corpse.Bugged</c> is true, and
+        /// <c>SpawnSetup</c> logs "spawned in bugged state" and returns before registering the thing on the map.
+        /// Every corpse lying on the ground, in a grave or in a freezer works this way, so a colony after a raid
+        /// can lose dozens at once.
+        ///
+        /// <b>This is a narrower test than the mothballed one, on purpose.</b> A dead pawn is named all over a save
+        /// by relationships, memorials and combat logs, and clearing those is what the repair pass is for; holding
+        /// back every pawn anything mentions would make the option do nothing at all. What cannot be cleared is a
+        /// container's contents, because a container holding nothing is not a smaller container, it is a broken one.
+        /// </summary>
+        internal HashSet<string> RemovableDeadPawns = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>How many dead pawns stayed because a corpse names them. What the row explains itself with.</summary>
+        internal int DeadPawnsHeld;
 
         /// <summary>
         /// Food, drug, apparel and reading policies no pawn is assigned to.
@@ -186,6 +210,16 @@ namespace Gideon.UIOverhaul.Features.Saves
             // reached yet. They are counted here and resolved against the finished set of definitions afterwards.
             Dictionary<string, int> references = new Dictionary<string, int>(StringComparer.Ordinal);
 
+            // Records in each load id namespace, against the ids those records actually wrote. A namespace with
+            // more records than ids has one whose id was written by leaving the element out: see below.
+            Dictionary<string, int> records = new Dictionary<string, int>(StringComparer.Ordinal);
+            Dictionary<string, int> written = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            // Dead world pawns, and the things every container still holds. The two are compared at the end to find
+            // the dead pawns that are somebody's corpse.
+            HashSet<string> dead = new HashSet<string>(StringComparer.Ordinal);
+            HashSet<string> contained = new HashSet<string>(StringComparer.Ordinal);
+
             // Mothballed pawns, the faction each belongs to, and which faction is the player's.
             Dictionary<string, string> mothballed = new Dictionary<string, string>(StringComparer.Ordinal);
             string mothCurrent = null;
@@ -266,6 +300,9 @@ namespace Gideon.UIOverhaul.Features.Saves
                     {
                         report.LoadIds++;
 
+                        if (space != null)
+                            written[space] = written.TryGetValue(space, out int had) ? had + 1 : 1;
+
                         // Tracked even for records that turn out to collide, because a repair has to clear every
                         // id in the namespace, including the ones it is about to move.
                         if (space != null && int.TryParse(raw, out int numeric)
@@ -300,6 +337,11 @@ namespace Gideon.UIOverhaul.Features.Saves
                         {
                             mothballed[mothCurrent] = value;
                         }
+
+                        // A dead world pawn. Held as the file writes it, without the Thing_ prefix a reference to it
+                        // carries, since that is the form the sweep sees when it decides whether to drop the record.
+                        if (holder == "pawnsDead" && name == "id" && !string.IsNullOrEmpty(value))
+                            dead.Add(value);
 
                         // Which faction is the player's. Order of def and loadID is not assumed, so both are held
                         // and the pairing is tested whenever either arrives.
@@ -369,6 +411,24 @@ namespace Gideon.UIOverhaul.Features.Saves
                             references[aim] = references.TryGetValue(aim, out int seen) ? seen + 1 : 1;
                     }
 
+                    // What a container holds. Kept apart from the references above because these are the ones the
+                    // repair pass must not touch, so counting them among the repairable ones would have the window
+                    // promise a fix it will not make.
+                    if (!closing && SaveSweepXml.IsContentsReference(name, depth, ancestors))
+                    {
+                        string held = SaveSweepXml.Target(SaveSweepXml.Value(line));
+
+                        if (held != null)
+                            contained.Add(held);
+                    }
+
+                    // One record in a namespaced list, counted against the ids that list's records write.
+                    if (!closing && name == "li" && depth >= 1 && depth - 1 < ancestors.Length
+                        && SaveSweepXml.Opens(line) && SaveSweepXml.TryNamespace(ancestors[depth - 1], out string owns))
+                    {
+                        records[owns] = records.TryGetValue(owns, out int n) ? n + 1 : 1;
+                    }
+
                     // A new faction record clears the pairing so one record's def cannot be read with another's id.
                     if (!closing && name == "li" && depth >= 1 && depth - 1 < ancestors.Length
                         && ancestors[depth - 1] == "allFactions")
@@ -404,6 +464,24 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             if (!report.Shaped)
                 return report;
+
+            // AN ID OF ZERO IS WRITTEN BY LEAVING THE ELEMENT OUT, and missing that silently rewrote a healthy save.
+            //
+            // Scribe_Values.Look skips an element whose value equals the default it was given, and a load id is
+            // scribed as Look(ref loadID, "loadID", 0) by Faction, Ideo, Hediff, Bill and the rest. So the record
+            // numbered zero writes no id line at all, this scan never saw it defined, and every reference to it
+            // looked broken. On the save this was found against that was Faction_0 and Ideo_0: 96 references, and
+            // the repair pass duly pointed all 96 at nothing, which cost 46 pawns their ideoligion and stripped 45
+            // factions of their relation to the insect hive. Nothing was wrong with that save.
+            //
+            // A namespace holding more records than it wrote ids has exactly one such record, since ids are unique
+            // and only zero can be omitted. Counted on that save: one each in Faction, Ideo, Hediff, Gene, Lord and
+            // Tale, and none at all in Ability or Verb.
+            foreach (KeyValuePair<string, int> pair in records)
+            {
+                if (pair.Value > (written.TryGetValue(pair.Key, out int had) ? had : 0))
+                    ids.Add(pair.Key + "_0");
+            }
 
             // Now that every definition is known, a reference can finally be judged.
             foreach (KeyValuePair<string, int> pair in references)
@@ -464,7 +542,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                     continue;
                 }
 
-                if (references.ContainsKey(pawn.Key))
+                if (references.ContainsKey(pawn.Key) || contained.Contains(pawn.Key))
                 {
                     report.MothballedReferenced++;
 
@@ -472,6 +550,20 @@ namespace Gideon.UIOverhaul.Features.Saves
                 }
 
                 report.RemovableMothballed.Add(pawn.Key);
+            }
+
+            // A dead pawn goes only if no container is holding it. See the note on RemovableDeadPawns for why this
+            // is the one reference that cannot be cleared instead.
+            foreach (string pawn in dead)
+            {
+                if (contained.Contains(pawn))
+                {
+                    report.DeadPawnsHeld++;
+
+                    continue;
+                }
+
+                report.RemovableDeadPawns.Add(pawn);
             }
 
             foreach (KeyValuePair<string, long> pair in sections)
