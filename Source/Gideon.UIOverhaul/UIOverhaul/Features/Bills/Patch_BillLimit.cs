@@ -12,7 +12,7 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// Raises RimWorld's limit of fifteen bills per workbench.
     ///
     /// <b>Why this is a transpiler and not a one line change.</b> <c>BillStack.MaxCount</c> is a
-    /// <c>public const int</c>, and a const in C# is written into every place that reads it at compile time --
+    /// <c>public const int</c>, and a const in C# is written into every place that reads it at compile time,
     /// the field in the assembly is documentation, and nothing at runtime consults it. So the number has to be
     /// replaced where it was inlined, which is the IL of the two methods that gate on it.
     ///
@@ -26,12 +26,12 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// two interface gates sufficient rather than merely cosmetic.
     ///
     /// <b>The replacement is narrow on purpose.</b> A pass that changed every fifteen in those methods would be
-    /// a coin toss -- there is no telling what else might be fifteen. This only rewrites a load of the constant
+    /// a coin toss, because there is no telling what else might be fifteen. This only rewrites a load of the constant
     /// that is immediately compared or branched on, which is what a bounds test looks like and what an unrelated
     /// number does not.
     ///
     /// <b>A silent failure is reported.</b> If RimWorld changes the limit or restructures the check, the
-    /// transform finds nothing and the cap quietly stays at fifteen -- so finding nothing is treated as the
+    /// transform finds nothing and the cap quietly stays at fifteen, so finding nothing is treated as the
     /// fault it is rather than shrugged off.
     /// </summary>
     [HarmonyPatch]

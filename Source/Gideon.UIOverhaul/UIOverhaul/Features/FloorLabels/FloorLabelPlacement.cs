@@ -62,7 +62,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     /// is almost never the middle.
     ///
     /// <b>Horizontal only.</b> Text runs left to right, so a tall thin gap is no use to it, and rotating labels
-    /// to fit was considered and rejected -- a colony of labels at different angles is harder to read than a few
+    /// to fit was considered and rejected, a colony of labels at different angles is harder to read than a few
     /// that are missing.
     ///
     /// <b>Two labels never share cells.</b> Zones sit inside rooms rather than beside them, so a stockpile

@@ -568,7 +568,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                     break;
 
                 case SavesChrome.SaveAction.Sweep:
-                    Find.WindowStack.Add(new Dialog_SaveSweep(acting));
+                    Find.WindowStack.Add(new Dialog_SaveSweep(acting, Refresh));
 
                     break;
 

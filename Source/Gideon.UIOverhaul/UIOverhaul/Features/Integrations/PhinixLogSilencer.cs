@@ -81,19 +81,44 @@ namespace Gideon.UIOverhaul.Features.Integrations
         /// <summary>Phinix's client class, which is where every one of these calls lives.</summary>
         private const string ClientTypeName = "PhinixClient.Client";
 
+        /// <summary>What <see cref="Prepare"/> found, handed straight to Harmony afterwards.</summary>
+        private static List<MethodBase> targets;
+
+        /// <summary>
+        /// Whether there is anything here to patch at all.
+        ///
+        /// <b>An empty target list is not how Harmony is told to do nothing.</b> Returning one from
+        /// <c>HarmonyTargetMethods</c> makes it fall back to looking for a target on the attributes, find none,
+        /// and throw <c>Undefined target method</c>. That is exactly what happened on a machine without Phinix
+        /// installed: the guard inside the search worked perfectly, produced no methods, and the patch still
+        /// failed loudly on a game that had nothing to do with Phinix.
+        ///
+        /// <c>HarmonyPrepare</c> is the switch that means skip this class. Returning false here leaves the whole
+        /// thing unapplied and silent, which is what an integration with an absent mod should be.
+        ///
+        /// The search runs here rather than in <see cref="Targets"/> so that "Phinix is loaded but its logging
+        /// moved" is caught by the same switch. It is a different reason for finding nothing and it must not be a
+        /// different outcome.
+        /// </summary>
+        [HarmonyPrepare]
+        public static bool Prepare()
+        {
+            targets = new List<MethodBase>();
+
+            UIGuard.Try("Integrations.FindPhinixLogging", () => Collect(targets),
+                "Phinix's information logging is not suppressed. Phinix itself is unaffected.");
+
+            UIDebug.Log(targets.Count == 0
+                ? "Nothing to silence in Phinix: either it is not installed or its logging has moved."
+                : "Silencing information logging in " + targets.Count + " Phinix method(s).");
+
+            return targets.Count > 0;
+        }
+
         [HarmonyTargetMethods]
         public static IEnumerable<MethodBase> Targets()
         {
-            List<MethodBase> found = new List<MethodBase>();
-
-            UIGuard.Try("Integrations.FindPhinixLogging", () => Collect(found),
-                "Phinix's information logging is not suppressed. Phinix itself is unaffected.");
-
-            UIDebug.Log(found.Count == 0
-                ? "No Phinix methods to silence: either Phinix is absent or its logging has moved."
-                : "Silencing information logging in " + found.Count + " Phinix method(s).");
-
-            return found;
+            return targets ?? new List<MethodBase>();
         }
 
         private static void Collect(List<MethodBase> found)

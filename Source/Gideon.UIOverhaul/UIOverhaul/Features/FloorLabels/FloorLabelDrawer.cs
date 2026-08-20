@@ -13,7 +13,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     /// <b>Placement is cached, because finding it is the expensive half.</b> Scanning a room's cells for its
     /// widest clear run is fine once and unaffordable sixty times a second across forty rooms. Rooms are
     /// recomputed from walls whenever the region grid updates, so the cache is rebuilt on an interval rather
-    /// than tied to an event RimWorld does not raise -- a wall going up shows its new label within a second,
+    /// than tied to an event RimWorld does not raise, a wall going up shows its new label within a second,
     /// which is faster than anybody notices.
     ///
     /// <b>Drawing itself is a matrix and a mesh per label.</b> Both are cached, so the per-frame cost is a
@@ -70,7 +70,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// Alpha of each white outline copy.
         ///
         /// <b>Low because there are eight of them and they overlap.</b> Each copy blends over the last, so the
-        /// halo's real opacity is far higher than this number -- at 0.55 the eight of them accumulated into a
+        /// halo's real opacity is far higher than this number, at 0.55 the eight of them accumulated into a
         /// solid white blob with the text lost inside it. This is per copy, not the outline's total.
         ///
         /// <b>Halved rather than trimmed, which is arithmetic and not taste.</b> Eight copies at alpha
@@ -86,7 +86,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// How far above the outline the fill is drawn.
         ///
         /// <b>Not cosmetic: without it the outline covers the text.</b> The font shader writes no depth and tests
-        /// none, so nine meshes submitted at one altitude have no defined order between them -- and the eight
+        /// none, so nine meshes submitted at one altitude have no defined order between them, and the eight
         /// white copies were landing on top of the dark fill they were supposed to sit behind. Transparent
         /// geometry is sorted by distance to the camera, so lifting the fill a hair is what puts it in front.
         ///
@@ -120,7 +120,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// Where each label was drawn this frame, so a click can find it.
         ///
         /// <b>Rebuilt every frame rather than cached with the placements,</b> because it depends on the label's
-        /// final scale -- which depends on the text, which changes the moment somebody renames a room.
+        /// final scale, which depends on the text, which changes the moment somebody renames a room.
         /// </summary>
         internal static readonly List<FloorLabelHit> Hits = new List<FloorLabelHit>();
 
@@ -191,14 +191,32 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             IReadOnlyList<Room> rooms = map.regionGrid == null ? null : map.regionGrid.AllRooms;
 
+            int seen = 0;
+            int notStructural = 0;
+            int tooSmall = 0;
+            int noRun = 0;
+
             if (rooms != null)
             {
                 for (int i = 0; i < rooms.Count; i++)
                 {
                     Room room = rooms[i];
 
-                    if (!Labelable(room))
+                    seen++;
+
+                    if (!Structural(room))
+                    {
+                        notStructural++;
+
                         continue;
+                    }
+
+                    if (room.CellCount < MinimumRoomCells)
+                    {
+                        tooSmall++;
+
+                        continue;
+                    }
 
                     FloorLabelSpot spot = FloorLabelPlacement.Find(room.Cells, map, taken);
 
@@ -209,12 +227,18 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                         spot = FloorLabelPlacement.Find(room.Cells, map, taken, true);
 
                     if (!Placeable(spot))
+                    {
+                        noRun++;
+
                         continue;
+                    }
 
                     RoomSpots[room.ID] = spot;
                     FloorLabelPlacement.Reserve(spot, taken);
                 }
             }
+
+            Census(seen, notStructural, tooSmall, noRun);
 
             if (map.zoneManager == null)
                 return;
@@ -246,6 +270,43 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 FloorLabelPlacement.Reserve(spot, taken);
             }
         }
+
+        /// <summary>
+        /// Reports why rooms were passed over, when debug logging is on and the answer has changed.
+        ///
+        /// <b>Added on 2026-08-19 because a report of missing room labels could not be diagnosed by reading the
+        /// code.</b> Four things drop a room, they are indistinguishable on screen, and every one of them looks
+        /// exactly like the feature being broken. This turns "many rooms have no label" into a number against
+        /// each reason, which is the difference between fixing it and guessing at it.
+        ///
+        /// <b>Only when the tally changes,</b> since this runs once a second forever. A wall going up moves a
+        /// number and prints a line; a colony sitting still prints nothing. Costs four integers and a comparison
+        /// per rebuild when logging is off.
+        /// </summary>
+        private static void Census(int seen, int notStructural, int tooSmall, int noRun)
+        {
+            if (!UIDebug.Enabled)
+                return;
+
+            if (seen == lastSeen && notStructural == lastNotStructural && tooSmall == lastTooSmall
+                && noRun == lastNoRun)
+                return;
+
+            lastSeen = seen;
+            lastNotStructural = notStructural;
+            lastTooSmall = tooSmall;
+            lastNoRun = noRun;
+
+            UIDebug.Log("Floor labels: " + seen + " rooms on the map, " + RoomSpots.Count + " placed. Passed over "
+                        + notStructural + " as not a proper indoor room, " + tooSmall + " as under the "
+                        + MinimumRoomCells + " cell minimum, and " + noRun
+                        + " with no run wide enough even over furniture.");
+        }
+
+        private static int lastSeen = -1;
+        private static int lastNotStructural = -1;
+        private static int lastTooSmall = -1;
+        private static int lastNoRun = -1;
 
         /// <summary>
         /// Whether a spot is worth keeping, which is also whether it is worth reserving.
@@ -280,17 +341,6 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 return false;
 
             return !room.PsychologicallyOutdoors && !room.TouchesMapEdge;
-        }
-
-        /// <summary>
-        /// Whether a label is actually drawn for this room.
-        ///
-        /// Split from <see cref="Structural"/> so the labels window can list a room that is merely too small,
-        /// marked as such and still nameable. A room that is not structural is not a room anybody would name.
-        /// </summary>
-        private static bool Labelable(Room room)
-        {
-            return Structural(room) && room.CellCount >= MinimumRoomCells;
         }
 
         private static void DrawRooms(Map map, GameComponent_FloorLabels store)
@@ -363,12 +413,12 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// Puts one label on the ground, scaled to the run it was given.
         ///
         /// <b>Drawn as a watermark: a faint fill inside a white outline.</b> A single flat color cannot work,
-        /// because the thing behind it is not one color -- the same label crosses wood, stone, carpet, soil and
+        /// because the thing behind it is not one color, the same label crosses wood, stone, carpet, soil and
         /// snow, and any fill legible on one of those disappears into another. Two tones solve it between them:
         /// whatever the floor is, either the pale outline or the darker fill contrasts with it.
         ///
         /// <b>The outline is eight offset copies of the same mesh.</b> Nine draws per label rather than one, and
-        /// worth it -- the alternative is a second font atlas rendered with an outline baked in, which is far
+        /// worth it, the alternative is a second font atlas rendered with an outline baked in, which is far
         /// more machinery and fixes the outline thickness at build time.
         ///
         /// The scale is the whole of rule 3: the mesh is built once at atlas resolution and squeezed to fit
@@ -455,7 +505,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         ///
         /// Prefers the cell a stored label was already keyed on, so clicking a renamed room finds the entry that
         /// exists rather than creating a second one beside it. Otherwise the lowest cell, which is stable across
-        /// rebuilds -- an arbitrary pick would key the same room differently every time.
+        /// rebuilds, an arbitrary pick would key the same room differently every time.
         /// </summary>
         private static IntVec3 KeyCellOf(Map map, Room room)
         {
@@ -522,7 +572,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         ///
         /// <b>Set by the labels window and drawn here, because the window cannot draw it itself.</b> An
         /// outline on the map is world-space geometry, and geometry submitted from <c>OnGUI</c> belongs to a
-        /// frame that has already been drawn -- the same reason the labels are drawn from <c>MapUpdate</c>. So
+        /// frame that has already been drawn, the same reason the labels are drawn from <c>MapUpdate</c>. So
         /// the window states what it wants highlighted and this pass obliges.
         /// </summary>
         internal static List<IntVec3> Highlight;
@@ -543,7 +593,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     ///
     /// <b><c>Map.MapUpdate</c> is the seam because the labels are meshes, not interface.</b> Anything submitted
     /// with <c>Graphics.DrawMesh</c> belongs to the frame that submitted it, and the frame's map drawing happens
-    /// here -- from <c>OnGUI</c> it would be too late and the labels would never appear. It is also where
+    /// here, from <c>OnGUI</c> it would be too late and the labels would never appear. It is also where
     /// RimWorld's own map overlays go, so they are drawn in the same pass and composite correctly.
     /// </summary>
     [HarmonyPatch(typeof(Map), nameof(Map.MapUpdate))]

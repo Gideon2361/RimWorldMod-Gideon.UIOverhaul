@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Colony wide bill list, alongside the other census tabs in the bottom button row.
+
+    order 59 puts it between our grow zones tab (58) and vanilla's Research (60), so the tabs that answer
+    "what is my colony doing" sit together.
+
+    The same window class is what a workbench's Bills tab now opens, with its bench filter set. One class
+    means the per bench view cannot drift away from the colony one, because it is the same view.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Bills</defName>
+    <label>bills</label>
+    <description>Every bill on every workbench in the colony: what it makes, how far along it is, who may work it, and which ones nobody can. Choose a bill to edit it in place, or save one as a template to reuse in any colony.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Bills.MainTabWindow_Bills</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <order>59</order>
+  </MainButtonDef>
+
+</Defs>

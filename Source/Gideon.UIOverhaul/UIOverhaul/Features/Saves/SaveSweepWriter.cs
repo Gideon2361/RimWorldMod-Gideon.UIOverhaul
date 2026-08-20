@@ -78,6 +78,18 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <summary>The bytes those records occupied, by the same reasons.</summary>
         internal Dictionary<string, long> BytesByReason = new Dictionary<string, long>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Every id declared inside something that was removed.
+        ///
+        /// <b>This is what makes the repair pass exact rather than clever.</b> Deciding whether an arbitrary value
+        /// is a reference needs a namespace table and a shape test, and both have blind spots: a combat log entry
+        /// is <c>LogEntry_7860269_19488</c>, which no namespace rule recognises, and a pawn named from inside a
+        /// list is invisible to a rule that has to exclude lists. But an id that was in the file and is now gone is
+        /// beyond argument, whatever it looks like and wherever it is named from. Repairing against this set needs
+        /// no rules at all.
+        /// </summary>
+        internal HashSet<string> RemovedIds = new HashSet<string>(StringComparer.Ordinal);
+
         /// <summary>Set when the sweep could not finish. Null on success.</summary>
         internal string Problem;
 
@@ -110,9 +122,17 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// inside the moved record's own subtree are rewritten, since those unambiguously belong to it; nothing outside
     /// it is touched, because a reference to a duplicated id cannot be attributed to one claimant or the other.
     ///
-    /// <b>The output is plain XML even when the input was compressed.</b> A swept copy exists to be inspected and
-    /// loaded once; writing it uncompressed keeps this class free of the compression path entirely, and the game
-    /// reads either.
+    /// <b>This class writes plain XML and nothing else, whatever the input was.</b> Staying out of the
+    /// compression path is what lets the whole sweep be run and checked outside the game, against real saves,
+    /// with no encoder in the way; every proof this feature rests on was taken that way.
+    ///
+    /// <b>The file the player ends up with is a separate question, and the answer changed.</b> A swept copy was
+    /// originally left uncompressed on the reasoning that it exists to be inspected and loaded once. That was the
+    /// wrong scope: for anyone who sweeps a save and then keeps playing it, the swept copy is their colony, and
+    /// leaving it as the one uncompressed file in a folder of compressed ones costs them the setting they turned
+    /// on. So <c>Dialog_SaveSweep</c> now hands the finished file to <c>SaveCompressor</c> when compression is on.
+    /// That happens after this class is done and cannot affect what it wrote, which is the property worth
+    /// keeping; if the compression step fails, the swept save is already complete and simply stays plain.
     /// </summary>
     internal static class SaveSweepWriter
     {
@@ -147,6 +167,18 @@ namespace Gideon.UIOverhaul.Features.Saves
             /// A policy is identified by key, label and number together, and those arrive on separate lines, so the
             /// decision waits until the record closes.
             /// </summary>
+            /// <summary>
+            /// Empty this element instead of removing it.
+            ///
+            /// <b>Because some sections must exist even when they hold nothing.</b> RimWorld reads
+            /// <c>history</c>, <c>playLog</c> and <c>battleLog</c> into fields the rest of the game then assumes
+            /// are there. Delete the element and the field stays null, and the first thing to reach for it throws:
+            /// an Ancient Exostrider Remains calls <c>Find.History</c> the moment it spawns, so a map holding one
+            /// never finishes loading. Keeping the tags and dropping what is between them gives back the space
+            /// without taking away the object.
+            /// </summary>
+            internal bool Hollow;
+
             internal string PolicyKey;
 
             internal string PolicyLabel;
@@ -171,7 +203,7 @@ namespace Gideon.UIOverhaul.Features.Saves
 
         /// <summary>Writes the repaired copy to <paramref name="target"/>.</summary>
         internal static SaveSweepOutcome Write(string source, string target, SaveSweepOptions options,
-            SaveSweepReport report, Dictionary<string, HashSet<string>> missing)
+            SaveSweepReport report, Dictionary<string, HashSet<string>> missing, HashSet<string> gone = null)
         {
             return UIGuard.Try("Saves.Sweep.Write",
                 () => Twice(source, target, options, report, missing),
@@ -195,7 +227,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// is only ever written, never moved onto or deleted.
         /// </summary>
         private static SaveSweepOutcome Twice(string source, string target, SaveSweepOptions options,
-            SaveSweepReport report, Dictionary<string, HashSet<string>> missing)
+            SaveSweepReport report, Dictionary<string, HashSet<string>> missing, HashSet<string> gone = null)
         {
             if (!options.RepairDangling)
                 return Walk(source, target, options, report, missing);
@@ -224,7 +256,9 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             SaveSweepReport after = SaveSweepScan.Scan(part);
 
-            if (!after.Shaped || after.DanglingIds.Count == 0)
+            // The rescan only finds what its rules can recognise, so the ids this sweep actually removed are the
+            // other half of the answer and the more reliable one.
+            if (!after.Shaped || (after.DanglingIds.Count == 0 && first.RemovedIds.Count == 0))
             {
                 Move(part, target);
                 first.Path = target;
@@ -241,8 +275,9 @@ namespace Gideon.UIOverhaul.Features.Saves
                 RepairDangling = true,
                 RemoveDeadPawns = false,
                 RemoveMothballed = false,
-                RemoveHistory = false
-            }, after, null);
+                RemoveHistory = false,
+                RemoveUnusedPolicies = false
+            }, after, null, first.RemovedIds);
 
             Discard(part);
 
@@ -274,7 +309,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         private static SaveSweepOutcome Walk(string source, string target, SaveSweepOptions options,
-            SaveSweepReport report, Dictionary<string, HashSet<string>> missing)
+            SaveSweepReport report, Dictionary<string, HashSet<string>> missing, HashSet<string> gone = null)
         {
             SaveSweepOutcome outcome = new SaveSweepOutcome { Path = target };
 
@@ -296,7 +331,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                     writer = new StreamWriter(target, false, new UTF8Encoding(true)) { NewLine = "\r\n" };
                 }
 
-                Sweep(source, writer, options, report, missing, outcome);
+                Sweep(source, writer, options, report, missing, outcome, gone);
 
                 outcome.Wrote = target != null;
             }
@@ -309,7 +344,8 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         private static void Sweep(string source, StreamWriter writer, SaveSweepOptions options,
-            SaveSweepReport report, Dictionary<string, HashSet<string>> missing, SaveSweepOutcome outcome)
+            SaveSweepReport report, Dictionary<string, HashSet<string>> missing, SaveSweepOutcome outcome,
+            HashSet<string> gone)
         {
             List<Frame> stack = new List<Frame>();
             string[] ancestors = new string[SaveSweepXml.MaxDepth];
@@ -354,6 +390,25 @@ namespace Gideon.UIOverhaul.Features.Saves
                                 }
                             }
 
+                            // Emptied rather than removed: the opening and closing tags are written and everything
+                            // between them is dropped, so the game still finds the section and finds it bare.
+                            if (top.Hollow && top.Lines.Count > 1)
+                            {
+                                Forget(outcome, top);
+
+                                long kept = top.Lines[0].Length + top.Lines[top.Lines.Count - 1].Length
+                                                                + SaveSweepScan.NewlineBytes * 2;
+
+                                outcome.RecordsRemoved++;
+                                outcome.BytesRemoved += top.Bytes - kept;
+                                Tally(outcome, top.Reason, top.Bytes - kept);
+
+                                Emit(stack, writer, ref started,
+                                    new List<string> { top.Lines[0], top.Lines[top.Lines.Count - 1] });
+
+                                continue;
+                            }
+
                             if (top.Drop)
                             {
                                 // No adjustment for nested removals is needed, and adding one was a bug worth
@@ -364,6 +419,8 @@ namespace Gideon.UIOverhaul.Features.Saves
                                 outcome.RecordsRemoved++;
                                 outcome.BytesRemoved += top.Bytes;
                                 Tally(outcome, top.Reason, top.Bytes);
+
+                                Forget(outcome, top);
                             }
                             else
                             {
@@ -407,6 +464,30 @@ namespace Gideon.UIOverhaul.Features.Saves
                         if (aim != null && report.DanglingIds.Contains(aim))
                         {
                             line = WithValue(line, "null");
+                            outcome.Repaired++;
+                        }
+                    }
+
+                    // A reference to something this sweep itself removed. Matched on the raw value against the ids
+                    // that actually left, so it needs no namespace table and no shape test: it catches a combat log
+                    // entry, which no rule recognises, and a pawn named from inside a list, which every rule has to
+                    // exclude. Both were left dangling by the version before this one.
+                    bool dropLine = false;
+
+                    if (gone != null && !closing && name != null && gone.Count > 0)
+                    {
+                        string value = SaveSweepXml.Value(line);
+
+                        if (value != null && gone.Contains(value))
+                        {
+                            // A list of references loses the entry entirely, which is what the list would look like
+                            // had the record never existed. Writing null into it would leave a hole the game then
+                            // has to interpret.
+                            if (name == "li")
+                                dropLine = true;
+                            else
+                                line = WithValue(line, "null");
+
                             outcome.Repaired++;
                         }
                     }
@@ -477,6 +558,9 @@ namespace Gideon.UIOverhaul.Features.Saves
                         }
                     }
 
+                    if (dropLine)
+                        continue;
+
                     if (stack.Count > 0)
                         Add(stack[stack.Count - 1], line);
                     else
@@ -500,7 +584,7 @@ namespace Gideon.UIOverhaul.Features.Saves
             {
                 return new Frame
                 {
-                    Depth = depth, Name = name, List = "game", Drop = true, Reason = "History and logs"
+                    Depth = depth, Name = name, List = "game", Hollow = true, Reason = "History and logs"
                 };
             }
 
@@ -660,6 +744,84 @@ namespace Gideon.UIOverhaul.Features.Saves
             writer.Write(line);
 
             started = true;
+        }
+
+        /// <summary>
+        /// Notes every id that has just left the file, so references to them can be cleared afterwards.
+        ///
+        /// <b>Reads the whole buffered subtree, not just the record's own id.</b> Removing a play log takes several
+        /// thousand log entries with it, and every hediff pointing at one of them is now broken. Removing a pawn
+        /// takes their hediffs and their abilities. The ids that matter are the nested ones.
+        ///
+        /// Deliberately loose about what counts as an id here: any value of an id-declaring element, whatever its
+        /// shape. A value that nothing refers to costs one entry in a set and is never matched again.
+        /// </summary>
+        private static void Forget(SaveSweepOutcome outcome, Frame frame)
+        {
+            string[] ancestors = new string[SaveSweepXml.MaxDepth];
+
+            // A log entry's id is built from two fields rather than stored, so the first is held until the second
+            // arrives. They are siblings and the scribe writes them in this order.
+            string[] ticks = new string[SaveSweepXml.MaxDepth];
+
+            for (int i = 0; i < frame.Lines.Count; i++)
+            {
+                string line = frame.Lines[i];
+                string name = SaveSweepXml.ElementName(line);
+
+                if (name == null || SaveSweepXml.IsClose(line))
+                    continue;
+
+                int depth = SaveSweepXml.Depth(line);
+                string value = SaveSweepXml.Value(line);
+
+                if (!string.IsNullOrEmpty(value) && value != "null" && depth < SaveSweepXml.MaxDepth)
+                {
+                    if (name == "ticksAbs")
+                    {
+                        ticks[depth] = value;
+                    }
+                    else if (name == "logID" && ticks[depth] != null)
+                    {
+                        // LogEntry.GetUniqueLoadID composes "LogEntry_{ticksAbs}_{logID}". Nothing in the file ever
+                        // holds that string, which is why removing a play log left every combat log reference
+                        // pointing at something no rule could recognise.
+                        outcome.RemovedIds.Add("LogEntry_" + ticks[depth] + "_" + value);
+                    }
+                    else if (name == "id" || name == "loadID" || name == "Id")
+                    {
+                        // A BARE NUMBER IS NEVER ADDED. An id like 670 means nothing without its namespace, and
+                        // matching references on it would null any unrelated element that happened to hold 670.
+                        // An earlier version did exactly that and reported 5,890 repairs on a file with a thousand
+                        // removed records.
+                        if (!SaveSweepXml.Numeric(value))
+                        {
+                            outcome.RemovedIds.Add(value);
+                            outcome.RemovedIds.Add("Thing_" + value);
+                        }
+
+                        string space = Namespace(depth, ancestors);
+
+                        if (space != null)
+                            outcome.RemovedIds.Add(space + "_" + value);
+                    }
+                }
+
+                if (depth < SaveSweepXml.MaxDepth && SaveSweepXml.Opens(line))
+                    ancestors[depth] = name;
+            }
+        }
+
+        /// <summary>The namespace a record at this depth belongs to, using the shared table.</summary>
+        private static string Namespace(int depth, string[] ancestors)
+        {
+            string dummy;
+            string raw;
+
+            // Reuses the one parser rather than repeating its rules, by asking it about a synthetic loadID line.
+            return SaveSweepXml.UniqueId("<loadID>0</loadID>", "loadID", depth, ancestors, out dummy, out raw) == null
+                ? null
+                : dummy;
         }
 
         private static void Tally(SaveSweepOutcome outcome, string reason, long bytes)

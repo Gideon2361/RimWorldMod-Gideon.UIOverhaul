@@ -253,6 +253,34 @@ namespace Gideon.UIOverhaul.Features.Options
         public int roomLabelMinimumCells = 12;
 
         /// <summary>
+        /// The ingredient search radius given to a newly created bill.
+        ///
+        /// <b>Vanilla's own default, so nothing changes until the player says so.</b> Backlog 20 asks for this to be
+        /// settable once rather than per bill, and the temptation is to ship a smaller number because 999 sends a
+        /// pawn across the map for one piece of steel. Doing that would quietly stall bills for everybody who never
+        /// opened the setting, in colonies whose stockpiles are simply far from the bench. The setting exists so
+        /// the player can choose; choosing for them is a different thing.
+        ///
+        /// Existing bills are never touched by this. The bills window offers that as an explicit action.
+        /// </summary>
+        public float defaultIngredientRadius = 999f;
+
+        /// <summary>
+        /// Whether the bills window points out a bill nothing can work.
+        ///
+        /// Display only. Nothing is ever suspended or altered because of it.
+        /// </summary>
+        public bool warnStalledBills = true;
+
+        /// <summary>
+        /// Whether command buttons are drawn in this mod's theme.
+        ///
+        /// Every gizmo in the game passes through that patch, so this exists to turn all of it off in one place if
+        /// it ever sits badly beside another mod.
+        /// </summary>
+        public bool restyleCommandButtons = true;
+
+        /// <summary>
         /// Which typeface the floor labels are drawn in.
         ///
         /// <b>Oswald Bold by default because it is condensed.</b> A label is scaled down to fit the widest clear
@@ -765,6 +793,25 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.notifyPhinixChat = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "warnStalledBills":
+                            settings.warnStalledBills = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "restyleCommandButtons":
+                            settings.restyleCommandButtons = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "defaultIngredientRadius":
+                            // Clamped to what the bill dialog itself allows, so a hand edited file cannot produce
+                            // a radius no bill could ever have been given through the interface.
+                            settings.defaultIngredientRadius =
+                                float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture,
+                                    out float radius)
+                                    ? Mathf.Clamp(radius, 3f, 999f)
+                                    : 999f;
+
+                            break;
+
                         // Absent means on, matching the default: a config written before this existed gets the
                         // quiet log rather than silently keeping the noisy one.
                         case "suppressPhinixInfoLog":
@@ -955,6 +1002,11 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("compressAutosaves",
                         compressAutosaves ? "true" : "false");
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
+                    writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
+                    writer.WriteElementString("restyleCommandButtons",
+                        restyleCommandButtons ? "true" : "false");
+                    writer.WriteElementString("defaultIngredientRadius",
+                        defaultIngredientRadius.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("suppressPhinixInfoLog",
                         suppressPhinixInfoLog ? "true" : "false");
 

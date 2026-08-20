@@ -52,8 +52,20 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// </summary>
         internal static void AfterWrite(string path)
         {
-            bool wanted = Requested ?? UIOverhaulSettingsFile.Current.compressAutosaves;
+            AfterWrite(path, Requested ?? UIOverhaulSettingsFile.Current.compressAutosaves);
+        }
 
+        /// <summary>
+        /// Compresses a file that was written by something other than <c>SaveGame</c>.
+        ///
+        /// <b>The caller says whether it wants compression rather than leaving a static armed.</b>
+        /// <see cref="Requested"/> exists to tell an autosave apart from a save the player asked for, and both of
+        /// those arrive on the main thread inside one call. The sweep writes from a long event on another thread,
+        /// where arming a static would race any save happening at the same time and could hand the dialog's
+        /// answer to an autosave. Passing the answer in costs one parameter and cannot race anything.
+        /// </summary>
+        internal static void AfterWrite(string path, bool wanted)
+        {
             if (!wanted)
                 return;
 

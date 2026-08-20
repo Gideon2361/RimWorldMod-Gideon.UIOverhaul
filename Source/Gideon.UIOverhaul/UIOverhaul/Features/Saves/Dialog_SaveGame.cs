@@ -23,9 +23,10 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// over the files, it is the game reading the folders a player has always been able to make and which it
     /// has always ignored.
     ///
-    /// <b>The dead-data sweep is deliberately absent.</b> It is the remaining half of the design and it is
-    /// not built yet. A checkbox that does nothing is worse than a missing feature, because the first one is
-    /// a lie the player only discovers after trusting it.
+    /// <b>The dead-data sweep is reached from a save's own row</b> rather than from a checkbox on the write.
+    /// It examines a file and writes a separate cleaned copy, which is not something to fold into the act of
+    /// saving: the two have different inputs, take different amounts of time, and only one of them is
+    /// destructive to nothing at all. See <see cref="Dialog_SaveSweep"/>.
     /// </summary>
     public class Dialog_SaveGame : Window
     {
@@ -34,9 +35,6 @@ namespace Gideon.UIOverhaul.Features.Saves
         private const float FieldHeight = 32f;
         private const float RowHeight = 30f;
         private const float FooterHeight = SavesChrome.FooterHeight;
-
-        /// <summary>Height of a folder heading inside the list.</summary>
-        private const float GroupHeight = 20f;
 
         /// <summary>
         /// The name to save under.
@@ -335,11 +333,19 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>
-        /// The saves that already exist, so an overwrite is chosen rather than stumbled into.
+        /// The saves that already exist in the folder being written to, so an overwrite is chosen rather than
+        /// stumbled into.
         ///
-        /// <b>Grouped by folder, with each group's count and total size in its heading.</b> That heading is
-        /// the reason to have folders at all: it is where somebody finds out that Autosaves is nine files and
-        /// most of their disk. Sorted with the chosen folder first, since that is the one being written to.
+        /// <b>Only this folder's saves, which is a deliberate reversal.</b> This list used to show every save in
+        /// the game, grouped by folder with the chosen one hoisted to the top, on the reasoning that the group
+        /// headings are where somebody finds out that Autosaves is nine files and most of their disk. In use that
+        /// was wrong twice over: a player who has just chosen a folder has said what they are interested in, and
+        /// the list answering with everything else buried the handful of names an overwrite could actually
+        /// collide with. Changed on Aaron's report, 2026-08-19.
+        ///
+        /// <b>The disk figure survived the change,</b> because that was the real value in the headings. It now
+        /// counts the chosen folder rather than the whole Saves tree, which is if anything a better answer to the
+        /// same question: switch the picker to Autosaves and the caption says what Autosaves costs.
         ///
         /// <b>Given every pixel between the fields and the footer.</b> An earlier version fixed this at a
         /// couple of hundred pixels and left the bottom half of the window empty, which is the sort of thing
@@ -347,14 +353,17 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// </summary>
         private void DrawExisting(Rect rect, UIColorPaletteDef palette)
         {
+            List<FileInfo> here = InFolder();
             long total = 0;
 
-            foreach (FileInfo file in existing)
+            foreach (FileInfo file in here)
                 total += file.Length;
 
+            string where = (folder.NullOrEmpty() ? SaveFolders.RootLabel : folder).ToUpper();
+
             SavesChrome.Caption(new Rect(rect.x, rect.y, rect.width, 16f),
-                (existing.Count == 1 ? "1 EXISTING SAVE" : existing.Count + " EXISTING SAVES")
-                + (existing.Count == 0 ? string.Empty : "   " + SavesChrome.Size(total) + " ON DISK"), palette);
+                (here.Count == 1 ? "1 SAVE IN " : here.Count + " SAVES IN ") + where
+                + (here.Count == 0 ? string.Empty : "   " + SavesChrome.Size(total) + " ON DISK"), palette);
 
             Rect body = new Rect(rect.x, rect.y + 18f, rect.width, Mathf.Max(0f, rect.height - 18f));
 
@@ -362,23 +371,16 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             Rect inner = body.ContractedBy(5f);
 
-            if (existing.Count == 0)
+            if (here.Count == 0)
             {
                 GUI.color = palette.TextDisabled;
-                Widgets.Label(inner.ContractedBy(6f), "No saves yet. This will be the first.");
+                Widgets.Label(inner.ContractedBy(6f), "Nothing saved here yet. This will be the first.");
                 GUI.color = palette.TextPrimary;
 
                 return;
             }
 
-            List<string> order = GroupOrder();
-
-            float height = order.Count * (GroupHeight + 2f);
-
-            foreach (FileInfo file in existing)
-                height += RowHeight + 3f;
-
-            Rect view = new Rect(0f, 0f, inner.width - 18f, height);
+            Rect view = new Rect(0f, 0f, inner.width - 18f, here.Count * (RowHeight + 3f));
 
             Widgets.BeginScrollView(inner, ref scroll, view);
 
@@ -386,20 +388,11 @@ namespace Gideon.UIOverhaul.Features.Saves
             {
                 float y = 0f;
 
-                foreach (string group in order)
+                foreach (FileInfo file in here)
                 {
-                    y = DrawGroupHeading(new Rect(0f, y, view.width, GroupHeight), group, palette);
+                    DrawExistingRow(new Rect(0f, y, view.width, RowHeight), file, palette);
 
-                    foreach (FileInfo file in existing)
-                    {
-                        if (!string.Equals(SaveFolders.FolderOf(file) ?? string.Empty, group,
-                                System.StringComparison.OrdinalIgnoreCase))
-                            continue;
-
-                        DrawExistingRow(new Rect(0f, y, view.width, RowHeight), file, palette);
-
-                        y += RowHeight + 3f;
-                    }
+                    y += RowHeight + 3f;
                 }
             }
             finally
@@ -409,76 +402,25 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>
-        /// The folders that have saves in them, the one being written to first.
+        /// The saves sitting in the folder currently chosen in the picker.
         ///
-        /// Empty string is the Saves root. Putting the chosen folder at the top means the saves an overwrite
-        /// could collide with are the ones already on screen.
+        /// A null folder is the Saves root, which is why the comparison is against an empty string rather than
+        /// against null: <see cref="SaveFolders.FolderOf"/> says null for the root and this window says null for
+        /// "no folder chosen", and those are the same place.
         /// </summary>
-        private List<string> GroupOrder()
+        private List<FileInfo> InFolder()
         {
-            List<string> order = new List<string>();
+            List<FileInfo> here = new List<FileInfo>();
             string chosen = folder ?? string.Empty;
 
             foreach (FileInfo file in existing)
             {
-                string where = SaveFolders.FolderOf(file) ?? string.Empty;
-
-                if (!order.Contains(where))
-                    order.Add(where);
-            }
-
-            order.Sort((a, b) =>
-            {
-                if (string.Equals(a, chosen, System.StringComparison.OrdinalIgnoreCase))
-                    return -1;
-
-                if (string.Equals(b, chosen, System.StringComparison.OrdinalIgnoreCase))
-                    return 1;
-
-                return string.Compare(a, b, System.StringComparison.OrdinalIgnoreCase);
-            });
-
-            return order;
-        }
-
-        private float DrawGroupHeading(Rect rect, string group, UIColorPaletteDef palette)
-        {
-            int count = 0;
-            long bytes = 0;
-
-            foreach (FileInfo file in existing)
-            {
-                if (!string.Equals(SaveFolders.FolderOf(file) ?? string.Empty, group,
+                if (string.Equals(SaveFolders.FolderOf(file) ?? string.Empty, chosen,
                         System.StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                count++;
-                bytes += file.Length;
+                    here.Add(file);
             }
 
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.LowerLeft;
-            GUI.color = palette.TextSecondary;
-
-            Rect name = new Rect(rect.x + 3f, rect.y, Mathf.Max(0f, rect.width * 0.55f), rect.height);
-
-            if (name.width >= 24f)
-                Widgets.LabelEllipses(name, (group.NullOrEmpty() ? SaveFolders.RootLabel : group).ToUpper());
-
-            Text.Anchor = TextAnchor.LowerRight;
-            GUI.color = palette.TextDisabled;
-
-            Widgets.Label(new Rect(rect.x, rect.y, rect.width - 4f, rect.height),
-                count + (count == 1 ? " save   " : " saves   ") + SavesChrome.Size(bytes));
-
-            GUI.color = palette.TextPrimary;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
-
-            return rect.yMax + 2f;
+            return here;
         }
 
         /// <summary>
@@ -608,7 +550,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                     break;
 
                 case SavesChrome.SaveAction.Sweep:
-                    Find.WindowStack.Add(new Dialog_SaveSweep(acting));
+                    Find.WindowStack.Add(new Dialog_SaveSweep(acting, Refresh));
 
                     break;
 

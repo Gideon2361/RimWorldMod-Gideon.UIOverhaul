@@ -4,6 +4,7 @@ using System.IO;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Options;
 using UnityEngine;
 using Verse;
 
@@ -49,6 +50,15 @@ namespace Gideon.UIOverhaul.Features.Saves
 
         private readonly FileInfo file;
 
+        /// <summary>
+        /// Told when a copy has been written, so the window underneath can list it.
+        ///
+        /// <b>A callback rather than the sweep window reaching for the save window.</b> Two different windows open
+        /// this one and they refresh themselves differently; handing each one's own refresh in keeps this window
+        /// from knowing either of them exists. Null is allowed, for a caller with nothing to update.
+        /// </summary>
+        private readonly Action written;
+
         private readonly SaveSweepOptions options = new SaveSweepOptions
         {
             RemoveMissingThings = true,
@@ -76,9 +86,10 @@ namespace Gideon.UIOverhaul.Features.Saves
         private string problem;
         private bool examined;
 
-        public Dialog_SaveSweep(FileInfo save)
+        public Dialog_SaveSweep(FileInfo save, Action onWritten = null)
         {
             file = save;
+            written = onWritten;
 
             doCloseX = true;
             forcePause = true;
@@ -434,13 +445,39 @@ namespace Gideon.UIOverhaul.Features.Saves
                 Commit();
         }
 
+        /// <summary>
+        /// Writes the copy, compresses it if the player compresses their saves, and tells the window behind this
+        /// one that there is a new file.
+        ///
+        /// <b>Compression is a separate step after the write, not part of it.</b> <see cref="SaveSweepWriter"/>
+        /// deliberately knows nothing about encoders, which is what lets the whole sweep be verified outside the
+        /// game. Reading the setting is guarded on its own so a settings file that cannot be read leaves a
+        /// perfectly good plain save rather than no save.
+        ///
+        /// <b>The refresh runs on the main thread, not in the long event.</b> Everything it touches is interface
+        /// state belonging to another window, and the long event's action runs on a worker thread.
+        /// </summary>
         private void Commit()
         {
             string target = Target();
 
-            LongEventHandler.QueueLongEvent(
-                () => done = SaveSweepWriter.Write(file.FullName, target, options, report, missing),
-                "Gideon_SweepWriting", false, null);
+            LongEventHandler.QueueLongEvent(() =>
+            {
+                done = SaveSweepWriter.Write(file.FullName, target, options, report, missing);
+
+                if (done == null || done.Problem != null || done.Path.NullOrEmpty())
+                    return;
+
+                SaveCompressor.AfterWrite(done.Path,
+                    UIGuard.Try("Saves.SweepReadCompressSetting",
+                        () => UIOverhaulSettingsFile.Current?.compressSaves ?? false, false, null));
+            }, "Gideon_SweepWriting", false, null);
+
+            LongEventHandler.ExecuteWhenFinished(() =>
+            {
+                if (done != null && done.Problem == null)
+                    written?.Invoke();
+            });
         }
 
         /// <summary>Where the copy goes: beside the original, named after it.</summary>

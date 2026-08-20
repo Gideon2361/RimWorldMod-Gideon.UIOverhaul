@@ -6,6 +6,7 @@ using Gideon.UIOverhaul.Features.Notifications;
 using Gideon.UIOverhaul.Features.Options;
 using Gideon.UIOverhaul.Shared;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
@@ -85,6 +86,16 @@ namespace Gideon.UIOverhaul.Features.Minimap
             Map map = Find.CurrentMap;
 
             if (map == null)
+                return;
+
+            // The world view keeps the last map current, so a null check is not enough to know a map is being
+            // looked at. RimWorld's own MapInterfaceOnGUI_AfterMainTabs guards its whole body on exactly this, but
+            // a postfix runs whether or not that body did, so the minimap inherited none of it and kept drawing a
+            // corner of the colony over the planet.
+            //
+            // Screenshot mode is filtered for the same reason vanilla filters it: a HUD panel is the thing that
+            // should not appear in a picture of the colony.
+            if (!WorldRendererUtility.DrawingMap || Find.UIRoot.screenshotMode.FiltersCurrentEvent)
                 return;
 
             Rect panel = PanelRect(map, settings);
@@ -172,7 +183,7 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// Dragging the header moves the panel.
         ///
         /// <b>The header only, matching every other window in this mod.</b> Dragging from anywhere would fight
-        /// the map area, where a press already means "jump the camera there" -- which is the whole reason
+        /// the map area, where a press already means "jump the camera there", which is the whole reason
         /// window dragging was confined to title bars in the first place.
         ///
         /// <b>Written to settings when the drag ends, not while it runs.</b> Saving on every mouse move would
@@ -454,7 +465,7 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// Clicking or dragging moves the camera there.
         ///
         /// <b>Raw events rather than ButtonInvisible.</b> A button reports a completed click, and dragging the
-        /// view around never completes one -- the same reason the schedule strip reads the mouse directly. The
+        /// view around never completes one, the same reason the schedule strip reads the mouse directly. The
         /// event is consumed either way, so a click meant for the minimap never also lands on the map behind it.
         /// </summary>
         private static void HandleClicks(Rect fitted, Map map, IntVec3 size)

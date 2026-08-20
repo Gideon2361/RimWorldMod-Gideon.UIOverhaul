@@ -210,6 +210,11 @@ namespace Gideon.UIOverhaul.Features.Saves
             // reached yet. They are counted here and resolved against the finished set of definitions afterwards.
             Dictionary<string, int> references = new Dictionary<string, int>(StringComparer.Ordinal);
 
+            // Every list element's value, kept so the ones that turn out to be real ids can be counted as
+            // references once the definitions are all known. Deduplicated, so the tens of thousands of signal
+            // names collapse to a few thousand distinct strings.
+            HashSet<string> candidates = new HashSet<string>(StringComparer.Ordinal);
+
             // Records in each load id namespace, against the ids those records actually wrote. A namespace with
             // more records than ids has one whose id was written by leaving the element out: see below.
             Dictionary<string, int> records = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -411,6 +416,22 @@ namespace Gideon.UIOverhaul.Features.Saves
                             references[aim] = references.TryGetValue(aim, out int seen) ? seen + 1 : 1;
                     }
 
+                    // A list element can also name a record, and some of the most important ones do: a pawn's
+                    // relationships and the world's pawnsForcefullyKeptAsWorldPawns are both lists of references.
+                    // They cannot be judged for DANGLING, because a list holds mod ids and quest signals too and
+                    // treating them all as references produced 70,988 false alarms. They can be counted as
+                    // REFERENCES though, by keeping every value and afterwards intersecting with the ids the file
+                    // actually defines. A value that matches a real id is a reference to it beyond argument, and a
+                    // value that matches nothing is simply never looked at again. Missing this removed a pawn the
+                    // game had explicitly asked to keep.
+                    if (!closing && name == "li")
+                    {
+                        string value = SaveSweepXml.Value(line);
+
+                        if (!string.IsNullOrEmpty(value) && value != "null")
+                            candidates.Add(value);
+                    }
+
                     // What a container holds. Kept apart from the references above because these are the ones the
                     // repair pass must not touch, so counting them among the repairable ones would have the window
                     // promise a fix it will not make.
@@ -532,6 +553,16 @@ namespace Gideon.UIOverhaul.Features.Saves
                 }
             }
 
+            // What anything at all points at, which is a wider question than what dangles. A list value only counts
+            // once it is known to match a real id; everything else it might hold is discarded here.
+            HashSet<string> referenced = new HashSet<string>(references.Keys, StringComparer.Ordinal);
+
+            foreach (string candidate in candidates)
+            {
+                if (ids.Contains(candidate))
+                    referenced.Add(candidate);
+            }
+
             // A mothballed pawn goes only if nothing names it and it is nobody's colonist.
             foreach (KeyValuePair<string, string> pawn in mothballed)
             {
@@ -542,7 +573,9 @@ namespace Gideon.UIOverhaul.Features.Saves
                     continue;
                 }
 
-                if (references.ContainsKey(pawn.Key) || contained.Contains(pawn.Key))
+                // referenced rather than references: a pawn named only from inside a list, as relationships and
+                // pawnsForcefullyKeptAsWorldPawns both are, was invisible to the narrower test and got removed.
+                if (referenced.Contains(pawn.Key) || contained.Contains(pawn.Key))
                 {
                     report.MothballedReferenced++;
 
