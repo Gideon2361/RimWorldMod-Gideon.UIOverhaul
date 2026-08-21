@@ -194,8 +194,16 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             // Cell coordinates address a corner, so the half cell puts the label on the middle of the run
             // rather than a half tile left and down of it.
+            //
+            // <b>Zone rather than MetaOverlays, asked for on 2026-08-21.</b> MetaOverlays is the top layer, so the
+            // label drew over walls, furniture and colonists -- a name floating in front of the room instead of
+            // written on its floor. Zone sits above terrain, floors and filth, and below wires, plants, buildings,
+            // items and pawns, which is exactly "on the floor, under everything standing on it".
+            //
+            // Above filth on purpose: blood and dirt drawing over the text would read as a rendering fault rather
+            // than as grime. The camera looks straight down, so this y is depth alone and moves nothing on screen.
             spot.Center = new Vector3(bestStart + bestLength * 0.5f,
-                AltitudeLayer.MetaOverlays.AltitudeFor(), bestZ + 0.5f);
+                AltitudeLayer.Zone.AltitudeFor(), bestZ + 0.5f);
 
             return spot;
         }

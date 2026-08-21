@@ -84,12 +84,16 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         private const float OutlineAlpha = 0.11f;
 
         /// <summary>
-        /// How far above the outline the fill is drawn.
+        /// How far the fill is offset from the outline along the view axis.
         ///
         /// <b>Not cosmetic: without it the outline covers the text.</b> The font shader writes no depth and tests
-        /// none, so nine meshes submitted at one altitude have no defined order between them, and the eight
-        /// white copies were landing on top of the dark fill they were supposed to sit behind. Transparent
-        /// geometry is sorted by distance to the camera, so lifting the fill a hair is what puts it in front.
+        /// none, so nine meshes submitted at one altitude have no defined order between them, and the eight white
+        /// copies were landing on top of the dark fill they were supposed to sit behind. Separating them by a hair
+        /// is what gives the sort something to order by.
+        ///
+        /// <b>Which direction depends on the render queue,</b> so the two have to be read together: see
+        /// <c>FloorLabelFont.LabelQueue</c>. Below 2500 Unity sorts front-to-back, so the fill is dropped away from
+        /// the camera to be drawn last. Above it the sort reverses and the fill would have to be lifted instead.
         ///
         /// Far below the gap between RimWorld's own altitude layers, so nothing else changes order.
         /// </summary>
@@ -529,8 +533,13 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 }
             }
 
+            // Lowered, not lifted, and the sign flipped with the render queue. The materials now sit at 2200,
+            // and Unity sorts a queue below 2500 front-to-back rather than back-to-front, so the mesh nearest the
+            // camera is drawn first. Lifting the fill used to make it last and therefore on top; below 2500 the
+            // same lift would make it first and let the eight outline copies bury it, which is the fault the
+            // constant exists to prevent. Dropping it instead keeps the fill drawn last.
             Graphics.DrawMesh(mesh.Mesh,
-                Matrix4x4.TRS(spot.Center + new Vector3(0f, FillLift, 0f), Quaternion.identity, size), fill, 0);
+                Matrix4x4.TRS(spot.Center - new Vector3(0f, FillLift, 0f), Quaternion.identity, size), fill, 0);
 
             // Recorded so a click can find this label. Half a cell of slack, because somebody aiming at text
             // aims at the word rather than at its exact glyph bounds.
@@ -653,9 +662,14 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
     {
         public static void Postfix(Map __instance)
         {
-            // Only the map on screen. MapUpdate runs for every loaded map, and drawing the others would be
-            // meshes submitted for a camera that is not looking at them.
-            if (__instance != null && __instance == Find.CurrentMap)
+            // Only the map on screen. MapUpdate runs for every loaded map, and drawing the others would be meshes
+            // submitted for a camera that is not looking at them.
+            //
+            // Current is not enough on its own: the world view leaves CurrentMap set, and the drawing block inside
+            // MapUpdate is guarded while this postfix is not -- a postfix inherits the method's timing, never its
+            // conditions. So the labels were submitted anyway and drew across the planet, which Aaron reported on
+            // 2026-08-21. MapView asks both halves of the question.
+            if (Shared.MapView.Showing(__instance))
                 FloorLabelDrawer.Draw(__instance);
         }
     }

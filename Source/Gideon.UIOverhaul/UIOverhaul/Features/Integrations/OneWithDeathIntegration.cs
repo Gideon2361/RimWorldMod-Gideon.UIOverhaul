@@ -82,16 +82,21 @@ namespace Gideon.UIOverhaul.Features.Integrations
         }
 
         /// <summary>
-        /// Adds every controlled undead to a list, for the pass that gathers who the tab lists.
+        /// Adds the controlled undead standing on one map to a list, for the pass that gathers who the tab lists.
         ///
         /// <b>Taken from the tracker rather than found by filtering a map list, and that is not a shortcut.</b> The
         /// tab's other categories are all sifted out of <c>AllHumanlikeSpawned</c>, which works because a prisoner
         /// or a guest is a person. An undead is whatever was raised, including animals, so filtering the humanlike
         /// list would silently drop every raised beast. The authoritative list is the one the necromancer holds.
+        ///
+        /// <b>The map is a parameter because the tracker's list is not a map's list.</b> It holds everything a
+        /// necromancer controls anywhere, while the caller runs once per map and every other source it draws from
+        /// is already scoped to that map. Handing back the whole set therefore put the same undead under every map
+        /// heading, which is what Aaron reported on 2026-08-21 with two maps and five undead listed twice.
         /// </summary>
-        internal static void Fill(List<Pawn> into)
+        internal static void Fill(Map map, List<Pawn> into)
         {
-            if (into == null || !Available)
+            if (map == null || into == null || !Available)
                 return;
 
             Refresh();
@@ -99,8 +104,8 @@ namespace Gideon.UIOverhaul.Features.Integrations
             foreach (Pawn pawn in Controlled)
             {
                 // Spawned only, matching every other category: a pawn in a caravan or a pod is not on a map for
-                // the tab to show a row about.
-                if (pawn != null && pawn.Spawned && !pawn.Dead)
+                // the tab to show a row about. Spawned is also what makes the map comparison safe to read.
+                if (pawn != null && pawn.Spawned && !pawn.Dead && pawn.Map == map)
                     into.Add(pawn);
             }
         }

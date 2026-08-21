@@ -89,13 +89,13 @@ namespace Gideon.UIOverhaul.Features.Minimap
                 return;
 
             // The world view keeps the last map current, so a null check is not enough to know a map is being
-            // looked at. RimWorld's own MapInterfaceOnGUI_AfterMainTabs guards its whole body on exactly this, but
-            // a postfix runs whether or not that body did, so the minimap inherited none of it and kept drawing a
-            // corner of the colony over the planet.
+            // looked at, and a gravship cutscene shows the planet while still reporting a map is being drawn.
+            // Both live in MapView now: the colonist bar's live tiles and the floor labels had the same fault, and
+            // three copies of this test is how one of them ends up answering differently.
             //
-            // Screenshot mode is filtered for the same reason vanilla filters it: a HUD panel is the thing that
-            // should not appear in a picture of the colony.
-            if (!WorldRendererUtility.DrawingMap || Find.UIRoot.screenshotMode.FiltersCurrentEvent)
+            // Screenshot mode stays here rather than moving in with them: it asks whether interface belongs in a
+            // picture the game is composing, which is a HUD question and not a world-space one.
+            if (!Shared.MapView.OnScreen || Find.UIRoot.screenshotMode.FiltersCurrentEvent)
                 return;
 
             Rect panel = PanelRect(map, settings);

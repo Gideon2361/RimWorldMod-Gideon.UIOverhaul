@@ -161,6 +161,12 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 material.mainTexture = texture;
                 material.color = color;
 
+                // Same queue as the game-font source, from the one constant, because these two are the only
+                // implementations of this interface and nothing downstream knows which it was handed. Setting it in
+                // one and not the other would mean labels sitting under the furniture or over it depending on which
+                // typeface the player picked.
+                material.renderQueue = FloorLabelFont.LabelQueue;
+
                 return material;
             }, null, null);
 

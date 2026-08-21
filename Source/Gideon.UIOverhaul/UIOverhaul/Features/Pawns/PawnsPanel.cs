@@ -39,6 +39,14 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private const float BarColumnWidth = 130f;
         private const float ActivityColumnWidth = 260f;
 
+        /// <summary>
+        /// Width of the Area column: a colour chip, an area name and the caret.
+        ///
+        /// Wider than the Schedule column beside it because an area is named by the player and "Allowed area 4"
+        /// is not a short word, where a time assignment is one of four the game names itself.
+        /// </summary>
+        private const float AreaColumnWidth = 150f;
+
         private const float RowHeight = 62f;
         private const float BarHeight = 14f;
         private const float WindowChrome = 24f;
@@ -424,6 +432,20 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Width = 110f,
                 DrawCell = DrawScheduleHintCell
             });
+
+            // Next to the schedule because vanilla's Restrict tab pairs them, and a control rather than a hint
+            // because it is the one thing on that tab this mod had no way to do at all.
+            //
+            // A column rather than another picker on the expanded row's policy strip, which is where the apparel,
+            // food and drug policies live: an area is changed for a dozen pawns at once when a raid lands, and
+            // behind a row expansion that is a dozen expand-and-collapse cycles.
+            Grid.Columns.Add(new UIDesignatorTabColumn
+            {
+                Label = "Area",
+                Width = AreaColumnWidth,
+                Tooltip = "Where each pawn is allowed to be. Unrestricted lets them use the whole map.",
+                DrawCell = DrawAreaCell
+            });
         }
 
         /// <summary>Reused between frames, so a rebuild does not allocate a list per map.</summary>
@@ -466,11 +488,14 @@ namespace Gideon.UIOverhaul.Features.Pawns
             // necessarily humanlike: a raised animal would be missed entirely by the sweep below. See
             // OneWithDeathIntegration.Fill, which is a no op when that mod is absent.
             //
+            // The map is passed in because that list is the only source here that is not already a map's own. It
+            // holds everything the necromancers control anywhere, and this method runs once per map.
+            //
             // Through Take rather than added directly, so an undead that is also in the colonist list arrives
             // once. Its category is decided afterwards, as every other pawn's is.
             Undead.Clear();
 
-            Integrations.OneWithDeathIntegration.Fill(Undead);
+            Integrations.OneWithDeathIntegration.Fill(map, Undead);
 
             foreach (Pawn undead in Undead)
                 Take(undead);
@@ -1046,6 +1071,80 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 GUI.color = palette.TextSecondary;
                 Text.Anchor = TextAnchor.MiddleLeft;
                 Widgets.Label(new Rect(swatch.xMax + 6f, band.y, band.width, band.height), now.LabelCap);
+            }
+
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+        }
+
+        /// <summary>
+        /// The allowed area, as a button carrying the area's own colour.
+        ///
+        /// <b>Drawn like the policy pickers on the expanded row,</b> because it is the same kind of control: a
+        /// per-pawn choice out of a list the player manages. Sharing their look is what stops the tab having two
+        /// unrelated ways of saying "press this to choose".
+        ///
+        /// <b>The chip is the area's colour, not decoration.</b> It is the colour that area is outlined in on the
+        /// map, and hovering an entry in the menu outlines it there, so the chip is how a name in this column and
+        /// a region on the map are the same thing.
+        /// </summary>
+        private static void DrawAreaCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = (Pawn) data.Payload;
+            Rect band = TopBand(cell);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            Text.Font = GameFont.Tiny;
+
+            if (!PawnAreas.Assignable(pawn))
+            {
+                string reason = PawnAreas.Reason(pawn);
+
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = palette.TextDisabled;
+
+                Widgets.Label(band, "--");
+
+                if (!reason.NullOrEmpty())
+                    TooltipHandler.TipRegion(band, (TipSignal) reason);
+            }
+            else
+            {
+                Rect button = new Rect(band.x + 4f, band.center.y - 11f, Mathf.Max(0f, band.width - 8f), 22f);
+                bool over = Mouse.IsOver(button);
+
+                UIElementPainter.PaintButton(button, palette, over, over && Input.GetMouseButton(0));
+
+                Area area = PawnAreas.Current(pawn);
+                Rect chip = new Rect(button.x + 6f, button.center.y - 6f, 12f, 12f);
+
+                GUI.DrawTexture(chip, area != null ? area.ColorTexture : BaseContent.GreyTex);
+
+                GUI.color = palette.Border;
+                Widgets.DrawBox(chip, 1);
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextPrimary;
+
+                // The caret's room comes out of the label rather than being drawn over it, so a long area name
+                // ends in an ellipsis instead of running underneath the arrow.
+                Rect label = new Rect(chip.xMax + 5f, button.y,
+                    Mathf.Max(0f, button.xMax - chip.xMax - 24f), button.height);
+
+                if (label.width >= 20f)
+                    Widgets.LabelEllipses(label, PawnAreas.Label(pawn));
+
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = palette.TextDisabled;
+
+                Widgets.Label(new Rect(button.x, button.y, Mathf.Max(0f, button.width - 6f), button.height), "▾");
+
+                if (Widgets.ButtonInvisible(button))
+                    PawnAreas.Choose(pawn);
             }
 
             GUI.color = previousColor;

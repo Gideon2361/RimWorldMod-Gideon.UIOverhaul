@@ -81,6 +81,21 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
             return Source.TryGlyph(c, out glyph);
         }
 
+        /// <summary>
+        /// Render queue the label materials are forced into, which is what puts them under the colony.
+        ///
+        /// <b>The altitude cannot do this on its own, and that is why the first attempt failed.</b> The material is
+        /// cloned from Unity's own font material, whose shader is <c>ZTest Always</c> in the Transparent queue
+        /// (3000). Ignoring the depth buffer means no <c>AltitudeLayer</c> can put it behind anything, and being in
+        /// a later queue than RimWorld's things means it is drawn after them regardless. Aaron reported labels
+        /// still over the furniture on 2026-08-21 after the layer alone was changed.
+        ///
+        /// 2200 sits between Unity's Geometry (2000), where RimWorld's terrain and floors draw, and AlphaTest
+        /// (2450), where its Cutout shaders draw every building, item and pawn. So the label lands on the floor and
+        /// everything standing on the floor lands on the label.
+        /// </summary>
+        internal const int LabelQueue = 2200;
+
         internal static Material MaterialFor(Color color)
         {
             return Source.MaterialFor(color);
@@ -192,6 +207,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                     Material material = new Material(resolvedFont.material);
 
                     material.color = color;
+                    material.renderQueue = LabelQueue;
 
                     return material;
                 }, null, null);

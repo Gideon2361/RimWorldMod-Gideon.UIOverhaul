@@ -7,6 +7,7 @@ using System.Xml;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.ColonyBar;
 using Gideon.UIOverhaul.Features.FloorLabels;
 using Gideon.UIOverhaul.Features.Minimap;
 using Gideon.UIOverhaul.Features.Notifications;
@@ -191,6 +192,39 @@ namespace Gideon.UIOverhaul.Features.Options
 
         /// <summary>How large the minimap is drawn. Medium is 220 pixels square.</summary>
         public MinimapSize minimapSize = MinimapSize.Medium;
+
+        /// <summary>
+        /// Whether the grouped colonist bar replaces RimWorld's.
+        ///
+        /// On by default, since it is the feature. Off leaves vanilla's bar drawing untouched, which is an opt out
+        /// rather than a failure path: nothing in this mod hands off to vanilla's own window when something goes
+        /// wrong, and this is somebody deciding they prefer the original.
+        /// </summary>
+        public bool showGroupedColonistBar = true;
+
+        /// <summary>
+        /// Whether each tile renders a live view of the pawn instead of their portrait.
+        ///
+        /// <b>Off by default, deliberately.</b> Every live tile costs a camera pass, so leaving this on by default
+        /// would spend frames on behalf of players who never asked for it. Off falls back to
+        /// <c>PortraitsCache</c>, which is what vanilla draws and is already cached.
+        /// </summary>
+        public bool livePawnView;
+
+        /// <summary>How often live tiles are refreshed. Ignored entirely when <see cref="livePawnView"/> is off.</summary>
+        public PawnViewRefresh pawnViewRefresh = PawnViewRefresh.Ms250;
+
+        /// <summary>
+        /// Whether the colonist bar's portraits are drawn without headgear.
+        ///
+        /// Off by default, since a hat is a thing the player chose to put on somebody. On is for the colony where
+        /// every face is behind a helmet and the bar has stopped telling you who is who.
+        ///
+        /// <b>Portraits only, and that is a limit rather than an oversight.</b> A live tile shows the pawn as the
+        /// map drew them, and the map draws each pawn once per frame for every camera at once, so there is no way
+        /// to hide a hat in the tile without hiding it on the map for everybody.
+        /// </summary>
+        public bool barHideHeadgear;
 
         /// <summary>
         /// Whether hostiles are marked on the minimap.
@@ -760,6 +794,26 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showMinimapEnemies = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Absent means on, matching the default, so an existing config gets the grouped bar
+                        // rather than being opted out of the feature by omission.
+                        case "showGroupedColonistBar":
+                            settings.showGroupedColonistBar = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // Absent means off here, also matching the default: this one costs frames, so silence
+                        // has to mean the cheap answer.
+                        case "livePawnView":
+                            settings.livePawnView = value.EqualsIgnoreCase("true");
+                            break;
+
+                        case "pawnViewRefresh":
+                            settings.pawnViewRefresh = ParseEnum(value, PawnViewRefresh.Ms250);
+                            break;
+
+                        case "barHideHeadgear":
+                            settings.barHideHeadgear = value.EqualsIgnoreCase("true");
+                            break;
+
                         // Invariant, like letterRowWidth above and for the same reason: a position written on
                         // a machine that uses a comma for the decimal point should still parse here.
                         case "minimapX":
@@ -1031,6 +1085,11 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("minimapSize", minimapSize.ToString());
                     writer.WriteElementString("showMinimapEnemies",
                         showMinimapEnemies ? "true" : "false");
+                    writer.WriteElementString("showGroupedColonistBar",
+                        showGroupedColonistBar ? "true" : "false");
+                    writer.WriteElementString("livePawnView", livePawnView ? "true" : "false");
+                    writer.WriteElementString("pawnViewRefresh", pawnViewRefresh.ToString());
+                    writer.WriteElementString("barHideHeadgear", barHideHeadgear ? "true" : "false");
                     writer.WriteElementString("minimapX",
                         minimapX.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("minimapY",

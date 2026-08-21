@@ -7,6 +7,7 @@ using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Patches.UIElements;
 using Gideon.UIOverhaul.Features.ButtonBar;
 using Gideon.UIOverhaul.Features.ButtonBar.BarWidgets;
+using Gideon.UIOverhaul.Features.ColonyBar;
 using Gideon.UIOverhaul.Features.DevTools;
 using Gideon.UIOverhaul.Features.Diagnostics;
 using Gideon.UIOverhaul.Features.FloorLabels;
@@ -1128,6 +1129,80 @@ namespace Gideon.UIOverhaul.Features.Options
             y += RowHeight + 12f;
         }
 
+        /// <summary>
+        /// The colonist bar's own settings, under its switch in the widget list.
+        ///
+        /// <b>Two rows, and they are a mode and its parameter rather than two answers to one question.</b> The
+        /// switch decides between live views and portraits; the frequency tunes the live case only, and is not
+        /// drawn at all when the switch is off, so it can never look like a control that does nothing.
+        /// </summary>
+        private void DrawColonistBarOptions(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings, float indent)
+        {
+            WidgetToggle(view, ref y, palette, settings, indent, "Hide headgear on portraits",
+                settings.barHideHeadgear, value =>
+                {
+                    settings.barHideHeadgear = value;
+
+                    // Portraits are cached per pawn and per render setting, so the ones already built were made
+                    // with the old answer. Cleared here rather than waited out, or the bar would keep showing
+                    // helmets until each pawn changed for some unrelated reason.
+                    UIGuard.Try("Options.ClearPortraits", PortraitsCache.Clear, null);
+                },
+                "Draws the bar's portraits bare-headed, for a colony where every face is behind a helmet and the "
+                + "bar has stopped telling you who is who.\n\nPortraits only. A live tile shows the pawn exactly "
+                + "as the map drew them, and the map draws each pawn once for every camera at once, so a hat "
+                + "cannot be hidden in the tile without hiding it on the map as well.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Live pawn view",
+                settings.livePawnView, value => settings.livePawnView = value,
+                "Draws each tile as a live camera view of the pawn and the ground around them, instead of their "
+                + "portrait.\n\nOff by default because it is not free: every live tile costs the game an extra "
+                + "camera pass. Folding a group stops its tiles rendering, so folding is also how the cost is "
+                + "kept down.\n\nPawns on another map keep their portrait either way. RimWorld only ever draws "
+                + "the map you are looking at, so there is nothing elsewhere to render.");
+
+            if (!settings.livePawnView)
+                return;
+
+            ChoiceRow(view, ref y, palette, "Render frequency", RefreshLabel(settings.pawnViewRefresh), () =>
+            {
+                List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                foreach (PawnViewRefresh rate in (PawnViewRefresh[]) System.Enum.GetValues(typeof(PawnViewRefresh)))
+                {
+                    PawnViewRefresh captured = rate;
+
+                    options.Add(new FloatMenuOption(RefreshLabel(captured),
+                        UIGuard.Wrap("Options.PawnViewRefresh", () =>
+                        {
+                            settings.pawnViewRefresh = captured;
+                            settings.Save();
+                        })));
+                }
+
+                Find.WindowStack.Add(new FloatMenu(options));
+            });
+        }
+
+        /// <summary>
+        /// The frequency choices, worded as the interval with its rate.
+        ///
+        /// The interval alone is the number that bounds the cost and the rate alone is the number somebody can
+        /// picture, so both are shown rather than choosing between them.
+        /// </summary>
+        private static string RefreshLabel(PawnViewRefresh rate)
+        {
+            switch (rate)
+            {
+                case PawnViewRefresh.Ms500: return "Every 500 ms  (2/sec)";
+                case PawnViewRefresh.Ms125: return "Every 125 ms  (8/sec)";
+                case PawnViewRefresh.Ms50: return "Every 50 ms  (20/sec)";
+                case PawnViewRefresh.EveryFrame: return "Every frame";
+                default: return "Every 250 ms  (4/sec)";
+            }
+        }
+
         private static string CornerLabel(MinimapCorner corner)
         {
             switch (corner)
@@ -1410,6 +1485,18 @@ namespace Gideon.UIOverhaul.Features.Options
 
             if (settings.showMinimapWidget)
                 DrawMinimapOptions(view, ref y, palette, settings, indent * 2f);
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Colonist bar",
+                settings.showGroupedColonistBar, value => settings.showGroupedColonistBar = value,
+                "Replaces RimWorld's colonist bar with named groups you can fold away.\n\nFold a group to stop "
+                + "looking at people who are fine; a folded group still raises a badge when somebody inside is "
+                + "down, bleeding, breaking or starving, so folding hides pawns without hiding emergencies."
+                + "\n\nThe gear on a group applies an area, schedule, policy or medical setting to everybody in "
+                + "it at once, and right-clicking a pawn moves them between groups.\n\nSwitch it off to go back "
+                + "to RimWorld's own bar. Your groups are kept in the save either way.");
+
+            if (settings.showGroupedColonistBar)
+                DrawColonistBarOptions(view, ref y, palette, settings, indent * 2f);
 
             GroupLabel(view, ref y, palette, "RimWorld's corner");
 
