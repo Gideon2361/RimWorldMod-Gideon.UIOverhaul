@@ -91,9 +91,17 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// copies were landing on top of the dark fill they were supposed to sit behind. Separating them by a hair
         /// is what gives the sort something to order by.
         ///
-        /// <b>Which direction depends on the render queue,</b> so the two have to be read together: see
-        /// <c>FloorLabelFont.LabelQueue</c>. Below 2500 Unity sorts front-to-back, so the fill is dropped away from
-        /// the camera to be drawn last. Above it the sort reverses and the fill would have to be lifted instead.
+        /// <b>Which direction depends on the material's render queue, so the two cannot be changed apart.</b> The
+        /// label shaders sit in the transparent range, where Unity sorts back-to-front, so lifting the fill toward
+        /// the camera is what makes it drawn last. Below 2500 the sort reverses and the same lift lets the eight
+        /// outline copies bury the fill instead, turning every label into a white blur.
+        ///
+        /// <b>That pairing has already caught us once.</b> On 2026-08-21 the materials were forced to queue 2200 to
+        /// get the labels under the furniture, this was flipped to a drop to match, and both had to be reverted
+        /// together when 2200 turned out to be under the floors as well and the labels vanished. Putting labels
+        /// under things needs a depth-testing shader rather than a queue number: the two baked atlases are
+        /// white-with-alpha and would survive one, but RimWorld's dynamic font atlas is black-with-alpha and would
+        /// render black whatever colour it was given, which an earlier attempt already proved.
         ///
         /// Far below the gap between RimWorld's own altitude layers, so nothing else changes order.
         /// </summary>
@@ -533,13 +541,11 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 }
             }
 
-            // Lowered, not lifted, and the sign flipped with the render queue. The materials now sit at 2200,
-            // and Unity sorts a queue below 2500 front-to-back rather than back-to-front, so the mesh nearest the
-            // camera is drawn first. Lifting the fill used to make it last and therefore on top; below 2500 the
-            // same lift would make it first and let the eight outline copies bury it, which is the fault the
-            // constant exists to prevent. Dropping it instead keeps the fill drawn last.
+            // Lifted, which is correct for the transparent queue these shaders ask for: back-to-front sorting draws
+            // the furthest mesh first, so lifting the fill is what makes it last and therefore on top. The sign is
+            // tied to the queue -- see the note on FillLift before changing either.
             Graphics.DrawMesh(mesh.Mesh,
-                Matrix4x4.TRS(spot.Center - new Vector3(0f, FillLift, 0f), Quaternion.identity, size), fill, 0);
+                Matrix4x4.TRS(spot.Center + new Vector3(0f, FillLift, 0f), Quaternion.identity, size), fill, 0);
 
             // Recorded so a click can find this label. Half a cell of slack, because somebody aiming at text
             // aims at the word rather than at its exact glyph bounds.

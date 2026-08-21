@@ -2524,9 +2524,8 @@ namespace Gideon.UIOverhaul.Features.Options
         {
             switch (face)
             {
-                case FloorLabelFace.OswaldBold: return "Oswald Bold";
                 case FloorLabelFace.HammersmithOne: return "Hammersmith One";
-                default: return "Game font";
+                default: return "Oswald Bold";
             }
         }
 

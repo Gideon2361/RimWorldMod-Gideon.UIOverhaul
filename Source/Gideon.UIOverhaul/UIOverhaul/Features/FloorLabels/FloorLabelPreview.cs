@@ -35,13 +35,6 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
         private static void Render(Rect rect, string text, FloorLabelFace face, UIColorPaletteDef palette)
         {
-            if (face == FloorLabelFace.GameFont)
-            {
-                DrawWithGameFont(rect, text, palette);
-
-                return;
-            }
-
             IFloorGlyphSource source = FloorLabelFont.For(face);
 
             if (source == null || !source.Available || source.Texture == null)

@@ -8,17 +8,27 @@ using Verse;
 
 namespace Gideon.UIOverhaul.Features.FloorLabels
 {
-    /// <summary>Which typeface the labels are drawn in.</summary>
+    /// <summary>
+    /// Which typeface the labels are drawn in. Baked atlases only.
+    ///
+    /// <b>RimWorld's own font was a third option and is gone, on Aaron's instruction 2026-08-21.</b> It is what
+    /// stood between these labels and drawing under the colony rather than over it: a tinting shader takes its
+    /// colour from the material and its coverage from the texture's alpha, which works on an atlas baked white,
+    /// and renders solid black on Unity's dynamic atlas whatever colour it is given. So the dynamic font forced a
+    /// draw-on-top material, and keeping it as an option would have meant one face layering differently from the
+    /// other two. Labels on Floor solves the same problem the same way -- it ships a font grid and never touches
+    /// the dynamic one.
+    ///
+    /// A saved setting naming the removed face reads back as <see cref="OswaldBold"/>, which is what
+    /// <c>ParseFace</c> already does with any name it does not recognise.
+    /// </summary>
     public enum FloorLabelFace
     {
         /// <summary>Oswald Bold. Condensed, so long names shrink less to fit a room.</summary>
         OswaldBold,
 
         /// <summary>Hammersmith One. Wider and more geometric.</summary>
-        HammersmithOne,
-
-        /// <summary>Whatever RimWorld itself uses, for anybody who wants the labels to match the interface.</summary>
-        GameFont
+        HammersmithOne
     }
 
     /// <summary>
@@ -139,10 +149,19 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// <summary>
         /// A material tinted for one label color.
         ///
-        /// <b><c>MetaOverlay</c> works here where it did not with Unity's own atlas,</b> and the difference is the
-        /// texture rather than the shader. The baker writes white into the color channels and puts the glyph in
-        /// alpha, so multiplying by a tint yields the tint; Unity's dynamic atlases are black with alpha, which
-        /// is what made an earlier attempt render every label solid black whatever color it was given.
+        /// <b>The tint works because of the texture, not the shader.</b> The baker writes white into the colour
+        /// channels and puts the glyph in alpha, so multiplying by a colour yields that colour. Unity's dynamic
+        /// atlases are black with alpha, which is what made an earlier attempt render every label solid black
+        /// whatever colour it was given, and ultimately why that face was dropped.
+        ///
+        /// <b><c>Transparent</c> rather than <c>MetaOverlay</c>, which is what puts the labels on the floor.</b>
+        /// MetaOverlay exists to draw over everything, so no <c>AltitudeLayer</c> could place these under a wall
+        /// however low it was set -- the layer was never the problem. RimWorld's altitude system works because its
+        /// shaders share a queue and sort along the view axis, so a material in that same queue obeys the altitude
+        /// it is given. Read from Labels on Floor, which uses this shader for the same reason.
+        ///
+        /// Forcing the render queue was tried instead and failed twice over: on top at 3000, invisible under the
+        /// floors at 2200. The shader was the knob all along.
         /// </summary>
         public Material MaterialFor(Color color)
         {
@@ -156,16 +175,10 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             Material made = UIGuard.Try("FloorLabels.AtlasMaterial", () =>
             {
-                Material material = new Material(ShaderDatabase.MetaOverlay);
+                Material material = new Material(ShaderDatabase.Transparent);
 
                 material.mainTexture = texture;
                 material.color = color;
-
-                // Same queue as the game-font source, from the one constant, because these two are the only
-                // implementations of this interface and nothing downstream knows which it was handed. Setting it in
-                // one and not the other would mean labels sitting under the furniture or over it depending on which
-                // typeface the player picked.
-                material.renderQueue = FloorLabelFont.LabelQueue;
 
                 return material;
             }, null, null);
