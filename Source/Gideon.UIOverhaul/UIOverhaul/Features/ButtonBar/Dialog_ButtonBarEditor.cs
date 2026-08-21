@@ -121,15 +121,76 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             // Every entry made explicit up front. The stored config may name only what the player has
             // touched, and an editor that showed a partial list would be lying about what is on the bar.
-            List<UIButtonBarEntry> resolved = UIButtonBarConfig.Current.Resolve();
-            if (working.entries.Count == 0)
-                working.entries = resolved;
+            //
+            // <b>This used to happen only for a completely empty layout, and that gap is a reported bug.</b>
+            // UIButtonBarConfig.Resolve appends any loaded tab the layout has never mentioned, deliberately, so
+            // installing a mod does not look like the mod is broken. The editor did not do the same, so such a
+            // tab was drawn on the bar and simultaneously listed under "Not on the bar" with a button offering to
+            // put it there. Both halves were behaving as written and the label was the lie. Aaron reported it on
+            // 2026-08-20 with a modded Level schedule and Manager, which is exactly the case: tabs from mods
+            // installed after he had arranged the bar.
+            Materialize();
 
             doCloseX = true;
             forcePause = false;
             absorbInputAroundWindow = true;
             closeOnClickedOutside = false;
             draggable = true;
+        }
+
+        /// <summary>
+        /// Writes into the working copy every loaded tab that is on the bar only because nothing mentioned it.
+        ///
+        /// <b>Appended rather than rebuilt from <c>Resolve</c>,</b> and the difference is a player's arrangement.
+        /// Resolve drops entries naming a def that is not loaded, on purpose, so that toggling a mod off does not
+        /// erase where its tab used to sit. Save writes this working copy over the live config wholesale, so
+        /// taking Resolve's output as the new list would make opening this window and pressing Save delete the
+        /// arrangement of every mod currently switched off.
+        ///
+        /// <b>Hidden tabs are left out, which is what makes the other column mean something.</b> After this runs,
+        /// anything not on the bar is on the bar's hidden list, so "Not on the bar" is true of everything in it.
+        ///
+        /// <b>Inserted ahead of the entries pinned to the end,</b> matching where Resolve puts them, so a tab the
+        /// player has never seen cannot appear to the right of the slots they deliberately anchored.
+        /// </summary>
+        private void Materialize()
+        {
+            HashSet<string> known = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            foreach (UIButtonBarEntry entry in working.entries)
+            {
+                if (!entry.tab.NullOrEmpty())
+                    known.Add(entry.tab);
+
+                foreach (UIButtonBarEntry child in entry.children)
+                {
+                    if (!child.tab.NullOrEmpty())
+                        known.Add(child.tab);
+                }
+            }
+
+            int at = working.entries.Count;
+
+            for (int i = 0; i < working.entries.Count; i++)
+            {
+                if (!working.entries[i].last)
+                    continue;
+
+                at = i;
+
+                break;
+            }
+
+            foreach (MainButtonDef def in DefDatabase<MainButtonDef>.AllDefsListForReading)
+            {
+                if (def == null || known.Contains(def.defName) || working.IsHidden(def.defName)
+                    || UIButtonBarConfig.Suppressed(def.defName))
+                    continue;
+
+                working.entries.Insert(at, new UIButtonBarEntry { tab = def.defName });
+
+                at++;
+            }
         }
 
         private static UIButtonBarConfig Clone(UIButtonBarConfig source)

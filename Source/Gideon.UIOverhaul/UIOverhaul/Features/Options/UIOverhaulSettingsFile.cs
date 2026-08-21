@@ -162,6 +162,17 @@ namespace Gideon.UIOverhaul.Features.Options
         public string favoritePlants = string.Empty;
 
         /// <summary>
+        /// Recipes flagged as favorites in the workbench bill picker, in the same shape as
+        /// <see cref="favoritePlants"/> and for the same reasons.
+        ///
+        /// <b>A recipe's defName is not always enough to name the entry,</b> because an ideoligion's styles put
+        /// the same recipe in the list more than once. An entry is therefore the recipe's defName, and for a
+        /// styled variant the precept's name after a colon. A defName cannot contain a colon or a comma, so both
+        /// separators stay unambiguous.
+        /// </summary>
+        public string favoriteRecipes = string.Empty;
+
+        /// <summary>
         /// Whether the minimap is drawn in a corner of the map view.
         ///
         /// <b>On by default, like the other corner widgets.</b> It is the largest thing this mod puts on screen
@@ -271,6 +282,20 @@ namespace Gideon.UIOverhaul.Features.Options
         /// Display only. Nothing is ever suspended or altered because of it.
         /// </summary>
         public bool warnStalledBills = true;
+
+        /// <summary>
+        /// How many bills one workbench may hold.
+        ///
+        /// <b>A setting rather than a number of ours,</b> asked for on 2026-08-19. It was a hard 120 written into
+        /// the IL, which was chosen to be past anybody's real use rather than as a considered figure. Sixty is the
+        /// default: comfortably past vanilla's fifteen, which is the actual complaint, without turning a smelter
+        /// into a list nobody can read.
+        ///
+        /// Clamped where it is read rather than where it is written, so a hand-edited file with a silly number
+        /// gives a sensible cap instead of an exception. Never goes below vanilla's own fifteen; see
+        /// <c>BillCap.Floor</c> for why lowering a limit is a different feature from raising one.
+        /// </summary>
+        public int maxBillsPerBench = 60;
 
         /// <summary>
         /// Whether command buttons are drawn in this mod's theme.
@@ -797,6 +822,24 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.warnStalledBills = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "maxBillsPerBench":
+                            int bills;
+
+                            // Invariant like every other number here. Clamped by BillCap on read rather than
+                            // here, so this only has to decide what an unparseable value means, which is the
+                            // default rather than vanilla's fifteen: a corrupted line should not quietly take a
+                            // feature away.
+                            settings.maxBillsPerBench = int.TryParse(value, NumberStyles.Integer,
+                                CultureInfo.InvariantCulture, out bills)
+                                ? bills
+                                : 60;
+
+                            break;
+
+                        case "favoriteRecipes":
+                            settings.favoriteRecipes = value ?? string.Empty;
+                            break;
+
                         case "restyleCommandButtons":
                             settings.restyleCommandButtons = !value.EqualsIgnoreCase("false");
                             break;
@@ -1003,6 +1046,9 @@ namespace Gideon.UIOverhaul.Features.Options
                         compressAutosaves ? "true" : "false");
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
+                    writer.WriteElementString("maxBillsPerBench",
+                        maxBillsPerBench.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteElementString("favoriteRecipes", favoriteRecipes ?? string.Empty);
                     writer.WriteElementString("restyleCommandButtons",
                         restyleCommandButtons ? "true" : "false");
                     writer.WriteElementString("defaultIngredientRadius",

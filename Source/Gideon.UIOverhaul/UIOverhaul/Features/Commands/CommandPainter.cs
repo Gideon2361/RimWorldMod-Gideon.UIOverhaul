@@ -29,8 +29,26 @@ namespace Gideon.UIOverhaul.Features.Commands
     /// </summary>
     internal static class CommandPainter
     {
-        /// <summary>Height of the strip the label sits in, along the bottom.</summary>
+        /// <summary>Shortest the label strip along the bottom ever is. It grows for a second line.</summary>
         private const float LabelStrip = 20f;
+
+        /// <summary>
+        /// Most lines a label may take.
+        ///
+        /// Two, because that is what a two word command needs and three would cover most of a seventy-five pixel
+        /// button. Anything longer is shortened to fit rather than given the room.
+        /// </summary>
+        private const int LabelLines = 2;
+
+        /// <summary>
+        /// Shortened labels, keyed by the text and the width it was fitted to.
+        ///
+        /// A command's label does not change, and fitting one means measuring a string once per character removed,
+        /// so the answer is worked out on the first frame a command appears and read from here on every frame
+        /// after.
+        /// </summary>
+        private static readonly System.Collections.Generic.Dictionary<string, string> fitted =
+            new System.Collections.Generic.Dictionary<string, string>();
 
         private const float HotkeySize = 14f;
 
@@ -157,6 +175,23 @@ namespace Gideon.UIOverhaul.Features.Commands
             }
         }
 
+        /// <summary>
+        /// The label along the bottom, over as many lines as it needs up to two.
+        ///
+        /// <b>The strip grows to the text instead of clipping it.</b> It was a fixed twenty pixels with wrapping
+        /// left on, so anything that did not fit on one line wrapped to a second line the strip had no room for and
+        /// spilled out over the icon: "Selection tools" and "Prevent cutting" both came out as a word laid across
+        /// the picture. Measuring first and sizing the strip to the answer is the fix, and it is what a two word
+        /// command needs, since these labels are mostly two words and either one alone identifies nothing.
+        ///
+        /// <b>Two lines is the cap, and past that the text is shortened.</b> A third line would cover most of a
+        /// seventy-five pixel button. The strip is drawn over the icon rather than the icon being shrunk to fit,
+        /// which is also what vanilla does with its own label backdrop.
+        ///
+        /// <b>Shortening is cached,</b> because finding the longest string that fits two lines is a loop over
+        /// characters and this runs for every gizmo on screen every frame. The label of a given command does not
+        /// change, so the answer is computed once.
+        /// </summary>
         private static void Label(Command command, Rect rect, UIColorPaletteDef palette, bool disabled)
         {
             string text = command.LabelCap;
@@ -164,23 +199,76 @@ namespace Gideon.UIOverhaul.Features.Commands
             if (text.NullOrEmpty())
                 return;
 
-            Rect strip = new Rect(rect.x + 1f, rect.yMax - LabelStrip - 1f, rect.width - 2f, LabelStrip);
-
-            UIElementPainter.FillRounded(strip, palette.SurfaceSunken);
-
             GameFont font = Text.Font;
             TextAnchor anchor = Text.Anchor;
             Color color = GUI.color;
+            bool wrap = Text.WordWrap;
 
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = disabled ? palette.TextDisabled : palette.TextPrimary;
+            try
+            {
+                // Set before measuring, or the measurement belongs to whatever font the caller left behind.
+                Text.Font = GameFont.Tiny;
+                Text.WordWrap = true;
 
-            Widgets.Label(strip, text);
+                float room = Mathf.Max(8f, rect.width - 6f);
+                string shown = Fit(text, room);
+                float height = Mathf.Max(LabelStrip, Text.CalcHeight(shown, room) + 3f);
 
-            GUI.color = color;
-            Text.Anchor = anchor;
-            Text.Font = font;
+                Rect strip = new Rect(rect.x + 1f, rect.yMax - height - 1f, rect.width - 2f, height);
+
+                UIElementPainter.FillRounded(strip, palette.SurfaceSunken);
+
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = disabled ? palette.TextDisabled : palette.TextPrimary;
+
+                Widgets.Label(strip, shown);
+            }
+            finally
+            {
+                GUI.color = color;
+                Text.Anchor = anchor;
+                Text.WordWrap = wrap;
+                Text.Font = font;
+            }
+        }
+
+        /// <summary>
+        /// The most of this label that fits two lines at this width, with an ellipsis when something was dropped.
+        ///
+        /// <b>Trimmed by character rather than by word.</b> Dropping a whole word from a two word label loses the
+        /// half that tells one command from another: "Prevent" and "cutting" are each useless alone, while
+        /// "Prevent cutt..." is still read correctly. Vanilla's own <c>Truncate</c> is single line only, which is
+        /// why this is here rather than a call to it.
+        ///
+        /// Assumes the current font is already set, since the caller has just set it to measure with.
+        /// </summary>
+        private static string Fit(string text, float width)
+        {
+            string key = text + "|" + Mathf.RoundToInt(width);
+
+            if (fitted.TryGetValue(key, out string cached))
+                return cached;
+
+            float limit = Text.LineHeight * LabelLines + 1f;
+            string shown = text;
+
+            if (Text.CalcHeight(text, width) > limit)
+            {
+                while (shown.Length > 4 && Text.CalcHeight(shown + "...", width) > limit)
+                    shown = shown.Substring(0, shown.Length - 1);
+
+                shown = shown.TrimEnd() + "...";
+            }
+
+            // A backstop rather than a real expectation: gizmo labels are a bounded set, but a mod that numbers
+            // them would grow this without limit. Cleared wholesale, since a cache of measurements has no entry
+            // worth keeping over another.
+            if (fitted.Count > 512)
+                fitted.Clear();
+
+            fitted[key] = shown;
+
+            return shown;
         }
 
         /// <summary>

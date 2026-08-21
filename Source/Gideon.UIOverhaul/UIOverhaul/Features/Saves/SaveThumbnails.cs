@@ -41,6 +41,21 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>
+        /// The save this mod's own window has already asked for a picture of, or null.
+        ///
+        /// <b>Armed for one save and cleared in a finally,</b> the same shape as <c>SaveFolders.Redirect</c> and
+        /// <c>SaveCompressor.Requested</c>, and for the same reason: it describes one save in flight and either
+        /// left standing would be inherited by the next one.
+        ///
+        /// <b>It exists so the catch-all patch does not overwrite a better picture.</b> The save window captures
+        /// before the write, deliberately, so the thumbnail is the frame the player was looking at when they
+        /// pressed the button. <see cref="Patch_SaveThumbnail"/> captures after the write, which is the only moment
+        /// available for a save nobody asked for. Both firing on one save would replace the first picture with the
+        /// second, throwing away the one that was timed on purpose.
+        /// </summary>
+        internal static string Handled;
+
+        /// <summary>
         /// Arranges for a picture of the map to be written beside the save.
         ///
         /// <b>This does not render anything itself, and the first version's attempt to is why it produced a

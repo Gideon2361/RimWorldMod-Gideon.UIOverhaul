@@ -9,12 +9,17 @@ using RimWorld;
 namespace Gideon.UIOverhaul.Features.Bills
 {
     /// <summary>
-    /// Raises RimWorld's limit of fifteen bills per workbench.
+    /// Puts RimWorld's limit of fifteen bills per workbench under the player's control.
     ///
     /// <b>Why this is a transpiler and not a one line change.</b> <c>BillStack.MaxCount</c> is a
     /// <c>public const int</c>, and a const in C# is written into every place that reads it at compile time,
     /// the field in the assembly is documentation, and nothing at runtime consults it. So the number has to be
     /// replaced where it was inlined, which is the IL of the two methods that gate on it.
+    ///
+    /// <b>What replaces it is a call, not a bigger number.</b> The limit was a compiled-in 120 until 2026-08-19,
+    /// which meant it could not be a setting: changing it would have needed a repatch. Each load of the constant
+    /// now becomes a call to <see cref="BillCap.Current"/>, so the slider in the options works immediately.
+    /// Anything in this mod that displays the cap reads the same property, which is why the two cannot disagree.
     ///
     /// <b>Two gates, and missing either one leaves the feature half done.</b>
     /// <list type="bullet">
@@ -46,12 +51,15 @@ namespace Gideon.UIOverhaul.Features.Bills
         private const int VanillaLimit = 15;
 
         /// <summary>
-        /// What it becomes.
+        /// The property the constant becomes a call to.
         ///
-        /// Chosen to be past anybody's real use rather than as a considered maximum. It also stays inside a
-        /// signed byte, so the instruction that loaded the old value can load this one unchanged.
+        /// <b>A call rather than a bigger constant, so the limit is a setting.</b> Writing another number into
+        /// the IL would fix the cap for the session and need a repatch to change, which a slider cannot do. A
+        /// call site costs one indirection in a method that runs while drawing a list of at most a hundred rows,
+        /// which is nothing, and it means the slider takes effect on the next frame.
         /// </summary>
-        private const int RaisedLimit = 120;
+        private static readonly MethodInfo CapGetter =
+            AccessTools.PropertyGetter(typeof(BillCap), nameof(BillCap.Current));
 
         [HarmonyTargetMethods]
         public static IEnumerable<MethodBase> Targets()
@@ -76,8 +84,12 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 // Rewritten in place rather than swapped for a new instruction, so any label or exception block
                 // attached to it stays attached. A branch target landing on this offset is common.
-                instruction.opcode = OpCodes.Ldc_I4;
-                instruction.operand = RaisedLimit;
+                //
+                // A static property getter takes no arguments and leaves one int on the stack, which is exactly
+                // what the constant load it replaces did, so the surrounding IL and the stack depth are unchanged
+                // and the comparison that follows needs no adjustment.
+                instruction.opcode = OpCodes.Call;
+                instruction.operand = CapGetter;
 
                 replaced++;
             }
@@ -87,7 +99,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                 UIGuard.Report("Bills.RaiseLimit",
                     new MissingFieldException("No bill limit comparison found in "
                                               + (original == null ? "an unknown method" : original.Name)),
-                    "Workbenches still allow only fifteen bills.");
+                    "Workbenches still allow only fifteen bills, and the setting for it does nothing.");
             }
 
             return code;

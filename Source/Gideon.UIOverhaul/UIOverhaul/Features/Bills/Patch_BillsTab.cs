@@ -1,4 +1,5 @@
-using Gideon.UIFramework.Defs;
+using System;
+using System.Reflection;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
@@ -7,73 +8,81 @@ using Verse;
 
 namespace Gideon.UIOverhaul.Features.Bills
 {
-    /// <summary>The bills tab's own def, looked up once.</summary>
-    [DefOf]
-    public static class BillsDefOf
-    {
-        public static MainButtonDef Gideon_Bills;
-
-        static BillsDefOf()
-        {
-            DefOfHelper.EnsureInitializedInCtor(typeof(BillsDefOf));
-        }
-    }
-
     /// <summary>
-    /// Turns a workbench's Bills tab into the colony bills tab, filtered to that bench.
+    /// Widens the bills tab's pane to fit the cards.
     ///
-    /// <b>It opens the same tab the bottom button opens, not a window of its own.</b> That is what keeps the per
-    /// bench view from drifting away from the colony view: one window class, one set of columns, one editor, and
-    /// the bench is a filter on it. Pressing the button in the bottom row clears the filter.
+    /// <b>The size belongs to the tab object, not to the drawing.</b> <c>ITab_Bills</c> sets <c>size</c> from its
+    /// own <c>WinSize</c> in its constructor, and RimWorld lays the inspect pane out from that field, so
+    /// drawing wider than it without changing it just puts our right hand column outside the pane and clips it.
+    /// Widened on Aaron's report of the target column wrapping, 2026-08-19.
     ///
-    /// <b>Hooked on the tab opening rather than on it drawing.</b> <c>FillTab</c> runs every frame the tab is
-    /// visible, so switching tabs from there would fight the player sixty times a second. <c>OnOpen</c> fires once.
+    /// <b>The constructor rather than the field.</b> There is one <c>ITab_Bills</c> instance per workbench def,
+    /// each built once when its def is resolved, so a postfix here runs a few dozen times at startup and never
+    /// again. Setting the field from the draw path instead would write it sixty times a second.
     ///
-    /// <b>Patched on the base class on purpose.</b> <c>ITab_Bills</c> does not declare <c>OnOpen</c> itself, so
-    /// the patch goes on <c>InspectTabBase</c> where it is declared and tests the instance. Patching a method a
-    /// type merely inherits attaches to the base anyway; doing it deliberately makes the filter visible rather
-    /// than accidental.
+    /// <b>Height is left alone.</b> The pane grows upward from the bottom of the screen and 480 already holds
+    /// five cards; taller would start covering the map for no gain, since the list scrolls.
     /// </summary>
-    [HarmonyPatch(typeof(InspectTabBase), "OnOpen")]
-    internal static class Patch_BillsTabOpen
+    [HarmonyPatch(typeof(ITab_Bills), MethodType.Constructor)]
+    internal static class Patch_BillsTabSize
     {
+        /// <summary>
+        /// <c>InspectTabBase.size</c>, which is protected.
+        ///
+        /// Reached by reflection rather than by deriving from the tab, because the tab we need to resize is the
+        /// one every workbench def already names. Looked up once: this runs per workbench def at startup, and a
+        /// field lookup per instance would be waste.
+        /// </summary>
+        private static readonly FieldInfo Size = AccessTools.Field(typeof(InspectTabBase), "size");
+
         [HarmonyPostfix]
-        public static void Postfix(InspectTabBase __instance)
+        public static void Postfix(ITab_Bills __instance)
         {
-            if (!(__instance is ITab_Bills))
-                return;
+            UIGuard.Try("Bills.TabSize", () =>
+            {
+                if (Size == null)
+                {
+                    // Reported rather than ignored: without it the pane stays 420 and the cards are clipped on
+                    // the right, which looks like our drawing is broken rather than like a field being renamed.
+                    UIGuard.Report("Bills.TabSize",
+                        new MissingFieldException("InspectTabBase.size could not be found"),
+                        "The bills tab keeps RimWorld's narrower pane, so its right hand column is cut off.");
 
-            UIGuard.Try("Bills.TabOpen", () => Open(Find.Selector?.SingleSelectedThing as Building_WorkTable),
-                "The bills tab did not open. RimWorld's own tab is still behind it.");
-        }
+                    return;
+                }
 
-        /// <summary>Switches to the bills tab and points it at one bench.</summary>
-        internal static void Open(Building_WorkTable bench)
-        {
-            if (bench == null || BillsDefOf.Gideon_Bills == null)
-                return;
-
-            Find.MainTabsRoot?.SetCurrentTab(BillsDefOf.Gideon_Bills);
-
-            // Read after the switch, because switching is what creates the window, and told to reread rather than
-            // left to notice: PostOpen has already run by the time the filter arrives.
-            MainTabWindow_Bills window = Find.WindowStack?.WindowOfType<MainTabWindow_Bills>();
-
-            if (window == null)
-                return;
-
-            window.only = bench;
-
-            window.Reread();
+                Size.SetValue(__instance, new Vector2(WorkBenchBillsTab.Width, WorkBenchBillsTab.Height));
+            }, "The bills tab keeps RimWorld's narrower pane, so its right hand column is cut off.");
         }
     }
 
     /// <summary>
-    /// Stops the vanilla bills tab drawing its cramped list behind ours.
+    /// Replaces the contents of a workbench's Bills tab with this mod's own card list.
     ///
-    /// <b>Replaced rather than removed.</b> The tab still exists, because taking it away would remove the place
-    /// players click and would fight every other mod that expects it to be there. It says where its contents went
-    /// and offers the way there, which also leaves an obvious route back if the tab ever fails to open.
+    /// <b>A bench's tab is now about that bench, and nothing else.</b> It used to switch the player to the colony
+    /// wide bills tab with a filter set, which answered a different question from the one they asked by clicking
+    /// on a workbench: they pointed at one bench and got the whole colony, with the main tab bar changing under
+    /// them. Aaron asked for that removed on 2026-08-19 and for the growing zone's shape in its place.
+    ///
+    /// <b>Replacing the contents rather than registering a new ITab.</b> Every workbench def in the game and in
+    /// every mod names <c>ITab_Bills</c>, so a tab of our own would have to be patched onto each of those def
+    /// lists and would still leave the vanilla tab beside it. Prefixing <c>FillTab</c> reaches every bench that
+    /// has the tab, including ones from mods that never heard of us, and it keeps the tab in the place players
+    /// already click.
+    ///
+    /// <b>The vanilla tab's own state is left untouched.</b> Its paste button and its <c>mouseoverBill</c>
+    /// tracking are skipped along with its drawing; nothing reads them once the body does not run, and
+    /// <c>TabUpdate</c> handles a null perfectly well.
+    ///
+    /// <b>On failure it hands drawing back to RimWorld.</b> <c>Replaced</c> rather than <c>Try</c>, because a
+    /// bench with no bills interface is a bench a player cannot use, and vanilla's cramped list is far better than
+    /// an empty panel. See <c>no-vanilla-fallback</c> for why this is the exception: that rule is about our own
+    /// windows never quietly handing off, and this is a panel drawn inside RimWorld's own tab rather than a window
+    /// of ours.
+    ///
+    /// <b>Its return value is passed straight through, not negated.</b> <c>Replaced</c> already answers as a
+    /// prefix does: false when we drew, true to hand the method back. This was written negated and shipped that
+    /// way, which ran vanilla's list underneath ours and produced two interfaces stacked on top of each other.
     /// </summary>
     [HarmonyPatch(typeof(ITab_Bills), "FillTab")]
     internal static class Patch_BillsTabFill
@@ -81,14 +90,12 @@ namespace Gideon.UIOverhaul.Features.Bills
         [HarmonyPrefix]
         public static bool Prefix()
         {
-            return !UIGuard.Replaced("Bills.TabFill", Draw,
+            return UIGuard.Replaced("Bills.TabFill", Draw,
                 "RimWorld's own bills tab is drawn instead of ours.");
         }
 
         private static void Draw()
         {
-            UIColorPaletteDef palette = UIColorPaletteDef.Active;
-
             GameFont font = Text.Font;
             TextAnchor anchor = Text.Anchor;
             Color color = GUI.color;
@@ -97,13 +104,8 @@ namespace Gideon.UIOverhaul.Features.Bills
             {
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.UpperLeft;
-                GUI.color = palette.TextSecondary;
 
-                Widgets.Label(new Rect(12f, 12f, 396f, 60f),
-                    "This bench's bills are on the Bills tab, in the row along the bottom.");
-
-                if (BillButtons.Button(new Rect(12f, 78f, 180f, 30f), "Open bills", palette, true))
-                    Patch_BillsTabOpen.Open(Find.Selector?.SingleSelectedThing as Building_WorkTable);
+                WorkBenchBillsTab.Draw(Find.Selector?.SingleSelectedThing as Building_WorkTable);
             }
             finally
             {

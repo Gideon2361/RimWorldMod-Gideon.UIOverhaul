@@ -58,6 +58,11 @@ namespace Gideon.UIOverhaul.Features.Saves
             // capturing first is what makes the picture the frame the player was actually looking at.
             SaveThumbnails.Capture(target);
 
+            // Claimed here and not inside Capture, because Patch_SaveThumbnail calls Capture too. Setting it in
+            // there would have that patch arm the flag against itself, and the next autosave landing on the same
+            // rotation slot would be skipped as already handled.
+            SaveThumbnails.Handled = target;
+
             LongEventHandler.QueueLongEvent(() =>
             {
                 UIGuard.Try("Saves.Write", () =>
@@ -80,6 +85,11 @@ namespace Gideon.UIOverhaul.Features.Saves
                         // but the redirect must come off even on a path that does not.
                         SaveFolders.Redirect = null;
                         SaveCompressor.Requested = null;
+
+                        // Cleared alongside them for the same reason. Patch_SaveThumbnail normally clears this
+                        // itself when it sees the save it names go by, but a save that never reaches SaveGame at
+                        // all would otherwise leave it armed and cost the next autosave its picture.
+                        SaveThumbnails.Handled = null;
                     }
 
                     // Only once the new file is actually there. A move that deleted first and then failed to

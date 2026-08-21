@@ -7,8 +7,9 @@
     order 59 puts it between our grow zones tab (58) and vanilla's Research (60), so the tabs that answer
     "what is my colony doing" sit together.
 
-    The same window class is what a workbench's Bills tab now opens, with its bench filter set. One class
-    means the per bench view cannot drift away from the colony one, because it is the same view.
+    A workbench's own Bills tab is a different interface, not this window filtered. It used to be this one
+    with a bench filter set, and that was wrong: clicking a bench answered a question about the whole colony
+    and changed the tab bar underneath the player. See WorkBenchBillsTab.
   -->
   <MainButtonDef>
     <defName>Gideon_Bills</defName>
@@ -16,6 +17,20 @@
     <description>Every bill on every workbench in the colony: what it makes, how far along it is, who may work it, and which ones nobody can. Choose a bill to edit it in place, or save one as a template to reuse in any colony.</description>
     <tabWindowClass>Gideon.UIOverhaul.Features.Bills.MainTabWindow_Bills</tabWindowClass>
     <validWithoutMap>false</validWithoutMap>
+
+    <!--
+      No file extension and no Textures prefix: RimWorld's ContentFinder takes a path relative to Textures
+      and appends the extension itself. An order slip with a cogwheel, 256 square in the same flat grayscale
+      with a diagonal light to dark gradient as the rest of this mod's main button icons, so it tints with
+      the palette the way the others do.
+
+      A real file rather than a texture generated at run time, and that is the point rather than an
+      implementation detail: the bar's own icon picker offers whatever it finds in a mod's
+      Textures/UI/MainButtonIcons folder, and it stores the choice as a path. A generated texture has no
+      path, so it could never be offered, reassigned or borrowed by another tab.
+    -->
+    <iconPath>UI/MainButtonIcons/Bills</iconPath>
+
     <order>59</order>
   </MainButtonDef>
 

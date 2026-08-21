@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.GrowZones.UI;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -17,8 +18,11 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// got worse when we raised the cap from fifteen to a hundred and twenty ourselves, which is what made a
     /// colony wide list the fix rather than a restyle.
     ///
-    /// <b>The per bench tab is this window with a filter set,</b> not a second screen. One thing to learn and one
-    /// code path to keep working.
+    /// <b>A bench's own tab is a different interface, not this one filtered.</b> It was this one filtered, and
+    /// that was wrong: clicking a workbench pointed at one bench and got the whole colony, with the main tab bar
+    /// changing under the player. A bench now has its own card list, which is the growing zone's shape applied to
+    /// recipes. This window keeps the question only it can answer, which is "where is that bill?" across every
+    /// bench on every map. See <c>WorkBenchBillsTab</c> for the other one.
     ///
     /// <b>The bill is edited here rather than behind another window.</b> Vanilla puts every setting in
     /// <c>Dialog_BillConfig</c>, stacked over the tab, so comparing two bills is open, read, close, open. Selecting
@@ -66,16 +70,6 @@ namespace Gideon.UIOverhaul.Features.Bills
             Placeholder = "Search recipe, bill name or bench",
             MaxLength = 64
         };
-
-        /// <summary>
-        /// The bench the list is narrowed to, or null for the whole colony.
-        ///
-        /// <b>Settable from outside, which is what makes the bench tab a filter rather than a second window.</b>
-        /// Clicking Bills on a workbench switches to this tab and sets this; clicking the main button clears it.
-        /// One window class, one code path, and the per bench view cannot drift from the colony one because it is
-        /// the same view.
-        /// </summary>
-        internal Building_WorkTable only;
 
         private List<BillGroup> groups = new List<BillGroup>();
         private Bill_Production selected;
@@ -146,10 +140,6 @@ namespace Gideon.UIOverhaul.Features.Bills
         {
             base.PostOpen();
 
-            // Opened from the bottom button rather than from a bench, so the colony is the subject again. The
-            // bench patch sets this straight afterwards, which is why clearing it here is safe.
-            only = null;
-
             Search.Text = string.Empty;
 
             Reread();
@@ -163,7 +153,7 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// </summary>
         internal void Reread()
         {
-            groups = BillCatalog.Collect(only);
+            groups = BillCatalog.Collect();
 
             if (selected == null)
                 return;
@@ -235,7 +225,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             GUI.color = palette.TextPrimary;
 
             Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 30f, TitleHeight),
-                only == null ? "Bills" : "Bills - " + only.LabelCap);
+                "Bills");
 
             int total = BillCatalog.Total(groups);
             int troubled = BillCatalog.Troubled(groups);
@@ -272,15 +262,10 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Rect add = new Rect(templates.x - 118f, bar.y + 2f, 110f, 26f);
 
-            // Straight to the recipes when there is only one bench in view, and through a bench picker when the
-            // whole colony is. Asking which bench while looking at one bench would be a question with one answer.
+            // Through a bench picker, always. This window is the colony, so there is no bench in view to
+            // assume; a bench that is in view has its own tab with its own card picker on it.
             if (Button(add, "Add bill", palette, true))
-            {
-                if (only != null)
-                    BillActions.AddBill(only, Reread);
-                else
-                    BillActions.AddBillAnywhere(Reread);
-            }
+                BillActions.AddBillAnywhere(Reread);
 
             return bar.yMax;
         }
@@ -327,7 +312,7 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             foreach (BillGroup group in groups)
             {
-                if (Shown(group) == 0 && !Empty(group))
+                if (Shown(group) == 0)
                     continue;
 
                 height += BenchHeight + (Folded(group) ? 0f : Shown(group) * RowHeight);
@@ -347,7 +332,7 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 foreach (BillGroup group in groups)
                 {
-                    if (Shown(group) == 0 && !Empty(group))
+                    if (Shown(group) == 0)
                         continue;
 
                     y = Bench(new Rect(0f, y, view.width, BenchHeight), group, palette);
@@ -392,17 +377,6 @@ namespace Gideon.UIOverhaul.Features.Bills
             // would follow the cursor forever. Asking the button directly is the only thing that catches that.
             if (dragging != null && !Input.GetMouseButton(0))
                 Drop();
-        }
-
-        /// <summary>
-        /// A bench that is listed despite having nothing on it, which is only ever the bench being looked at.
-        ///
-        /// Its heading is what the Add bill button on the row hangs from, so an empty bench is somewhere to put a
-        /// first bill rather than a blank window.
-        /// </summary>
-        private static bool Empty(BillGroup group)
-        {
-            return group.Bills.Count == 0;
         }
 
         /// <summary>
@@ -549,7 +523,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             Text.Font = GameFont.Small;
             GUI.color = entry.Suspended ? palette.TextDisabled : palette.TextPrimary;
 
-            float textWidth = rect.width - 250f;
+            float textWidth = rect.width - 306f;
 
             Widgets.Label(new Rect(rect.x + 72f, rect.y + 6f, textWidth, 20f), entry.Label);
 
@@ -561,15 +535,64 @@ namespace Gideon.UIOverhaul.Features.Bills
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = entry.Trouble != BillTrouble.None ? palette.Danger : palette.TextSecondary;
 
-            Widgets.Label(new Rect(rect.xMax - 170f, rect.y, 160f, rect.height), State(entry));
+            Widgets.Label(new Rect(rect.xMax - 226f, rect.y, 160f, rect.height), State(entry));
 
             Text.Anchor = TextAnchor.UpperLeft;
 
+            bool acted = Actions(rect, entry, palette);
+
             // Not while dragging, or releasing the button over a row would select it as well as move something.
-            if (dragging == null && Widgets.ButtonInvisible(rect))
+            // Not after an action either: a click that suspended or deleted a bill is answered, and letting the
+            // row take it as well would select a bill the player was in the middle of removing.
+            if (!acted && dragging == null && Widgets.ButtonInvisible(rect))
                 selected = entry.Bill;
 
             return rect.yMax;
+        }
+
+        /// <summary>
+        /// Suspend and delete, on the row itself.
+        ///
+        /// <b>Here rather than only in the footer, which is what Aaron asked for on 2026-08-19.</b> Suspending one
+        /// bill used to be click the row, travel to the bottom of a 760 pixel window, click Suspend, and travel
+        /// back for the next one. The footer pair went with this change: with the action on every row they were a
+        /// second way to do the same thing, one of which needed a selection first.
+        ///
+        /// <b>Glyphs rather than words,</b> also asked for. A pause symbol and a bin are read without reading,
+        /// which is what a column repeated down a list of thirty six bills needs; two words each are not.
+        ///
+        /// <b>Delete is armed by colour rather than by a confirmation.</b> A bill is cheap to recreate and the
+        /// picker is two clicks away, so a modal per deletion would cost more than the mistake does. The bin is
+        /// drawn in the danger colour so it never reads as the neutral half of the pair.
+        /// </summary>
+        private bool Actions(Rect rect, BillEntry entry, UIColorPaletteDef palette)
+        {
+            Rect bin = new Rect(rect.xMax - 32f, rect.y + rect.height * 0.5f - 11f, 22f, 22f);
+            Rect pause = new Rect(bin.x - 26f, bin.y, 22f, 22f);
+
+            if (BillGlyphs.Pause != null && GzpPalette.IconButton(pause, BillGlyphs.Pause,
+                    entry.Suspended ? "Resume this bill" : "Suspend this bill",
+                    entry.Suspended ? palette.Warning : palette.TextSecondary))
+            {
+                entry.Bill.suspended = !entry.Bill.suspended;
+
+                Reread();
+
+                return true;
+            }
+
+            if (BillGlyphs.Trash == null || !GzpPalette.IconButton(bin, BillGlyphs.Trash, "Delete this bill",
+                    palette.Danger))
+                return false;
+
+            entry.Bill.billStack?.Delete(entry.Bill);
+
+            if (selected == entry.Bill)
+                selected = null;
+
+            Reread();
+
+            return true;
         }
 
         /// <summary>
@@ -1056,43 +1079,23 @@ namespace Gideon.UIOverhaul.Features.Bills
         {
             Rect rect = new Rect(inRect.x, inRect.yMax - FooterHeight, inRect.width, FooterHeight);
 
-            Rect suspend = new Rect(rect.x, rect.y + 6f, 110f, 30f);
-            Rect delete = new Rect(suspend.xMax + 8f, rect.y + 6f, 90f, 30f);
             Rect close = new Rect(rect.xMax - 90f, rect.y + 6f, 90f, 30f);
-
-            if (selected == null)
-            {
-                UIElementPainter.OutlineRounded(suspend, palette.Border, palette.ControlBackgroundFaded);
-                UIElementPainter.OutlineRounded(delete, palette.Border, palette.ControlBackgroundFaded);
-            }
-            else
-            {
-                if (Button(suspend, selected.suspended ? "Resume" : "Suspend", palette))
-                {
-                    selected.suspended = !selected.suspended;
-
-                    Reread();
-                }
-
-                if (Button(delete, "Delete", palette))
-                {
-                    selected.billStack?.Delete(selected);
-                    selected = null;
-
-                    Reread();
-                }
-            }
 
             Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleLeft;
 
             int troubled = BillCatalog.Troubled(groups);
 
+            // <b>No Suspend and Delete buttons here any more.</b> Both actions are on every row, so a pair down
+            // here was a second route to the same thing that additionally required selecting a bill first, which
+            // is the round trip Aaron asked to be rid of. The line they used to sit beside now starts at the left
+            // edge and has the room to say something.
+            //
             // A refused drag takes the line, because it is the thing that just happened and the player needs to
             // know their gesture did nothing rather than assume it worked.
             GUI.color = note == null ? palette.TextSecondary : palette.Warning;
 
-            Widgets.Label(new Rect(delete.xMax + 14f, rect.y, close.x - delete.xMax - 24f, FooterHeight),
+            Widgets.Label(new Rect(rect.x, rect.y, close.x - rect.x - 14f, FooterHeight),
                 note ?? (troubled == 0
                     ? "Every bill has somebody who can work it."
                     : troubled + (troubled == 1 ? " bill has" : " bills have") + " nobody who can work them."));

@@ -8,12 +8,36 @@ using Verse.Sound;
 namespace Gideon.UIOverhaul.Features.Bills
 {
     /// <summary>
-    /// The things the bills window does to the colony rather than to itself: making a bill, choosing which bench
-    /// it goes on, and restricting who works it.
+    /// One thing a bench can be told to make: a recipe, and the ideology style of it when there is one.
     ///
-    /// <b>Separated from the window because none of it is drawing.</b> Each of these opens a menu and then
-    /// changes the game, and keeping them out of the layout code is what stops a mistake in a rectangle from
-    /// turning into a mistake in somebody's colony.
+    /// <b>A pair rather than a recipe alone,</b> because the same recipe appears more than once when an
+    /// ideoligion has styles for what it produces, and the style is what tells those entries apart. Keeping them
+    /// together means the float menu and the card picker offer exactly the same set and create exactly the same
+    /// bill, rather than two lists that agree until somebody edits one.
+    /// </summary>
+    internal sealed class RecipeOffer
+    {
+        internal RecipeDef Recipe;
+
+        /// <summary>Null for the plain recipe.</summary>
+        internal Precept_ThingStyle Style;
+
+        internal string Label => Style != null
+            ? "RecipeMake".Translate(Style.LabelCap).CapitalizeFirst().ToString()
+            : Recipe.LabelCap.ToString();
+
+        /// <summary>What to draw for it, which is not always what it produces. See the note in the row drawer.</summary>
+        internal ThingDef Icon => Recipe?.UIIconThing;
+    }
+
+    /// <summary>
+    /// The things the bills interfaces do to the colony rather than to themselves: making a bill, choosing which
+    /// bench it goes on, and restricting who works it.
+    ///
+    /// <b>Separated from the windows because none of it is drawing,</b> and because three interfaces now share it:
+    /// the colony window, the float menu, and the card picker on a bench. Each of these opens a menu or writes to
+    /// a bill stack, and keeping them out of the layout code is what stops a mistake in a rectangle from turning
+    /// into a mistake in somebody's colony.
     ///
     /// <b>The recipe list is built the way RimWorld builds it,</b> including the ideology building variants and
     /// the two warnings it raises before adding: no mechanitor for a mechanitor recipe, and nobody skilled
@@ -23,6 +47,37 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// </summary>
     internal static class BillActions
     {
+        /// <summary>
+        /// Everything this bench can be asked to make right now, in the def's own order.
+        ///
+        /// Shared by the float menu and by the card picker so the two cannot disagree. Guarded, because it walks
+        /// def lists and reaches through the player faction's ideoligions.
+        /// </summary>
+        internal static List<RecipeOffer> Available(Building_WorkTable bench)
+        {
+            return UIGuard.Try("Bills.AvailableRecipes", () =>
+            {
+                List<RecipeOffer> offers = new List<RecipeOffer>();
+                List<RecipeDef> all = bench?.def?.AllRecipes;
+
+                if (all == null)
+                    return offers;
+
+                foreach (RecipeDef recipe in all)
+                {
+                    if (recipe == null || !recipe.AvailableNow || !recipe.AvailableOnNow(bench))
+                        continue;
+
+                    offers.Add(new RecipeOffer { Recipe = recipe });
+
+                    foreach (Precept_ThingStyle style in Styles(recipe))
+                        offers.Add(new RecipeOffer { Recipe = recipe, Style = style });
+                }
+
+                return offers;
+            }, new List<RecipeOffer>(), "The list of recipes for this bench could not be built.");
+        }
+
         /// <summary>
         /// Opens the recipe menu for one bench and adds whatever is chosen.
         ///
@@ -131,20 +186,13 @@ namespace Gideon.UIOverhaul.Features.Bills
         private static List<FloatMenuOption> Recipes(Building_WorkTable bench, System.Action added)
         {
             List<FloatMenuOption> options = new List<FloatMenuOption>();
-            List<RecipeDef> all = bench.def?.AllRecipes;
 
-            if (all == null)
-                return options;
-
-            foreach (RecipeDef recipe in all)
+            foreach (RecipeOffer offer in Available(bench))
             {
-                if (recipe == null || !recipe.AvailableNow || !recipe.AvailableOnNow(bench))
-                    continue;
+                RecipeOffer captured = offer;
 
-                Offer(options, bench, recipe, null, added);
-
-                foreach (Precept_ThingStyle style in Styles(recipe))
-                    Offer(options, bench, recipe, style, added);
+                options.Add(new FloatMenuOption(captured.Label, () => Make(bench, captured, added),
+                    captured.Icon, captured.Recipe.UIIcon));
             }
 
             return options;
@@ -182,28 +230,20 @@ namespace Gideon.UIOverhaul.Features.Bills
             }
         }
 
-        private static void Offer(List<FloatMenuOption> options, Building_WorkTable bench, RecipeDef recipe,
-            Precept_ThingStyle style, System.Action added)
-        {
-            string label = style != null
-                ? "RecipeMake".Translate(style.LabelCap).CapitalizeFirst().ToString()
-                : recipe.LabelCap.ToString();
-
-            options.Add(new FloatMenuOption(label, () => Make(bench, recipe, style, added),
-                recipe.UIIconThing, recipe.UIIcon));
-        }
-
         /// <summary>
         /// Creates the bill and puts it on the bench.
         ///
         /// The two warnings come before the bill rather than instead of it, exactly as vanilla does: the player
         /// asked for the bill, so they get the bill, and they are told what will stop it running.
         /// </summary>
-        private static void Make(Building_WorkTable bench, RecipeDef recipe, Precept_ThingStyle style,
-            System.Action added)
+        internal static void Make(Building_WorkTable bench, RecipeOffer offer, System.Action added)
         {
             UIGuard.Try("Bills.Add", () =>
             {
+                if (bench == null || offer?.Recipe == null)
+                    return;
+
+                RecipeDef recipe = offer.Recipe;
                 Map map = bench.Map;
 
                 if (ModsConfig.BiotechActive && recipe.mechanitorOnlyRecipe
@@ -219,7 +259,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                     Bill.CreateNoPawnsWithSkillDialog(recipe);
                 }
 
-                Bill bill = recipe.MakeNewBill(style);
+                Bill bill = recipe.MakeNewBill(offer.Style);
 
                 bench.billStack?.AddBill(bill);
 

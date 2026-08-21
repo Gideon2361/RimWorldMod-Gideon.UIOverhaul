@@ -58,15 +58,18 @@ namespace Gideon.UIOverhaul.Features.Bills
     {
         /// <summary>
         /// Every bench with at least one bill, across every map.
+        ///
+        /// <b>No per bench mode.</b> There used to be one, because clicking Bills on a workbench opened this
+        /// window filtered to that bench. A bench now has its own card list on its own tab, so a filter parameter
+        /// nothing passes would be a promise this class no longer keeps. See <c>Patch_BillsTabFill</c>.
         /// </summary>
-        /// <param name="only">Restrict to one bench, which is how the per bench tab becomes a filtered view.</param>
-        internal static List<BillGroup> Collect(Building_WorkTable only = null)
+        internal static List<BillGroup> Collect()
         {
-            return UIGuard.Try("Bills.Catalog", () => Gather(only), new List<BillGroup>(),
+            return UIGuard.Try("Bills.Catalog", Gather, new List<BillGroup>(),
                 "The colony's bills could not be listed.");
         }
 
-        private static List<BillGroup> Gather(Building_WorkTable only)
+        private static List<BillGroup> Gather()
         {
             List<BillGroup> groups = new List<BillGroup>();
             List<Map> maps = Find.Maps;
@@ -75,13 +78,6 @@ namespace Gideon.UIOverhaul.Features.Bills
                 return groups;
 
             bool many = maps.Count > 1;
-
-            // A bench with no bills is listed only when it is the bench being looked at. In the colony view it
-            // would be noise: a developed colony has dozens of worktables and most of them are idle, and a list
-            // of empty headings is a worse answer to "where is that bill?" than no heading at all. Looking at one
-            // bench is the opposite case, since an empty bench is exactly where a player goes to add the first
-            // bill and there would otherwise be nothing on screen to add it to.
-            bool keepEmpty = only != null;
 
             foreach (Map map in maps)
             {
@@ -95,10 +91,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                     if (!(building is Building_WorkTable bench))
                         continue;
 
-                    if (only != null && bench != only)
-                        continue;
-
-                    BillGroup group = Read(bench, map, many, keepEmpty);
+                    BillGroup group = Read(bench, map, many);
 
                     if (group != null)
                         groups.Add(group);
@@ -108,7 +101,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             return groups;
         }
 
-        private static BillGroup Read(Building_WorkTable bench, Map map, bool many, bool keepEmpty)
+        private static BillGroup Read(Building_WorkTable bench, Map map, bool many)
         {
             List<Bill> bills = bench.billStack?.Bills;
 
@@ -137,7 +130,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                 });
             }
 
-            return group.Bills.Count == 0 && !keepEmpty ? null : group;
+            return group.Bills.Count == 0 ? null : group;
         }
 
         /// <summary>The room the bench is in, plus the map when there is more than one.</summary>

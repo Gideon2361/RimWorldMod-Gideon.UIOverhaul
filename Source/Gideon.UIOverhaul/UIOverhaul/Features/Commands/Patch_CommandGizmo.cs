@@ -32,7 +32,13 @@ namespace Gideon.UIOverhaul.Features.Commands
 
             // Replaced rather than Try, because this stands in for RimWorld's own drawing: a failure has to fall
             // back to it rather than leave the player with no button at all.
-            if (!UIGuard.Replaced("Gizmos.Draw", () => drawn = CommandPainter.Draw(__instance, butRect, parms),
+            //
+            // <b>Its return value is already what a prefix returns</b>, so it is passed straight through: false
+            // when we drew, true to let RimWorld draw. This was written negated, which inverted the whole patch,
+            // and it shipped that way in 14123. On success it ran vanilla's drawing on top of ours, and on
+            // failure it suppressed vanilla and returned a default GizmoResult, which is the one outcome the
+            // guard exists to prevent.
+            if (UIGuard.Replaced("Gizmos.Draw", () => drawn = CommandPainter.Draw(__instance, butRect, parms),
                     "Command buttons are drawn RimWorld's own way."))
             {
                 return true;

@@ -2253,7 +2253,121 @@ namespace Gideon.UIOverhaul.Features.Options
             GUI.color = palette.TextPrimary;
 
             y += 44f;
+
+            GroupLabel(view, ref y, palette, "Bills");
+
+            DrawBillCap(view, ref y, palette, settings);
+            DrawIngredientRadius(view, ref y, palette, settings);
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Point out bills nobody can work",
+                settings.warnStalledBills, value => settings.warnStalledBills = value,
+                "Marks a bill red in the bills window when no colonist is allowed to start it, whether because "
+                + "of its skill range, its worker restriction, or the work type being switched off for "
+                + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
         }
+
+        /// <summary>
+        /// How many bills one workbench may hold.
+        ///
+        /// <b>The floor is vanilla's own fifteen and that is deliberate.</b> Raising a cap is safe; lowering one
+        /// below what a bench already holds only produces a disabled Add button and a number that reads as an
+        /// error, since nothing here ever deletes a bill.
+        ///
+        /// Saved when the drag ends rather than on every frame of it, like the room label minimum: each save
+        /// rewrites the whole settings file and a slider raises a change per pixel of movement.
+        /// </summary>
+        private void DrawBillCap(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            int shown = Mathf.Clamp(settings.maxBillsPerBench, Bills.BillCap.Floor, Bills.BillCap.Ceiling);
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Most bills on one workbench: " + shown);
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f), shown,
+                Bills.BillCap.Floor, Bills.BillCap.Ceiling, false, null, null, null, 1f);
+
+            y += 26f;
+
+            GUI.color = palette.TextSecondary;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "RimWorld's own limit is fifteen. Bills already on a bench are never removed by lowering this.");
+
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 6f;
+
+            int rounded = Mathf.RoundToInt(chosen);
+
+            if (rounded != settings.maxBillsPerBench)
+            {
+                settings.maxBillsPerBench = rounded;
+                billCapUnsaved = true;
+            }
+
+            if (!billCapUnsaved || Input.GetMouseButton(0))
+                return;
+
+            billCapUnsaved = false;
+            settings.Save();
+        }
+
+        /// <summary>Whether the bill cap has been dragged somewhere that is not on disk yet.</summary>
+        private bool billCapUnsaved;
+
+        /// <summary>
+        /// The search radius a newly made bill starts with.
+        ///
+        /// <b>999 is vanilla's own value and reads as Whole map,</b> because that is what it means: a crafter will
+        /// walk to the far corner for one item. Shipping anything smaller as the default would quietly stall bills
+        /// for everybody who never opened this, in colonies whose stockpiles are simply far from the bench.
+        ///
+        /// Existing bills are never touched. Each bill's own radius is on its settings window.
+        /// </summary>
+        private void DrawIngredientRadius(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            int shown = Mathf.Clamp(Mathf.RoundToInt(settings.defaultIngredientRadius), 3, 999);
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "New bills search for ingredients within: " + (shown >= 999 ? "the whole map" : shown + " tiles"));
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f), shown, 3f,
+                999f, false, null, null, null, 1f);
+
+            y += 26f;
+
+            GUI.color = palette.TextSecondary;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Applies to bills you make from now on. Bills you already have keep the radius you gave them.");
+
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 6f;
+
+            int rounded = Mathf.RoundToInt(chosen);
+
+            if (rounded != Mathf.RoundToInt(settings.defaultIngredientRadius))
+            {
+                settings.defaultIngredientRadius = rounded;
+                radiusUnsaved = true;
+            }
+
+            if (!radiusUnsaved || Input.GetMouseButton(0))
+                return;
+
+            radiusUnsaved = false;
+            settings.Save();
+        }
+
+        /// <summary>Whether the default ingredient radius has been dragged somewhere that is not on disk yet.</summary>
+        private bool radiusUnsaved;
 
         /// <summary>
         /// The typeface, with each choice drawn in itself.

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Options;
 using HarmonyLib;
@@ -191,10 +192,10 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
             IReadOnlyList<Room> rooms = map.regionGrid == null ? null : map.regionGrid.AllRooms;
 
+            // One tally per reason a room went unlabelled, for the debug census below. Reasons come from
+            // Rejection so this counts the rule that actually decided rather than a second copy of it.
+            Dictionary<string, int> passed = new Dictionary<string, int>();
             int seen = 0;
-            int notStructural = 0;
-            int tooSmall = 0;
-            int noRun = 0;
 
             if (rooms != null)
             {
@@ -204,16 +205,18 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
                     seen++;
 
-                    if (!Structural(room))
+                    string rejected = Rejection(room);
+
+                    if (rejected != null)
                     {
-                        notStructural++;
+                        Tally(passed, rejected);
 
                         continue;
                     }
 
                     if (room.CellCount < MinimumRoomCells)
                     {
-                        tooSmall++;
+                        Tally(passed, "under the " + MinimumRoomCells + " cell minimum");
 
                         continue;
                     }
@@ -228,7 +231,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
                     if (!Placeable(spot))
                     {
-                        noRun++;
+                        Tally(passed, "no run wide enough even over furniture");
 
                         continue;
                     }
@@ -238,7 +241,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
                 }
             }
 
-            Census(seen, notStructural, tooSmall, noRun);
+            Census(seen, passed);
 
             if (map.zoneManager == null)
                 return;
@@ -283,30 +286,55 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// number and prints a line; a colony sitting still prints nothing. Costs four integers and a comparison
         /// per rebuild when logging is off.
         /// </summary>
-        private static void Census(int seen, int notStructural, int tooSmall, int noRun)
+        private static void Census(int seen, Dictionary<string, int> passed)
         {
             if (!UIDebug.Enabled)
                 return;
 
-            if (seen == lastSeen && notStructural == lastNotStructural && tooSmall == lastTooSmall
-                && noRun == lastNoRun)
+            StringBuilder line = new StringBuilder();
+
+            line.Append("Floor labels: ").Append(seen).Append(" rooms on the map, ").Append(RoomSpots.Count)
+                .Append(" placed.");
+
+            if (passed.Count > 0)
+                line.Append(" Passed over");
+
+            bool first = true;
+
+            foreach (KeyValuePair<string, int> pair in passed)
+            {
+                line.Append(first ? " " : ", ").Append(pair.Value).Append(' ').Append(pair.Key);
+
+                first = false;
+            }
+
+            line.Append('.');
+
+            string text = line.ToString();
+
+            if (text == lastLine)
                 return;
 
-            lastSeen = seen;
-            lastNotStructural = notStructural;
-            lastTooSmall = tooSmall;
-            lastNoRun = noRun;
+            lastLine = text;
 
-            UIDebug.Log("Floor labels: " + seen + " rooms on the map, " + RoomSpots.Count + " placed. Passed over "
-                        + notStructural + " as not a proper indoor room, " + tooSmall + " as under the "
-                        + MinimumRoomCells + " cell minimum, and " + noRun
-                        + " with no run wide enough even over furniture.");
+            UIDebug.Log(text);
         }
 
-        private static int lastSeen = -1;
-        private static int lastNotStructural = -1;
-        private static int lastTooSmall = -1;
-        private static int lastNoRun = -1;
+        private static void Tally(Dictionary<string, int> into, string reason)
+        {
+            into.TryGetValue(reason, out int already);
+
+            into[reason] = already + 1;
+        }
+
+        /// <summary>
+        /// The last line printed, compared whole rather than field by field.
+        ///
+        /// Eight counters compared individually is eight statics and eight conditions that have to be kept in step
+        /// with the message; the string is built either way when logging is on, and comparing it is one operation
+        /// that cannot fall out of step with what it prints.
+        /// </summary>
+        private static string lastLine;
 
         /// <summary>
         /// Whether a spot is worth keeping, which is also whether it is worth reserving.
@@ -330,17 +358,41 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
         /// Whether a room is the sort of thing that gets a name on its floor.
         ///
         /// <b>The outdoors is a Room too,</b> and it is the whole map. Skipping it is not a nicety: a label
-        /// scaled to the outdoors would be a word the size of the colony.
+        /// scaled to the outdoors would be a word the size of the colony. So are doorways, and there is one per
+        /// door.
         /// </summary>
         internal static bool Structural(Room room)
         {
+            return Rejection(room) == null;
+        }
+
+        /// <summary>
+        /// Why this room gets no label, or null when it does.
+        ///
+        /// <b>The rule lives here once, and the census reads it.</b> The diagnostic first restated these five
+        /// tests in the rebuild loop so it could count them separately, which left two copies of the same rule
+        /// one screen apart, and the copy in the loop was the one that decided what got drawn. Editing
+        /// <see cref="Structural"/> would then have changed the labels window and not the labels. Returning the
+        /// reason instead gives the census its breakdown for free and leaves one rule.
+        ///
+        /// The strings are diagnostic text and are never shown to a player, which is why they read as reasons
+        /// rather than as sentences.
+        /// </summary>
+        private static string Rejection(Room room)
+        {
             if (room == null || room.Map == null)
-                return false;
+                return "no map";
 
-            if (room.Fogged || room.IsDoorway || !room.ProperRoom)
-                return false;
+            if (room.Fogged)
+                return "fogged";
 
-            return !room.PsychologicallyOutdoors && !room.TouchesMapEdge;
+            if (room.IsDoorway)
+                return "doorway";
+
+            if (!room.ProperRoom || room.TouchesMapEdge)
+                return "not enclosed";
+
+            return room.PsychologicallyOutdoors ? "outdoors" : null;
         }
 
         private static void DrawRooms(Map map, GameComponent_FloorLabels store)

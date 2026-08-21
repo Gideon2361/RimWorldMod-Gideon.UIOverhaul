@@ -176,6 +176,11 @@ namespace Gideon.UIFramework.Helpers
         /// </summary>
         internal Texture2D ToTexture(string name)
         {
+            return Bake(name);
+        }
+
+        private Texture2D Bake(string name)
+        {
             Texture2D texture = new Texture2D(width, height, TextureFormat.ARGB32, false)
             {
                 // The same two settings the shared shapes use, for the same reasons: clamped so an edge pixel does

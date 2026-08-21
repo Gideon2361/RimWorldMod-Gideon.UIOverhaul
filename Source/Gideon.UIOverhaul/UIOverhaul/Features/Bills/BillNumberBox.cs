@@ -46,19 +46,30 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// </summary>
         private int shown = int.MinValue;
 
-        /// <summary>Draws the control and returns what the number should now be.</summary>
+        /// <summary>
+        /// Draws the control and returns what the number should now be.
+        ///
+        /// A null <paramref name="label"/> draws no label and gives the whole rectangle to the field and its two
+        /// buttons, which is what a bill row wants: the row already says what the number is for, and repeating it
+        /// in 96 pixels the row does not have would cost the field instead.
+        /// </summary>
         internal int Draw(Rect rect, UIColorPaletteDef palette, string label, object subject, int value, int low,
             int high)
         {
-            float labelWidth = 96f;
+            float labelWidth = 0f;
 
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = palette.TextSecondary;
+            if (label != null)
+            {
+                labelWidth = 96f;
 
-            Widgets.Label(new Rect(rect.x, rect.y, labelWidth - 6f, rect.height), label);
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextSecondary;
 
-            Text.Anchor = TextAnchor.UpperLeft;
+                Widgets.Label(new Rect(rect.x, rect.y, labelWidth - 6f, rect.height), label);
+
+                Text.Anchor = TextAnchor.UpperLeft;
+            }
 
             Rect minus = new Rect(rect.x + labelWidth, rect.y, 26f, rect.height);
             Rect plus = new Rect(rect.xMax - 26f, rect.y, 26f, rect.height);
