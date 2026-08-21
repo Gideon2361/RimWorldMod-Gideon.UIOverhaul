@@ -151,6 +151,194 @@ namespace Gideon.UIOverhaul.Features.Bills
                 new BillTemplateOutcome { Usable = false, Unusable = "This template could not be read." }, null);
         }
 
+        /// <summary>
+        /// Every bill on a bench as one template.
+        ///
+        /// <b>The order is kept because the order is the priority.</b> A bench's bills are worked top down, so a
+        /// template that sorted them would import a working setup that behaves differently from the one it was
+        /// taken from.
+        ///
+        /// The bench's own def is recorded so applying it elsewhere can say whether the bench matches. See the
+        /// note on <see cref="BillTemplate.BenchDef"/> for why a mismatch warns rather than refuses.
+        /// </summary>
+        internal static BillTemplate CaptureBench(Building_WorkTable bench, string name)
+        {
+            return UIGuard.Try("Bills.Templates.CaptureBench", () =>
+            {
+                if (bench == null)
+                    return null;
+
+                BillTemplate template = new BillTemplate
+                {
+                    Name = name,
+                    Kind = BillTemplateKind.Bench,
+                    BenchDef = bench.def?.defName,
+                    Origin = bench.LabelCap,
+                    Saved = DateTime.Now.ToString("yyyy-MM-dd")
+                };
+
+                List<Bill> bills = bench.billStack?.Bills;
+
+                if (bills == null)
+                    return template;
+
+                foreach (Bill bill in bills)
+                {
+                    // Only production bills carry anything a template can hold. Anything else a mod has put on
+                    // the bench is left behind rather than saved as an empty entry that would import as nothing.
+                    if (!(bill is Bill_Production production))
+                        continue;
+
+                    BillTemplate child = Capture(production, production.LabelCap);
+
+                    if (child != null)
+                        template.Bills.Add(child);
+                }
+
+                return template;
+            }, null, "That bench could not be saved as a template.");
+        }
+
+        /// <summary>
+        /// Makes a new bill on a bench from a bill template.
+        ///
+        /// <b>This is the half the feature was missing.</b> Applying a template used to need a bill to apply it
+        /// onto, so a template was a way to reconfigure something that already existed rather than a way to set
+        /// something up. Asked for by Aaron on 2026-08-20: choose a template, choose a bench, get the bill.
+        ///
+        /// <b>The bench has to offer the recipe.</b> A bill is created by the recipe, not by us, and putting one
+        /// on a bench whose def does not list it makes a bill nothing will ever work. That is refused rather than
+        /// created, and named, which is the same treatment a missing def already gets.
+        ///
+        /// The settings are then applied by the ordinary <see cref="Apply"/> walk, so there is exactly one place
+        /// that knows what travels onto a bill and what does not.
+        /// </summary>
+        internal static BillTemplateOutcome CreateOn(BillTemplate template, Building_WorkTable bench)
+        {
+            return UIGuard.Try("Bills.Templates.Create", () => Create(template, bench),
+                new BillTemplateOutcome { Usable = false, Unusable = "That template could not be applied." },
+                "No bill was created. The bench is unchanged.");
+        }
+
+        private static BillTemplateOutcome Create(BillTemplate template, Building_WorkTable bench)
+        {
+            BillTemplateOutcome outcome = new BillTemplateOutcome();
+
+            if (template == null || bench == null)
+            {
+                outcome.Usable = false;
+                outcome.Unusable = "There is nothing to apply, or nowhere to apply it.";
+
+                return outcome;
+            }
+
+            if (template.Kind != BillTemplateKind.Bill)
+            {
+                outcome.Usable = false;
+                outcome.Unusable = "Only a bill template can make a bill.";
+
+                return outcome;
+            }
+
+            RecipeDef recipe = template.Recipe.NullOrEmpty()
+                ? null
+                : DefDatabase<RecipeDef>.GetNamedSilentFail(template.Recipe);
+
+            if (recipe == null)
+            {
+                outcome.Usable = false;
+                outcome.Unusable = "Needs a recipe this game does not have: " + template.Recipe;
+
+                return outcome;
+            }
+
+            if (bench.def?.AllRecipes == null || !bench.def.AllRecipes.Contains(recipe))
+            {
+                outcome.Usable = false;
+                outcome.Unusable = bench.LabelCap + " cannot make " + recipe.label + ".";
+
+                return outcome;
+            }
+
+            if (bench.billStack == null || bench.billStack.Count >= BillCap.Current)
+            {
+                outcome.Usable = false;
+                outcome.Unusable = bench.LabelCap + " already has its " + BillCap.Current + " bills.";
+
+                return outcome;
+            }
+
+            // Made by the recipe and added before the settings are applied, because applying a store mode reads
+            // the bill's own bench to resolve a stockpile: a bill not yet on a stack has no map to look at.
+            Bill bill = recipe.MakeNewBill();
+
+            bench.billStack.AddBill(bill);
+
+            if (!(bill is Bill_Production production))
+            {
+                outcome.Applied = 0;
+
+                outcome.Skipped.Add("This recipe makes a kind of bill a template cannot configure, so it was "
+                                    + "added with its own defaults.");
+
+                return outcome;
+            }
+
+            return Run(template, production, bench.Map);
+        }
+
+        /// <summary>
+        /// Puts every bill in a bench template onto a bench.
+        ///
+        /// <b>Added to what is there, never replacing it.</b> Clearing the bench first would be the tidier import
+        /// and is not this mod's to do: bills are player configuration, and no import is worth silently deleting
+        /// a set of them. A bench that already has bills ends up with both, which is visible and undoable.
+        ///
+        /// <b>Each bill is judged on its own.</b> One the bench cannot make is skipped and named, and the rest
+        /// still arrive, which is the rule Aaron set for template import in the first place.
+        /// </summary>
+        internal static BillTemplateOutcome ApplyBench(BillTemplate template, Building_WorkTable bench)
+        {
+            return UIGuard.Try("Bills.Templates.ApplyBench", () =>
+            {
+                BillTemplateOutcome outcome = new BillTemplateOutcome();
+
+                if (template == null || bench == null || template.Kind != BillTemplateKind.Bench)
+                {
+                    outcome.Usable = false;
+                    outcome.Unusable = "That is not a bench template.";
+
+                    return outcome;
+                }
+
+                if (!template.BenchDef.NullOrEmpty() && bench.def != null
+                                                     && template.BenchDef != bench.def.defName)
+                {
+                    // A warning rather than a refusal. Two benches of different defs share most of their recipes
+                    // often enough that refusing would cost more than it protects, and every bill the target
+                    // cannot make is skipped below anyway.
+                    outcome.Skipped.Add("Saved from a different bench, so some bills may not fit.");
+                }
+
+                foreach (BillTemplate child in template.Bills)
+                {
+                    BillTemplateOutcome one = Create(child, bench);
+
+                    if (one.Usable)
+                    {
+                        outcome.Applied++;
+
+                        continue;
+                    }
+
+                    outcome.Skipped.Add((child?.Name ?? "A bill") + ": " + one.Unusable);
+                }
+
+                return outcome;
+            }, new BillTemplateOutcome { Usable = false, Unusable = "That bench template could not be applied." },
+                "No bills were added. The bench is unchanged.");
+        }
+
         /// <summary>Applies the template onto a bill, returning what travelled and what did not.</summary>
         internal static BillTemplateOutcome Apply(BillTemplate template, Bill_Production bill, Map map)
         {

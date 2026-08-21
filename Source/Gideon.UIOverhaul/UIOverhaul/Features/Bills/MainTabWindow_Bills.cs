@@ -262,10 +262,11 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Rect add = new Rect(templates.x - 118f, bar.y + 2f, 110f, 26f);
 
-            // Through a bench picker, always. This window is the colony, so there is no bench in view to
-            // assume; a bench that is in view has its own tab with its own card picker on it.
+            // Into the wizard, which asks for the bench itself as its first step. This window is the colony, so
+            // there is no bench in view to assume, and the two float menus this replaced were sixty bare names
+            // followed by a few hundred more.
             if (Button(add, "Add bill", palette, true))
-                BillActions.AddBillAnywhere(Reread);
+                Find.WindowStack.Add(new Dialog_AddWorkBill(Reread));
 
             return bar.yMax;
         }
@@ -463,7 +464,9 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             if (adding)
             {
-                BillActions.AddBill(group.Bench, Reread);
+                // Straight to the recipe step: this heading already names the bench, so the wizard's first
+                // question would have one answer.
+                Find.WindowStack.Add(new Dialog_AddWorkBill(group.Bench, Reread));
             }
             else if (group.Bench != null && Widgets.ButtonInvisible(rect))
             {
@@ -539,6 +542,8 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Text.Anchor = TextAnchor.UpperLeft;
 
+            Progress(rect, entry, palette);
+
             bool acted = Actions(rect, entry, palette);
 
             // Not while dragging, or releasing the button over a row would select it as well as move something.
@@ -548,6 +553,66 @@ namespace Gideon.UIOverhaul.Features.Bills
                 selected = entry.Bill;
 
             return rect.yMax;
+        }
+
+        /// <summary>
+        /// How close the bill is to its target, as a bar along the bottom of the row.
+        ///
+        /// <b>The growing zone's bar, applied here,</b> asked for on 2026-08-20. It answers the question the
+        /// subtitle only half answers: "until you have 5000" says what the target is and nothing about whether
+        /// the colony is near it.
+        ///
+        /// <b>Only for a target count bill, because only that mode has a denominator.</b> Do X times counts down
+        /// what is left with nothing recording where it started, and Forever has no end. A bar drawn for those
+        /// would have to invent a scale, which is the placeholder the bench row still carries and which is worse
+        /// than no bar: a bar is read as a proportion whether or not it is one.
+        ///
+        /// <b>Amber once the target is met,</b> matching the stripe and the badge, so a satisfied bill reads the
+        /// same in all three places.
+        /// </summary>
+        private static void Progress(Rect rect, BillEntry entry, UIColorPaletteDef palette)
+        {
+            Bill_Production bill = entry.Bill;
+
+            if (bill == null || bill.repeatMode != BillRepeatModeDefOf.TargetCount || bill.targetCount <= 0)
+                return;
+
+            int held = Held(bill);
+            float fill = Mathf.Clamp01(held / (float) bill.targetCount);
+
+            Rect bar = new Rect(rect.x + 72f, rect.yMax - 9f, rect.width - 300f, 4f);
+
+            if (bar.width <= 8f)
+                return;
+
+            UIElementPainter.FillRounded(bar, palette.SurfaceSunken);
+
+            if (fill > 0f)
+            {
+                UIElementPainter.FillRounded(new Rect(bar.x, bar.y, Mathf.Max(2f, bar.width * fill), bar.height),
+                    fill >= 1f ? palette.Warning : palette.Accent);
+            }
+
+            if (Mouse.IsOver(rect))
+                TooltipHandler.TipRegion(bar, (TipSignal)(held + " of " + bill.targetCount + " in the colony."));
+        }
+
+        /// <summary>
+        /// How many of the bill's product the colony already has.
+        ///
+        /// Asked of the recipe's own worker counter, which is what the game uses to decide whether the bill should
+        /// run at all, so the bar and the bill agree about when it is satisfied. Guarded and defaulting to zero:
+        /// it reaches the map's resource counter and a recipe whose product cannot be counted says so rather than
+        /// returning a number that means nothing.
+        /// </summary>
+        private static int Held(Bill_Production bill)
+        {
+            return UIGuard.Try("Bills.RowTargetCount", () =>
+            {
+                RecipeWorkerCounter counter = bill.recipe?.WorkerCounter;
+
+                return counter == null || !counter.CanCountProducts(bill) ? 0 : counter.CountProducts(bill);
+            }, 0, null);
         }
 
         /// <summary>

@@ -294,7 +294,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             BillTemplate template = new BillTemplate
             {
                 Name = Text(node, "name"),
-                Kind = Text(node, "kind") == "Filter" ? BillTemplateKind.Filter : BillTemplateKind.Bill,
+                Kind = ReadKind(Text(node, "kind")),
                 Origin = Text(node, "origin"),
                 Saved = Text(node, "saved"),
                 Recipe = Text(node, "recipe"),
@@ -318,7 +318,8 @@ namespace Gideon.UIOverhaul.Features.Bills
                 QualityMin = Text(node, "qualityMin") ?? "Awful",
                 QualityMax = Text(node, "qualityMax") ?? "Legendary",
                 SkillMin = Int(node, "skillMin", 0),
-                SkillMax = Int(node, "skillMax", 20)
+                SkillMax = Int(node, "skillMax", 20),
+                BenchDef = Text(node, "benchDef")
             };
 
             XmlNode allowed = node["allowed"];
@@ -332,7 +333,44 @@ namespace Gideon.UIOverhaul.Features.Bills
                 }
             }
 
+            // A bench template's bills, read by the same function that read this one. Nesting is one level deep
+            // and stays that way: a bench holds bills, and a bill holds nothing, so there is no recursion to
+            // bound. A bench nested inside a bench would be read here and then ignored by everything downstream.
+            XmlNode bills = node["bills"];
+
+            if (bills == null)
+                return template;
+
+            foreach (XmlNode child in bills.ChildNodes)
+            {
+                if (child.NodeType != XmlNodeType.Element || child.Name != Element)
+                    continue;
+
+                BillTemplate nested = ReadOne(child);
+
+                if (nested != null && nested.Kind == BillTemplateKind.Bill)
+                    template.Bills.Add(nested);
+            }
+
             return template;
+        }
+
+        /// <summary>
+        /// The kind an element names.
+        ///
+        /// <b>Anything unrecognised reads as a bill,</b> which is what a file written before the other kinds
+        /// existed says by saying nothing. Parsed by name rather than by <c>Enum.Parse</c> so a hand-edited file
+        /// with a typo gives a usable template rather than an exception on the way in, matching how every other
+        /// name in this mod's config files is read.
+        /// </summary>
+        private static BillTemplateKind ReadKind(string text)
+        {
+            if (string.Equals(text, "Filter", StringComparison.OrdinalIgnoreCase))
+                return BillTemplateKind.Filter;
+
+            return string.Equals(text, "Bench", StringComparison.OrdinalIgnoreCase)
+                ? BillTemplateKind.Bench
+                : BillTemplateKind.Bill;
         }
 
         internal static void Write(string path, List<BillTemplate> list)
@@ -393,12 +431,29 @@ namespace Gideon.UIOverhaul.Features.Bills
             Put(writer, "skillMin", template.SkillMin.ToString(CultureInfo.InvariantCulture));
             Put(writer, "skillMax", template.SkillMax.ToString(CultureInfo.InvariantCulture));
 
+            Put(writer, "benchDef", template.BenchDef);
+
             if (template.Allowed.Count > 0)
             {
                 writer.WriteStartElement("allowed");
 
                 foreach (string def in template.Allowed)
                     Put(writer, "li", def);
+
+                writer.WriteEndElement();
+            }
+
+            // Written through the same function, so a nested bill and a top level one cannot end up with
+            // different element names for the same field.
+            if (template.Bills.Count > 0)
+            {
+                writer.WriteStartElement("bills");
+
+                foreach (BillTemplate child in template.Bills)
+                {
+                    if (child != null)
+                        WriteOne(writer, child);
+                }
 
                 writer.WriteEndElement();
             }

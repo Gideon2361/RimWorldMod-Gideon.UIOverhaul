@@ -46,6 +46,19 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// <summary>Narrowest width worth drawing text into. Below this, nothing is drawn at all.</summary>
         private const float MinLabelWidth = 24f;
 
+        /// <summary>
+        /// A card in a branch drawn as things rather than as names.
+        ///
+        /// Sized so a three word thing name fits two lines under a legible icon. Wider than this and a screen
+        /// holds too few; narrower and the names start needing three lines.
+        /// </summary>
+        private const float CardWidth = 108f;
+
+        private const float CardHeight = 96f;
+
+        /// <summary>The artwork on a card. Large enough to tell a rifle from a pistol at a glance.</summary>
+        private const float IconSize = 44f;
+
         private static readonly List<DebugActionNode> Recent = new List<DebugActionNode>();
 
         private readonly UITextBoxControl search = new UITextBoxControl
@@ -62,6 +75,19 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
         /// <summary>The branch being browsed, or null when showing search results.</summary>
         private DebugActionNode inside;
+
+        /// <summary>
+        /// The branch whose children <see cref="expanded"/> holds, so a keystroke does not re-expand it.
+        ///
+        /// Separate from <c>cachedInside</c> on purpose: that one is part of the "has anything moved" test and
+        /// changes with the query too, and expanding is far too expensive to key on that.
+        /// </summary>
+        private DebugActionNode expandedFor;
+
+        private List<DevAction> expanded;
+
+        /// <summary>Whether this branch's children are being drawn as cards. See <see cref="DevActionArt"/>.</summary>
+        private bool cards;
 
         private List<DevAction> results = new List<DevAction>();
         private string cachedQuery = string.Empty;
@@ -201,40 +227,62 @@ namespace Gideon.UIOverhaul.Features.DevTools
             }
         }
 
+        /// <summary>
+        /// The header: the search box, and inside a branch the way back and where you are.
+        ///
+        /// <b>The box used to be replaced inside a branch, and that was wrong.</b> The reasoning was that the
+        /// query does not apply in there and a field that silently stopped filtering would be worse than none.
+        /// The premise was the mistake rather than the conclusion: the query can perfectly well apply to the
+        /// branch's own children, and some branches hold hundreds of them. Aaron reported it against Change
+        /// weather, which is a hundred and thirty names in five columns with no way to narrow them.
+        ///
+        /// So the box stays and filters the children instead. Nothing silently stops working, because what it
+        /// searches changes with where you are, and the placeholder says which.
+        /// </summary>
         private void DrawSearch(Rect rect, UIColorPaletteDef palette)
         {
-            if (inside != null)
+            if (inside == null)
             {
-                // Inside a branch the query does not apply, so the box is replaced by where you are and the way
-                // back. A search field that silently stopped filtering would be worse than not showing one.
-                UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
-
-                Rect back = new Rect(rect.x + 6f, rect.y + 4f, 70f, rect.height - 8f);
-
-                if (Button(back, "Back", palette))
-                    navigateOut = true;
-
-                GameFont previousFont = Text.Font;
-                Color previousColor = GUI.color;
-                TextAnchor previousAnchor = Text.Anchor;
-
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = palette.TextPrimary;
-
-                // LabelNow, not label. A node built with a labelGetter leaves the label field null, and drawing
-                // a null string is where backing out of such a branch threw.
-                Widgets.Label(new Rect(back.xMax + 10f, rect.y, rect.width - back.width - 24f, rect.height),
-                    Name(inside));
-
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
+                search.Placeholder = "Search every developer action";
+                search.Draw(rect, palette);
 
                 return;
             }
 
-            search.Draw(rect, palette);
+            Rect back = new Rect(rect.x, rect.y + 2f, 70f, rect.height - 4f);
+
+            if (Button(back, "Back", palette))
+                navigateOut = true;
+
+            // Where you are, kept to a third of the header so a long branch name cannot squeeze the box out.
+            float nameWidth = Mathf.Min(240f, (rect.width - back.width - 20f) * 0.45f);
+            Rect where = new Rect(back.xMax + 10f, rect.y, nameWidth, rect.height);
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+            bool previousWrap = Text.WordWrap;
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            Text.WordWrap = false;
+            GUI.color = palette.TextPrimary;
+
+            // LabelNow, not label. A node built with a labelGetter leaves the label field null, and drawing
+            // a null string is where backing out of such a branch threw.
+            string branch = Name(inside);
+
+            Widgets.Label(where, branch.Truncate(where.width));
+
+            Text.WordWrap = previousWrap;
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+
+            search.Placeholder = "Search " + branch;
+
+            search.Draw(new Rect(where.xMax + 10f, rect.y + 1f, Mathf.Max(60f, rect.xMax - where.xMax - 10f),
+                rect.height - 2f), palette);
         }
 
         private void DrawRail(Rect rect, UIColorPaletteDef palette)
@@ -365,14 +413,58 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
             if (inside != null)
             {
-                results = Children(inside);
+                // <b>Expanded once per branch, filtered per keystroke.</b> Children comes from a mod's own
+                // childGetter and can build a list of thousands, so re-expanding on every character typed is the
+                // one thing this must not do. The expansion is cached against the node and the query only
+                // narrows what came back.
+                if (inside != expandedFor)
+                {
+                    expandedFor = inside;
+                    expanded = Children(inside);
+                }
+
+                results = Narrow(expanded, query);
+                cards = DevActionArt.SuitsCards(results);
                 highlighted = 0;
 
                 return;
             }
 
+            expandedFor = null;
+            expanded = null;
+            cards = false;
+
             results = DevActionIndex.Search(query, tab, MaxResults);
             highlighted = 0;
+        }
+
+        /// <summary>
+        /// The children whose label contains the query.
+        ///
+        /// A plain substring test rather than the ranked scoring the top level search uses. Inside a branch every
+        /// candidate is a sibling of the same kind at the same depth, so there is nothing to rank them by, and
+        /// the reader is narrowing a known list rather than searching an unknown one.
+        /// </summary>
+        private static List<DevAction> Narrow(List<DevAction> source, string query)
+        {
+            if (source == null)
+                return new List<DevAction>();
+
+            string term = (query ?? string.Empty).Trim();
+
+            if (term.Length == 0)
+                return source;
+
+            List<DevAction> kept = new List<DevAction>();
+
+            foreach (DevAction action in source)
+            {
+                if (action.Label != null
+                    && action.Label.IndexOf(term, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    kept.Add(action);
+            }
+
+            return kept;
         }
 
         /// <summary>
@@ -433,14 +525,30 @@ namespace Gideon.UIOverhaul.Features.DevTools
             // space to the right of every one of them. Search results stay a single column, because there the
             // rows carry a category as well and the ranking means the answer is near the top rather than found
             // by scanning.
-            int columns = inside != null && results.Count > 12
-                ? Mathf.Max(1, Mathf.FloorToInt((inner.width - 18f) / 210f))
-                : 1;
+            //
+            // A branch whose children are things gets cards instead, which is a wider cell and a taller one. See
+            // DevActionArt for how a branch is judged to be that.
+            int columns;
+            float cellHeight;
+
+            if (cards)
+            {
+                columns = Mathf.Max(1, Mathf.FloorToInt((inner.width - 18f) / CardWidth));
+                cellHeight = CardHeight;
+            }
+            else
+            {
+                columns = inside != null && results.Count > 12
+                    ? Mathf.Max(1, Mathf.FloorToInt((inner.width - 18f) / 210f))
+                    : 1;
+
+                cellHeight = RowHeight;
+            }
 
             float columnWidth = (inner.width - 18f) / columns;
             int rows = Mathf.CeilToInt(results.Count / (float) columns);
 
-            Rect view = new Rect(0f, 0f, inner.width - 18f, rows * RowHeight);
+            Rect view = new Rect(0f, 0f, inner.width - 18f, rows * cellHeight);
 
             // <b>Only when the keyboard moved it, and that distinction is the whole bug.</b> This used to run
             // every frame, so it re-asserted the scroll position continuously: with the highlight on the first
@@ -451,12 +559,12 @@ namespace Gideon.UIOverhaul.Features.DevTools
             {
                 follow = false;
 
-                float top = highlighted / columns * RowHeight;
+                float top = highlighted / columns * cellHeight;
 
                 if (top < scroll.y)
                     scroll.y = top;
-                else if (top + RowHeight > scroll.y + inner.height)
-                    scroll.y = top + RowHeight - inner.height;
+                else if (top + cellHeight > scroll.y + inner.height)
+                    scroll.y = top + cellHeight - inner.height;
             }
 
             Widgets.BeginScrollView(inner, ref scroll, view);
@@ -474,18 +582,21 @@ namespace Gideon.UIOverhaul.Features.DevTools
             // damage the GUI state of everything drawn after it.
             try
             {
-                int firstRow = Mathf.Max(0, Mathf.FloorToInt(scroll.y / RowHeight) - 1);
-                int lastRow = Mathf.Min(rows, firstRow + Mathf.CeilToInt(inner.height / RowHeight) + 2);
+                int firstRow = Mathf.Max(0, Mathf.FloorToInt(scroll.y / cellHeight) - 1);
+                int lastRow = Mathf.Min(rows, firstRow + Mathf.CeilToInt(inner.height / cellHeight) + 2);
 
                 int first = firstRow * columns;
                 int last = Mathf.Min(results.Count, lastRow * columns);
 
                 for (int i = first; i < last; i++)
                 {
-                    Rect cell = new Rect(i % columns * columnWidth, i / columns * RowHeight,
-                        columnWidth, RowHeight);
+                    Rect cell = new Rect(i % columns * columnWidth, i / columns * cellHeight,
+                        columnWidth, cellHeight);
 
-                    DrawResult(cell, results[i], i, palette);
+                    if (cards)
+                        DrawCard(cell, results[i], i, palette);
+                    else
+                        DrawResult(cell, results[i], i, palette);
                 }
             }
             finally
@@ -494,6 +605,65 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 Text.Font = previousFont;
 
                 Widgets.EndScrollView();
+            }
+        }
+
+        /// <summary>
+        /// One thing as a card: its own artwork, and its name under it.
+        ///
+        /// <b>Asked for against Spawn thing and Spawn stack of,</b> which are a thousand names in a list where
+        /// every one of them is a thing the game already has a picture of. A grid of pictures is how the architect
+        /// tab presents the same kind of choice, and this is that presentation applied here.
+        ///
+        /// <b>The picture is an enrichment, never the identity.</b> The label is drawn whether or not the artwork
+        /// resolved, and choosing the card runs the node vanilla built, so a card with no picture still works and
+        /// a card with the wrong picture still does the right thing. See <see cref="DevActionArt"/> for why the
+        /// match can be wrong at all.
+        /// </summary>
+        private void DrawCard(Rect rect, DevAction action, int index, UIColorPaletteDef palette)
+        {
+            bool chosen = index == highlighted;
+            Rect card = rect.ContractedBy(3f);
+
+            UIElementPainter.OutlineRounded(card, chosen ? palette.Accent : palette.Border,
+                chosen ? palette.AccentMuted : palette.PanelBackground);
+
+            if (!chosen && Mouse.IsOver(card))
+                Widgets.DrawBoxSolid(card, palette.HoverOverlay);
+
+            ThingDef art = DevActionArt.Resolve(action.Label);
+
+            if (art != null)
+            {
+                Rect icon = new Rect(card.center.x - IconSize * 0.5f, card.y + 6f, IconSize, IconSize);
+
+                UIGuard.Try("DevTools.CardIcon", () => Widgets.DefIcon(icon, art), null);
+            }
+
+            Color previousColor = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+            GameFont previousFont = Text.Font;
+            bool previousWrap = Text.WordWrap;
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.UpperCenter;
+            Text.WordWrap = true;
+            GUI.color = chosen ? palette.Accent : palette.TextSecondary;
+
+            // Two lines of room and wrapping left on, because these are real thing names and plenty of them are
+            // three words. The name is what identifies the card, so it is the one part that must not be cut.
+            Widgets.Label(new Rect(card.x + 3f, card.y + IconSize + 8f, card.width - 6f, card.height - IconSize - 10f),
+                action.Label ?? Name(action.Node));
+
+            Text.WordWrap = previousWrap;
+            Text.Font = previousFont;
+            Text.Anchor = previousAnchor;
+            GUI.color = previousColor;
+
+            if (Widgets.ButtonInvisible(card))
+            {
+                highlighted = index;
+                Choose(index);
             }
         }
 
@@ -661,6 +831,13 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 inside = null;
                 highlighted = 0;
                 scroll = Vector2.zero;
+
+                // <b>The query is cleared on the way through, in both directions.</b> Now that the box filters a
+                // branch's children as well as the whole index, a query carried across the boundary filters the
+                // wrong list: drilling into Change weather with "spawn" still typed would show an empty branch,
+                // and coming back out would show the branch's leftover word searching everything. Each side of
+                // the boundary starts from nothing typed.
+                search.Clear();
             }
 
             if (navigateInto != null)
@@ -669,6 +846,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 navigateInto = null;
                 highlighted = 0;
                 scroll = Vector2.zero;
+
+                // Cleared going in as well as coming out. See the note above.
+                search.Clear();
             }
 
             if (pending == null)

@@ -81,7 +81,21 @@ namespace Gideon.UIOverhaul.Features.Bills
                     (TipSignal)("This bench already has the maximum of " + BillCap.Current + " bills."));
             }
 
-            Count(new Rect(add.xMax + 10f, inner.y, inner.width - add.width - 10f, 30f), stack);
+            // <b>Save the whole bench, not one bill.</b> Asked for on 2026-08-20: a bench set up the way somebody
+            // wants is a unit of work, and rebuilding it bill by bill on the next identical bench is the thing
+            // templates were supposed to remove. Disabled with nothing on the bench, since a template of no bills
+            // would import as nothing.
+            Rect save = new Rect(add.xMax + 8f, inner.y, 130f, 30f);
+            bool anything = stack != null && stack.Count > 0;
+
+            if (GzpPalette.GrayButton(save, "Save bench", anything) && bench.Map != null)
+                Find.WindowStack.Add(new Dialog_SaveBenchTemplate(bench));
+
+            if (!anything)
+                TooltipHandler.TipRegion(save, (TipSignal)"Add a bill first. An empty bench has nothing to save.");
+
+            Count(new Rect(save.xMax + 10f, inner.y, Mathf.Max(0f, inner.width - save.xMax + inner.x - 10f), 30f),
+                stack);
 
             Rect list = new Rect(inner.x, add.yMax + 8f, inner.width, inner.height - add.height - 8f);
 

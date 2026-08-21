@@ -20,7 +20,15 @@ namespace Gideon.UIOverhaul.Features.Pawns
         Patient,
 
         /// <summary>A visitor lodging with the colony, when Hospitality is providing them.</summary>
-        Guest
+        Guest,
+
+        /// <summary>
+        /// Something one of the colony's necromancers is controlling, when One with Death is providing them.
+        ///
+        /// Not necessarily a person: a raised animal is undead too, which is why this category's members are
+        /// gathered from the necromancer's own list rather than sifted out of the humanlike pawns like the rest.
+        /// </summary>
+        Undead
     }
 
     /// <summary>
@@ -45,7 +53,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
             PawnCategory.Prisoner,
             PawnCategory.Slave,
             PawnCategory.Patient,
-            PawnCategory.Guest
+            PawnCategory.Guest,
+            PawnCategory.Undead
         };
 
         /// <summary>
@@ -130,6 +139,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 case PawnCategory.Guest:
                     return isGuest != null;
 
+                case PawnCategory.Undead:
+                    return Integrations.OneWithDeathIntegration.Available;
+
                 default:
                     return true;
             }
@@ -143,6 +155,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 case PawnCategory.Prisoner: return "Prisoners";
                 case PawnCategory.Slave: return "Slaves";
                 case PawnCategory.Patient: return "Patients";
+                case PawnCategory.Undead: return "Undead";
                 default: return "Guests";
             }
         }
@@ -153,6 +166,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <b>Slaves share <c>Mood</c> with the mental break badge,</b> rather than a second purple being added
         /// beside it. One purple in the theme means a palette that retunes it stays internally consistent; two
         /// would drift the first time either was adjusted.
+        ///
+        /// <b>Undead takes <c>Info</c>,</b> which was the last unused role in the palette. A grey green would suit
+        /// the subject better and would mean adding a role to every palette, including the ones other people
+        /// write, to colour one filter chip. Reusing a role costs nothing and stays correct under a retheme.
         /// </summary>
         internal static Color Color(PawnCategory category, UIColorPaletteDef palette)
         {
@@ -162,6 +179,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 case PawnCategory.Prisoner: return palette.Warning;
                 case PawnCategory.Slave: return palette.Mood;
                 case PawnCategory.Patient: return palette.Danger;
+                case PawnCategory.Undead: return palette.Info;
                 default: return palette.Success;
             }
         }
@@ -177,6 +195,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
         internal static PawnCategory Of(Pawn pawn)
         {
             Resolve();
+
+            // First, because it is the most definite test here and the only one that is not an inference. The
+            // others read a pawn's state and conclude something; this one asks a necromancer's own list whether it
+            // is holding this pawn. A raised colonist would otherwise answer to Colonist and never reach Undead.
+            if (Integrations.OneWithDeathIntegration.IsControlledUndead(pawn))
+                return PawnCategory.Undead;
 
             if (pawn.IsSlaveOfColony)
                 return PawnCategory.Slave;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
 using RimWorld;
@@ -38,6 +39,10 @@ namespace Gideon.UIOverhaul.Features.Bills
         private const float StatIcon = 20f;
         private const float CardGap = 6f;
         private const float HeaderHeight = 46f;
+
+        /// <summary>The step strip between the header and the body.</summary>
+        private const float StripHeight = 34f;
+
         private const float HeroHeight = 68f;
         private const float FooterHeight = 52f;
         private const float Pad = 12f;
@@ -59,8 +64,12 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// </summary>
         private static readonly HashSet<string> CollapsedSections = new HashSet<string>();
 
-        private readonly Building_WorkTable bench;
-        private readonly List<RecipeOffer> offers;
+        /// <summary>The bench being added to. Null until the first step is answered.</summary>
+        private Building_WorkTable bench;
+
+        /// <summary>What that bench can make. Rebuilt when the bench changes, since it is the bench's own list.</summary>
+        private List<RecipeOffer> offers = new List<RecipeOffer>();
+
         private readonly Action added;
 
         private RecipeOffer selected;
@@ -87,12 +96,32 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         private readonly UICardControl heroCard = new UICardControl();
 
-        public Dialog_AddWorkBill(Building_WorkTable table, Action onAdded)
+        /// <summary>
+        /// Opens on the recipe step for a bench that is already known.
+        ///
+        /// The bench tab and the plus on a bench heading both come in this way, because they have already answered
+        /// the first question and asking it again would be a question with one answer.
+        /// </summary>
+        public Dialog_AddWorkBill(Building_WorkTable table, Action onAdded) : this(onAdded)
         {
-            bench = table;
+            Choose(table);
+
+            // Left false on this route, which is what makes step one a fact rather than a choice: the bench was
+            // never picked here, so offering to go back to a screen the reader has not seen would step out of the
+            // interaction rather than within it.
+            askedForBench = false;
+        }
+
+        /// <summary>
+        /// Opens on the bench step, for the colony window's Add bill.
+        ///
+        /// <b>Three steps rather than two float menus.</b> Add bill used to open a menu of every worktable and then
+        /// a menu of every recipe, both bare lists of names, the first of which runs to sixty entries on a
+        /// developed base with no way to tell two identical benches apart. Approved from a mockup on 2026-08-20.
+        /// </summary>
+        public Dialog_AddWorkBill(Action onAdded)
+        {
             added = onAdded;
-            offers = BillActions.Available(table);
-            selected = offers.Count > 0 ? offers[0] : null;
 
             doCloseX = false;
             forcePause = false;
@@ -104,6 +133,39 @@ namespace Gideon.UIOverhaul.Features.Bills
         public override Vector2 InitialSize => new Vector2(900f, 640f);
 
         protected override float Margin => 0f;
+
+        /// <summary>Which of the three screens is showing.</summary>
+        private enum Step
+        {
+            Bench,
+            Recipe,
+            Setup
+        }
+
+        private Step step = Step.Bench;
+
+        /// <summary>Whether this window asked which bench, as opposed to being told.</summary>
+        private bool askedForBench = true;
+
+        private readonly BenchGrid benches = new BenchGrid();
+
+        private readonly WorkBillSettingsPane settings = new WorkBillSettingsPane();
+
+        /// <summary>
+        /// The bill being configured on the last step, made but not yet on the bench.
+        ///
+        /// <b>A real bill rather than a draft of one, and that is the design.</b> The obvious build was a step that
+        /// holds answers and commits them at the end, which would have given every control in
+        /// <see cref="WorkBillSettingsPane"/> a second behaviour, and the failure would be a setting that silently
+        /// does nothing in one of the two places it is offered. Handing over a genuine
+        /// <c>Bill_Production</c> means the pane cannot tell the difference and does not have to.
+        ///
+        /// <b>Its <c>billStack</c> is set even though it is not in that stack.</b> The worker menu reaches through
+        /// <c>bill.billStack.billGiver</c> to find the work giver, and the ingredient tree wants a map; without
+        /// this the pane would draw with an empty pawn list. Being in the stack is what makes a bill live, and it
+        /// is not in it, so nothing works this bill until Add is pressed.
+        /// </summary>
+        private Bill_Production draft;
 
         /// <summary>
         /// What the list shows: everything the bench offers, narrowed by the search box, starred first.
@@ -137,25 +199,293 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         private void Contents(Rect inRect)
         {
+            UIColorPaletteDef palette = UIColorPaletteDef.Active;
+
             // Chrome fill for the whole window. The header, the outer border and the gutter between the panels
             // are all just this showing through.
             Widgets.DrawBoxSolid(inRect, GzpPalette.BGD);
             Text.Font = GameFont.Small;
 
             Header(new Rect(inRect.x, inRect.y, inRect.width, HeaderHeight));
+            Strip(new Rect(inRect.x, inRect.y + HeaderHeight, inRect.width, StripHeight), palette);
 
-            Rect body = new Rect(inRect.x, inRect.y + HeaderHeight, inRect.width,
-                inRect.height - HeaderHeight - FooterHeight).ContractedBy(EdgeInset);
+            Rect body = new Rect(inRect.x, inRect.y + HeaderHeight + StripHeight, inRect.width,
+                inRect.height - HeaderHeight - StripHeight - FooterHeight).ContractedBy(EdgeInset);
 
-            Rect list = new Rect(body.x, body.y, ListWidth, body.height);
-            Rect detail = new Rect(list.xMax + Gutter, body.y, body.width - ListWidth - Gutter, body.height);
+            switch (step)
+            {
+                case Step.Bench:
+                    Building_WorkTable picked = benches.Draw(body, search, false, palette);
 
-            List(list);
-            Detail(detail);
-            Footer(new Rect(inRect.x, inRect.yMax - FooterHeight, inRect.width, FooterHeight));
+                    if (picked != null)
+                        Choose(picked);
+
+                    break;
+
+                case Step.Setup:
+                    settings.Draw(body, draft, palette, false);
+
+                    break;
+
+                default:
+                    Rect list = new Rect(body.x, body.y, ListWidth, body.height);
+                    Rect detail = new Rect(list.xMax + Gutter, body.y, body.width - ListWidth - Gutter,
+                        body.height);
+
+                    List(list);
+                    Detail(detail);
+
+                    break;
+            }
+
+            Footer(new Rect(inRect.x, inRect.yMax - FooterHeight, inRect.width, FooterHeight), palette);
 
             GUI.color = Color.white;
             Text.Anchor = TextAnchor.UpperLeft;
+        }
+
+        /// <summary>
+        /// The three steps across the top, current one carrying the accent rule.
+        ///
+        /// <b>An answered step reads back as its answer,</b> so the strip is a record of the choices rather than a
+        /// menu of them: step one stops saying Bench and says which bench. Clicking an answered step goes back to
+        /// it. A step ahead of where you are is dim and inert, because it still tells you the shape of what you are
+        /// doing even when you cannot reach it.
+        ///
+        /// <b>Step one is not clickable when the window opened on step two,</b> which is the bench tab's route: the
+        /// bench was never chosen here, so going back to a screen the reader has not seen would be a step
+        /// backwards out of the interaction rather than within it.
+        /// </summary>
+        private void Strip(Rect rect, UIColorPaletteDef palette)
+        {
+            Widgets.DrawBoxSolid(rect, GzpPalette.BGD);
+
+            float x = rect.x + Pad;
+
+            x = Tab(rect, x, 1, bench == null ? "Bench" : bench.LabelCap, Step.Bench, bench != null, palette);
+            x = Tab(rect, x, 2, selected == null ? "Recipe" : selected.Label, Step.Recipe, draft != null, palette);
+
+            Tab(rect, x, 3, "Set up", Step.Setup, false, palette);
+
+            if (step != Step.Bench)
+                return;
+
+            Color previous = GUI.color;
+            TextAnchor anchor = Text.Anchor;
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = GzpPalette.TextDim;
+
+            Widgets.Label(new Rect(rect.x, rect.y, rect.width - Pad, rect.height),
+                benches.Shown + (benches.Shown == 1 ? " bench" : " benches"));
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = anchor;
+            GUI.color = previous;
+        }
+
+        /// <summary>One tab. Returns where the next one starts.</summary>
+        private float Tab(Rect rect, float x, int number, string label, Step which, bool done,
+            UIColorPaletteDef palette)
+        {
+            bool here = step == which;
+            bool reachable = done && !here && Answered(which);
+
+            Text.Font = GameFont.Small;
+
+            float width = Text.CalcSize(label).x + 54f;
+            Rect tab = new Rect(x, rect.y, width, rect.height);
+
+            if (here)
+            {
+                Widgets.DrawBoxSolid(tab, GzpPalette.BG);
+                Widgets.DrawBoxSolid(new Rect(tab.x, tab.y, tab.width, 2f), GzpPalette.Accent);
+            }
+            else if (reachable && Mouse.IsOver(tab))
+            {
+                Widgets.DrawBoxSolid(tab, palette.HoverOverlay);
+            }
+
+            Color previous = GUI.color;
+            TextAnchor anchor = Text.Anchor;
+
+            Rect pip = new Rect(tab.x + 14f, tab.center.y - 8f, 16f, 16f);
+
+            if (here)
+            {
+                UIElementPainter.FillRounded(pip, GzpPalette.Accent);
+            }
+            else if (done)
+            {
+                UIElementPainter.FillRounded(pip, palette.AccentMuted);
+            }
+            else
+            {
+                UIElementPainter.OutlineRounded(pip, GzpPalette.TextDim, GzpPalette.BGD);
+            }
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            GUI.color = here ? GzpPalette.BGD : done ? GzpPalette.Accent : GzpPalette.TextDim;
+
+            // A tick rather than the number once a step is answered, because the number is only useful while it
+            // is still a step to take.
+            Widgets.Label(pip, done && !here ? "+" : number.ToString());
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = here ? GzpPalette.Accent : done ? GzpPalette.TextDim : palette.TextDisabled;
+
+            bool wrap = Text.WordWrap;
+            Text.WordWrap = false;
+
+            Widgets.Label(new Rect(pip.xMax + 8f, tab.y, tab.width - 46f, tab.height), label);
+
+            Text.WordWrap = wrap;
+            Text.Anchor = anchor;
+            GUI.color = previous;
+
+            if (reachable && Widgets.ButtonInvisible(tab))
+                Back(which);
+
+            return tab.xMax + 2f;
+        }
+
+        /// <summary>Whether a step can be returned to at all, as opposed to merely having been passed through.</summary>
+        private bool Answered(Step which)
+        {
+            switch (which)
+            {
+                // Only when this window asked the question. Opened from a bench, the bench is a fact.
+                case Step.Bench: return askedForBench;
+                case Step.Recipe: return bench != null;
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// Takes the bench for step one and moves to the recipes.
+        ///
+        /// <b>A click on a card is the choice; there is no Next.</b> A bench is not a decision anybody reviews, and
+        /// the strip puts it one click from being undone, so a confirm step would add a control and a click to
+        /// every bill anyone ever adds.
+        /// </summary>
+        private void Choose(Building_WorkTable table)
+        {
+            bench = table;
+            offers = BillActions.Available(table);
+
+            // The recipe is kept when the new bench can still make it, and cleared when it cannot. That does the
+            // expected thing whether the bench is being corrected or reconsidered, and the rule never has to be
+            // explained.
+            if (selected != null && !Offered(selected))
+                selected = null;
+
+            if (selected == null)
+                selected = offers.Count > 0 ? offers[0] : null;
+
+            search = string.Empty;
+            step = Step.Recipe;
+        }
+
+        /// <summary>Whether the current bench still offers this exact recipe and style.</summary>
+        private bool Offered(RecipeOffer offer)
+        {
+            foreach (RecipeOffer candidate in offers)
+            {
+                if (candidate.Recipe == offer.Recipe && candidate.Style == offer.Style)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Goes back to an earlier step, discarding anything the later ones had built.
+        ///
+        /// The draft is dropped rather than kept, because it was made from a recipe that may no longer be the
+        /// chosen one. Nothing is lost: it was never on a bench, and step three starts from the recipe's own
+        /// defaults either way.
+        /// </summary>
+        private void Back(Step which)
+        {
+            draft = null;
+            step = which;
+
+            if (which == Step.Bench)
+            {
+                search = string.Empty;
+                benches.Reset();
+            }
+        }
+
+        /// <summary>
+        /// Makes the bill and moves to the last step.
+        ///
+        /// The bill is real from here on, and knows its bench, but is not in the bench's stack until Add. See the
+        /// note on <see cref="draft"/> for why it is not a draft object.
+        /// </summary>
+        private void Configure()
+        {
+            if (bench?.billStack == null || selected?.Recipe == null)
+                return;
+
+            UIGuard.Try("Bills.Wizard.Draft", () =>
+            {
+                Bill made = selected.Recipe.MakeNewBill(selected.Style);
+
+                if (!(made is Bill_Production production))
+                {
+                    // A recipe whose bill this pane cannot configure goes straight on with its own defaults,
+                    // since there is nothing for step three to show. It still closes, because Add closing is
+                    // about finishing rather than about which screen finished it.
+                    BillActions.Make(bench, selected, added);
+                    Close();
+
+                    return;
+                }
+
+                production.billStack = bench.billStack;
+
+                draft = production;
+                step = Step.Setup;
+            }, "That bill could not be prepared. Nothing has been added.");
+        }
+
+        /// <summary>
+        /// Puts the configured bill on the bench and closes.
+        ///
+        /// <b>Closing is the end of the interaction, not a return to the middle of it.</b> This used to go back to
+        /// the recipes with the bench kept, on the reasoning that filling a bench is one bench choice and several
+        /// recipe choices. In use that reads wrong: Add is the last thing asked for, and a window still standing
+        /// afterwards looks like the bill did not take. A second bill is one more click on Add bill.
+        /// </summary>
+        private void Finish()
+        {
+            if (draft == null || bench?.billStack == null)
+                return;
+
+            UIGuard.Try("Bills.Wizard.Add", () =>
+            {
+                bench.billStack.AddBill(draft);
+
+                if (draft.recipe?.conceptLearned != null)
+                {
+                    PlayerKnowledgeDatabase.KnowledgeDemonstrated(draft.recipe.conceptLearned,
+                        KnowledgeAmount.Total);
+                }
+
+                SoundDefOf.Tick_Low.PlayOneShotOnCamera();
+
+                draft = null;
+
+                // Closed before the callback, following the same rule as the bench picker: a caller that opens a
+                // window of its own is then not opening it underneath this one.
+                Close();
+
+                added?.Invoke();
+            }, "The bill was not added.");
         }
 
         private void Header(Rect rect)
@@ -172,15 +502,23 @@ namespace Gideon.UIOverhaul.Features.Bills
             Text.Font = GameFont.Small;
 
             Rect close = new Rect(rect.xMax - Pad - 24f, rect.y + 11f, 24f, 24f);
-            Rect box = new Rect(close.x - 10f - 240f, rect.y + 10f, 240f, 26f);
 
-            GUI.color = GzpPalette.Stat;
-            search = GzpPalette.FlatTextField(box, search);
-
-            if (search.NullOrEmpty() && !Mouse.IsOver(box))
+            // No search on the last step: it configures one bill and there is nothing to look through. The
+            // ingredient tree has its own search inside it.
+            if (step != Step.Setup)
             {
-                GUI.color = GzpPalette.TextDim;
-                Widgets.Label(box.ContractedBy(7f, 2f), "Search recipes...");
+                Rect box = new Rect(close.x - 10f - 240f, rect.y + 10f, 240f, 26f);
+
+                GUI.color = GzpPalette.Stat;
+                search = GzpPalette.FlatTextField(box, search);
+
+                if (search.NullOrEmpty() && !Mouse.IsOver(box))
+                {
+                    GUI.color = GzpPalette.TextDim;
+
+                    Widgets.Label(box.ContractedBy(7f, 2f),
+                        step == Step.Bench ? "Search benches..." : "Search recipes...");
+                }
             }
 
             GUI.color = previous;
@@ -618,32 +956,74 @@ namespace Gideon.UIOverhaul.Features.Bills
             y += 6f;
         }
 
-        private void Footer(Rect rect)
+        /// <summary>
+        /// The action bar, which says something different on each step.
+        ///
+        /// <b>The right hand button is the only way forward, and it is never Add until the last step.</b> With
+        /// three steps the button that finishes has to be on the screen that finishes, or it would create a bill
+        /// carrying whatever the settings step had not been asked yet.
+        /// </summary>
+        private void Footer(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, GzpPalette.BGD);
 
             BillStack stack = bench?.billStack;
             int count = stack?.Count ?? 0;
-            bool full = count >= BillCap.Current;
+            bool full = stack != null && count >= BillCap.Current;
 
             Color previous = GUI.color;
+
             GUI.color = full ? GzpPalette.Bad : GzpPalette.TextDim;
 
-            Widgets.Label(new Rect(rect.x + Pad, rect.y + 16f, 340f, 24f),
-                full
-                    ? "Bill limit reached (" + BillCap.Current + ")."
-                    : count + " / " + BillCap.Current + " bills on this bench");
+            Widgets.Label(new Rect(rect.x + Pad, rect.y + 16f, rect.width - 300f, 24f), Line(count, full));
 
             GUI.color = previous;
 
-            Rect add = new Rect(rect.xMax - Pad - 150f, rect.y + 10f, 150f, 32f);
+            Rect right = new Rect(rect.xMax - Pad - 150f, rect.y + 10f, 150f, 32f);
 
-            // Stays open after adding, because adding a run of bills to a fresh bench is the common case and
-            // reopening the window for each one is the sort of friction this whole feature exists to remove.
-            if (!GzpPalette.GrayButton(add, "Add Bill", selected != null && !full, true))
-                return;
+            switch (step)
+            {
+                case Step.Bench:
+                    if (GzpPalette.GrayButton(new Rect(right.x + 40f, right.y, 110f, right.height), "Cancel"))
+                        Close();
 
-            BillActions.Make(bench, selected, added);
+                    return;
+
+                case Step.Recipe:
+                    // Back only where the bench was chosen here. From the bench tab there is nowhere behind this.
+                    if (askedForBench
+                        && GzpPalette.GrayButton(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
+                        Back(Step.Bench);
+
+                    if (GzpPalette.GrayButton(right, "Next: set up", selected != null && !full, true))
+                        Configure();
+
+                    return;
+
+                default:
+                    if (GzpPalette.GrayButton(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
+                        Back(Step.Recipe);
+
+                    if (GzpPalette.GrayButton(right, "Add Bill", draft != null && !full, true))
+                        Finish();
+
+                    return;
+            }
+        }
+
+        /// <summary>The status line, which is the only place the chosen bench is named in full on later steps.</summary>
+        private string Line(int count, bool full)
+        {
+            if (step == Step.Bench)
+                return "Choose a bench to see what it can make.";
+
+            if (full)
+                return bench.LabelCap + " already has its " + BillCap.Current + " bills.";
+
+            if (step == Step.Setup)
+                return "The bill is created when you finish. Nothing has changed yet.";
+
+            return count + " / " + BillCap.Current + " bills on " + bench.LabelCap;
         }
     }
 }

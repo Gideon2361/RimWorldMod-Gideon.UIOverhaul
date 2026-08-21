@@ -956,10 +956,11 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showExplicitStoryEvents = value.EqualsIgnoreCase("true");
                             break;
 
-                        // modernDebugLog was here briefly and never shipped. Listed anyway: a local test run
-                        // may have written it, and a warning about a setting nobody chose is exactly the noise
-                        // this list exists to prevent.
+                        // modernDebugLog and minimapScale were each here briefly and never shipped. Listed
+                        // anyway: a local test run may have written them, and a warning about a setting nobody
+                        // chose is exactly the noise this list exists to prevent.
                         case "modernDebugLog":
+                        case "minimapScale":
                         case "showBarButton":
                         case "showDesktopWidgets":
                         case "showSeasonWidget":

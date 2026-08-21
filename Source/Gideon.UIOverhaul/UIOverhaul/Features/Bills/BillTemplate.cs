@@ -10,7 +10,16 @@ namespace Gideon.UIOverhaul.Features.Bills
         Bill,
 
         /// <summary>Only an ingredient filter, reusable across unrelated bills.</summary>
-        Filter
+        Filter,
+
+        /// <summary>
+        /// Every bill on one bench, so an identical bench elsewhere can be set up in one action.
+        ///
+        /// Holds no settings of its own: everything is in <see cref="BillTemplate.Bills"/>, one entry per bill,
+        /// in the order they sat on the bench. That order is their priority, so it is preserved rather than
+        /// sorted.
+        /// </summary>
+        Bench
     }
 
     /// <summary>
@@ -54,8 +63,27 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         // ---- tier two: resolved by name when applied ----
 
-        /// <summary>The recipe's defName, or null for a filter template.</summary>
+        /// <summary>The recipe's defName, or null for a filter or bench template.</summary>
         internal string Recipe;
+
+        /// <summary>
+        /// The bench this was captured from, as a <c>ThingDef</c> defName. Only set for a bench template.
+        ///
+        /// <b>Recorded so applying one somewhere else can say whether the bench matches,</b> which is what Aaron
+        /// asked the feature for: importing a bench's bills onto an <i>identical</i> bench. A different bench is
+        /// not refused, because a stonecutter's table and an electric one share most of their recipes and
+        /// refusing would be more annoying than useful; it is warned about, and each bill that the target cannot
+        /// make is skipped and named, which is the same rule the rest of this class already follows.
+        /// </summary>
+        internal string BenchDef;
+
+        /// <summary>
+        /// The bills on the bench, for a bench template. Empty for every other kind.
+        ///
+        /// <b>Nested templates rather than a second class,</b> so every rule about what travels and what does not
+        /// is written once and applies to a bill whether it was saved on its own or as part of a bench.
+        /// </summary>
+        internal List<BillTemplate> Bills = new List<BillTemplate>();
 
         /// <summary>The <c>ThingDef</c> names the ingredient filter allows.</summary>
         internal List<string> Allowed = new List<string>();
@@ -127,6 +155,13 @@ namespace Gideon.UIOverhaul.Features.Bills
             BillTemplate copy = (BillTemplate) MemberwiseClone();
 
             copy.Allowed = new List<string>(Allowed);
+
+            // Deep, not shared. A bench template's children are edited and renamed through the copy the window
+            // holds, and a shallow list would write those edits straight back into the stored original.
+            copy.Bills = new List<BillTemplate>(Bills.Count);
+
+            foreach (BillTemplate child in Bills)
+                copy.Bills.Add(child?.Copy());
 
             return copy;
         }

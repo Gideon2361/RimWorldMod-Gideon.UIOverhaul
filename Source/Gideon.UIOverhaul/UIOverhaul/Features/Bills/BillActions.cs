@@ -11,9 +11,8 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// One thing a bench can be told to make: a recipe, and the ideology style of it when there is one.
     ///
     /// <b>A pair rather than a recipe alone,</b> because the same recipe appears more than once when an
-    /// ideoligion has styles for what it produces, and the style is what tells those entries apart. Keeping them
-    /// together means the float menu and the card picker offer exactly the same set and create exactly the same
-    /// bill, rather than two lists that agree until somebody edits one.
+    /// ideoligion has styles for what it produces, and the style is what tells those entries apart. Losing the
+    /// style would mean two identical looking cards that build different things.
     /// </summary>
     internal sealed class RecipeOffer
     {
@@ -34,10 +33,15 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// The things the bills interfaces do to the colony rather than to themselves: making a bill, choosing which
     /// bench it goes on, and restricting who works it.
     ///
-    /// <b>Separated from the windows because none of it is drawing,</b> and because three interfaces now share it:
-    /// the colony window, the float menu, and the card picker on a bench. Each of these opens a menu or writes to
-    /// a bill stack, and keeping them out of the layout code is what stops a mistake in a rectangle from turning
-    /// into a mistake in somebody's colony.
+    /// <b>Separated from the windows because none of it is drawing.</b> Each of these writes to a bill stack or
+    /// opens a menu that will, and keeping them out of the layout code is what stops a mistake in a rectangle
+    /// from turning into a mistake in somebody's colony.
+    ///
+    /// <b>The float menu routes are gone.</b> Add bill opened a menu of benches and then a menu of recipes until
+    /// the wizard replaced both on 2026-08-20, so <c>AddBill</c>, <c>AddBillAnywhere</c> and the bench listing
+    /// they needed were deleted rather than left unreachable. <see cref="Available"/> survives because the card
+    /// picker asks the same question of a bench, and <see cref="Make"/> survives as the wizard's fallback for a
+    /// recipe whose bill cannot be configured.
     ///
     /// <b>The recipe list is built the way RimWorld builds it,</b> including the ideology building variants and
     /// the two warnings it raises before adding: no mechanitor for a mechanitor recipe, and nobody skilled
@@ -76,126 +80,6 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 return offers;
             }, new List<RecipeOffer>(), "The list of recipes for this bench could not be built.");
-        }
-
-        /// <summary>
-        /// Opens the recipe menu for one bench and adds whatever is chosen.
-        ///
-        /// <paramref name="added"/> runs after a bill is actually created, so the window can re-read itself. It
-        /// does not run when the menu is dismissed.
-        /// </summary>
-        internal static void AddBill(Building_WorkTable bench, System.Action added)
-        {
-            UIGuard.Try("Bills.AddMenu", () =>
-            {
-                if (bench == null)
-                    return;
-
-                List<FloatMenuOption> options = Recipes(bench, added);
-
-                if (options.Count == 0)
-                {
-                    options.Add(new FloatMenuOption("NoneBrackets".Translate(), null));
-                }
-
-                Find.WindowStack.Add(new FloatMenu(options));
-            }, "The list of recipes could not be built, so no bill was added.");
-        }
-
-        /// <summary>
-        /// Asks which bench first, then which recipe.
-        ///
-        /// <b>Every worktable on every map, not only the ones already holding a bill.</b> The whole point of
-        /// adding from the colony view is reaching a bench that has nothing on it yet, which is exactly the bench
-        /// the list does not show.
-        /// </summary>
-        internal static void AddBillAnywhere(System.Action added)
-        {
-            UIGuard.Try("Bills.AddMenuAnywhere", () =>
-            {
-                List<FloatMenuOption> options = new List<FloatMenuOption>();
-
-                foreach (Building_WorkTable bench in Benches())
-                {
-                    Building_WorkTable captured = bench;
-                    string where = Place(captured);
-
-                    options.Add(new FloatMenuOption(
-                        where.NullOrEmpty() ? captured.LabelCap : captured.LabelCap + " (" + where + ")",
-                        () => AddBill(captured, added)));
-                }
-
-                if (options.Count == 0)
-                {
-                    options.Add(new FloatMenuOption("NoneBrackets".Translate(), null));
-                }
-
-                Find.WindowStack.Add(new FloatMenu(options));
-            }, "The list of benches could not be built, so no bill was added.");
-        }
-
-        /// <summary>Every colonist worktable on every loaded map, in the order the maps are listed.</summary>
-        internal static List<Building_WorkTable> Benches()
-        {
-            List<Building_WorkTable> benches = new List<Building_WorkTable>();
-            List<Map> maps = Find.Maps;
-
-            if (maps == null)
-                return benches;
-
-            foreach (Map map in maps)
-            {
-                List<Building> buildings = map?.listerBuildings?.allBuildingsColonist;
-
-                if (buildings == null)
-                    continue;
-
-                foreach (Building building in buildings)
-                {
-                    if (building is Building_WorkTable bench)
-                        benches.Add(bench);
-                }
-            }
-
-            return benches;
-        }
-
-        /// <summary>The room a bench is in, and its map when there is more than one.</summary>
-        private static string Place(Building_WorkTable bench)
-        {
-            Map map = bench?.Map;
-
-            if (map == null)
-                return null;
-
-            string room = null;
-            Room found = bench.Position.GetRoom(map);
-
-            if (found != null && !found.PsychologicallyOutdoors)
-                room = found.Role?.LabelCap;
-
-            bool many = Find.Maps != null && Find.Maps.Count > 1;
-            string place = map.Parent?.LabelCap;
-
-            if (!many || place.NullOrEmpty())
-                return room;
-
-            return room.NullOrEmpty() ? place : room + " - " + place;
-        }
-
-        private static List<FloatMenuOption> Recipes(Building_WorkTable bench, System.Action added)
-        {
-            List<FloatMenuOption> options = new List<FloatMenuOption>();
-
-            foreach (RecipeOffer offer in Available(bench))
-            {
-                RecipeOffer captured = offer;
-
-                options.Add(new FloatMenuOption(captured.Label, () => Make(bench, captured, added),
-                    captured.Icon, captured.Recipe.UIIcon));
-            }
-
-            return options;
         }
 
         /// <summary>

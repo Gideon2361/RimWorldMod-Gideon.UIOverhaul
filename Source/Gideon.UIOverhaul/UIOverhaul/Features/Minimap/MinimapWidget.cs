@@ -231,6 +231,13 @@ namespace Gideon.UIOverhaul.Features.Minimap
             }
         }
 
+        /// <summary>
+        /// The side of the map area.
+        ///
+        /// <b>Whole pixels only.</b> The baked picture is blitted into this square, and a fractional side puts its
+        /// edge between pixels, which shows as a seam along one side that moves as the panel is dragged. That is
+        /// why these are three whole numbers rather than one number and a multiplier.
+        /// </summary>
         private static float SideOf(MinimapSize size)
         {
             switch (size)

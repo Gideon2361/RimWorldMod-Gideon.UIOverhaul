@@ -430,6 +430,14 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private static readonly List<Pawn> Considered = new List<Pawn>();
 
         /// <summary>
+        /// Scratch for the undead handed over by One with Death, reused rather than allocated per rebuild.
+        ///
+        /// Separate from <see cref="Considered"/> because that one is deduplicated on the way in and this is the
+        /// raw list being fed into it.
+        /// </summary>
+        private static readonly List<Pawn> Undead = new List<Pawn>();
+
+        /// <summary>
         /// Every pawn on a map this tab could list, whatever the filters say.
         ///
         /// <b>Assembled from vanilla's own indexed lists where it can be.</b> Colonists, prisoners and slaves
@@ -453,6 +461,19 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Take(pawns.FreeColonists);
             Take(pawns.PrisonersOfColonySpawned);
             Take(pawns.SlavesOfColonySpawned);
+
+            // Taken from the necromancer's own list rather than sifted out of a map list, because an undead is not
+            // necessarily humanlike: a raised animal would be missed entirely by the sweep below. See
+            // OneWithDeathIntegration.Fill, which is a no op when that mod is absent.
+            //
+            // Through Take rather than added directly, so an undead that is also in the colonist list arrives
+            // once. Its category is decided afterwards, as every other pawn's is.
+            Undead.Clear();
+
+            Integrations.OneWithDeathIntegration.Fill(Undead);
+
+            foreach (Pawn undead in Undead)
+                Take(undead);
 
             if (!PawnCategories.Available(PawnCategory.Patient)
                 && !PawnCategories.Available(PawnCategory.Guest))

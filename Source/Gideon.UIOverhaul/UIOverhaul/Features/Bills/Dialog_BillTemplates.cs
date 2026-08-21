@@ -259,8 +259,30 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Text.Anchor = TextAnchor.UpperLeft;
 
-            bool ready = chosen != null && target != null
-                                        && BillTemplateApply.Preview(chosen, target.Map).Usable;
+            // <b>Two ways to apply, and which ones are offered depends on the template and on whether a bill was
+            // selected.</b> Applying onto a bill reconfigures something that exists; applying to a bench creates
+            // something that does not. The second was missing entirely until 2026-08-20, which meant a template
+            // could only ever be used to edit a bill somebody had already made by hand.
+            Rect bench = new Rect(apply.x - 158f, apply.y, 150f, apply.height);
+
+            if (chosen != null && chosen.Kind == BillTemplateKind.Bench)
+            {
+                // A bench template has nothing to apply onto a single bill, so it only offers the bench route and
+                // takes the whole width rather than leaving a dead button beside it.
+                if (BillButtons.Button(new Rect(bench.x, bench.y, apply.xMax - bench.x, bench.height),
+                        "Import onto a bench", palette, true))
+                    PickBench(true);
+
+                return;
+            }
+
+            bool usable = chosen != null && BillTemplateApply.Preview(chosen, Find.CurrentMap).Usable;
+
+            if (usable && chosen.Kind == BillTemplateKind.Bill && BillButtons.Button(bench, "Make on a bench...",
+                    palette, target == null))
+                PickBench(false);
+
+            bool ready = usable && target != null;
 
             if (!ready)
             {
@@ -274,6 +296,12 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 Text.Anchor = TextAnchor.UpperLeft;
 
+                if (Mouse.IsOver(apply) && chosen != null && target == null)
+                {
+                    TooltipHandler.TipRegion(apply,
+                        (TipSignal)"Select a bill first, or use Make on a bench to create a new one.");
+                }
+
                 return;
             }
 
@@ -283,6 +311,65 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 note = done.Line();
             }
+        }
+
+        /// <summary>
+        /// Asks which bench, then creates from the chosen template.
+        ///
+        /// <b>The bench picker is the same screen the wizard uses,</b> so this route and adding a bill by hand ask
+        /// the question the same way. Benches already at the bill cap cannot be chosen, since both of these add
+        /// bills rather than editing them.
+        ///
+        /// This window stays open behind the picker and reports what happened, rather than closing: importing a
+        /// bench template onto three benches in a row is the case this feature exists for.
+        /// </summary>
+        private void PickBench(bool whole)
+        {
+            BillTemplate template = chosen;
+
+            if (template == null)
+                return;
+
+            string heading = whole ? "Import " + template.Name + " onto" : "Make " + template.Name + " on";
+
+            Find.WindowStack.Add(new Dialog_PickBench(heading,
+                whole
+                    ? "Every bill in the template is added. Any the bench cannot make is skipped and named."
+                    : "One bill is created from this template on the bench you choose.",
+                false,
+                picked =>
+                {
+                    BillTemplateOutcome done = whole
+                        ? BillTemplateApply.ApplyBench(template, picked)
+                        : BillTemplateApply.CreateOn(template, picked);
+
+                    note = Report(done, picked, whole);
+                }));
+        }
+
+        /// <summary>What the footer says after a bench import, which is not what the per bill line says.</summary>
+        private static string Report(BillTemplateOutcome done, Building_WorkTable bench, bool whole)
+        {
+            if (done == null)
+                return "Nothing happened.";
+
+            if (!done.Usable)
+                return done.Unusable;
+
+            if (!whole)
+            {
+                return done.Skipped.Count == 0
+                    ? "Made a bill on " + bench.LabelCap + "."
+                    : "Made a bill on " + bench.LabelCap + ", skipping " + done.Skipped.Count + ": "
+                      + done.Skipped[0];
+            }
+
+            string line = "Added " + done.Applied + (done.Applied == 1 ? " bill to " : " bills to ")
+                          + bench.LabelCap;
+
+            return done.Skipped.Count == 0
+                ? line + "."
+                : line + ", skipping " + done.Skipped.Count + ": " + done.Skipped[0];
         }
     }
 
