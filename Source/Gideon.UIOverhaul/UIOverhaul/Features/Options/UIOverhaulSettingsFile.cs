@@ -318,6 +318,42 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool warnStalledBills = true;
 
         /// <summary>
+        /// Whether ore veins are shaded while the mine designator is up.
+        ///
+        /// On by default: it costs nothing while the designator is not selected, and the thing it fixes is that
+        /// ore is drawn as rock with a slightly different texture, which at anything but full zoom is no
+        /// difference at all.
+        /// </summary>
+        public bool showMineableOverlay = true;
+
+        /// <summary>
+        /// How far an orbital trade beacon reaches, in tiles.
+        ///
+        /// <b>RimWorld's own 7.9 by default,</b> which is a beacon covering 15 by 15 with the corners clipped.
+        /// Asked for on 2026-08-22 as a slider from 3 to three times vanilla, and the default is vanilla's for the
+        /// same reason the ingredient radius keeps its: an install that never opens this setting plays the game
+        /// the game shipped.
+        ///
+        /// Clamped where it is read rather than here, so a hand edited file with a silly number gives a sensible
+        /// beacon rather than one that covers the map. See <c>TradeBeaconRadius</c>.
+        /// </summary>
+        public float tradeBeaconRadius = 7.9f;
+
+        /// <summary>
+        /// Whether a crop that catches blight is marked for cutting automatically.
+        ///
+        /// <b>On by default, which is the opposite of the livestock setting below and for a reason.</b> That one
+        /// changes what pawns are allowed to do; this one issues a designation the player was going to issue
+        /// anyway. A blighted plant yields nothing at all, <c>Plant.CanYieldNow</c> says so outright, and it
+        /// spreads to its neighbours while it stands: there is no reading of the game where leaving it is the
+        /// better play, so doing it by hand is busywork rather than a decision.
+        ///
+        /// Still a setting, because it writes designations into a live colony and anything that does that should
+        /// be switchable off in one place.
+        /// </summary>
+        public bool autoCutBlightedPlants = true;
+
+        /// <summary>
         /// Whether livestock can be given an allowed area, which RimWorld refuses.
         ///
         /// <b>Off by default, and that is not caution for its own sake.</b> This is the only setting in this file
@@ -903,6 +939,27 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.penAnimalsUseAreas = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Defaults on, so it is read the other way round: only an explicit false turns it off.
+                        case "autoCutBlightedPlants":
+                            settings.autoCutBlightedPlants = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showMineableOverlay":
+                            settings.showMineableOverlay = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "tradeBeaconRadius":
+                            // An unreadable value gives RimWorld's own radius rather than the smallest or the
+                            // largest, which is the answer that changes nothing for somebody whose file was
+                            // corrupted. The range is clamped again where it is read.
+                            settings.tradeBeaconRadius =
+                                float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture,
+                                    out float beacon)
+                                    ? Mathf.Clamp(beacon, 3f, 23.7f)
+                                    : 7.9f;
+
+                            break;
+
                         case "maxBillsPerBench":
                             int bills;
 
@@ -1134,6 +1191,12 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
                     writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
+                    writer.WriteElementString("autoCutBlightedPlants",
+                        autoCutBlightedPlants ? "true" : "false");
+                    writer.WriteElementString("showMineableOverlay",
+                        showMineableOverlay ? "true" : "false");
+                    writer.WriteElementString("tradeBeaconRadius",
+                        tradeBeaconRadius.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("maxBillsPerBench",
                         maxBillsPerBench.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("favoriteRecipes", favoriteRecipes ?? string.Empty);

@@ -509,13 +509,47 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (HasActiveFrostbite(set))
                 return TemperatureTrouble.Freezing;
 
-            if (set.HasHediff(HediffDefOf.Heatstroke))
+            if (HasVisible(set, HediffDefOf.Heatstroke))
                 return TemperatureTrouble.Hot;
 
-            if (set.HasHediff(HediffDefOf.Hypothermia))
+            if (HasVisible(set, HediffDefOf.Hypothermia))
                 return TemperatureTrouble.Cold;
 
             return Ambient(pawn);
+        }
+
+        /// <summary>
+        /// Whether the pawn has this condition to a degree the game itself admits to.
+        ///
+        /// <b>Not <c>HasHediff</c>, and that is the fix for what Aaron reported on 2026-08-22:</b> a visiting
+        /// trader with a red 911 reading Hypothermic whose health tab listed nothing but an ambrosia tolerance.
+        /// Both temperature hediffs open with a stage marked <c>becomeVisible false</c> -- hypothermia's runs to
+        /// severity 0.04 -- and RimWorld hides those from the health card entirely. The hediff is genuinely there,
+        /// so <c>HasHediff</c> is genuinely true, and the pawn is merely standing somewhere chilly.
+        ///
+        /// <c>Hediff.Visible</c> is the same test <c>HealthCardUtility</c> filters its own list with, so this row
+        /// now says what the health tab says. Below the threshold the reading falls through to the ambient tier
+        /// and comes out as an amber "Too Cold", which is what a shivering guest actually is.
+        /// </summary>
+        private static bool HasVisible(HediffSet set, HediffDef def)
+        {
+            if (def == null)
+                return false;
+
+            List<Hediff> hediffs = set.hediffs;
+
+            if (hediffs == null)
+                return false;
+
+            for (int i = 0; i < hediffs.Count; i++)
+            {
+                Hediff hediff = hediffs[i];
+
+                if (hediff != null && hediff.def == def && hediff.Visible)
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -541,7 +575,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
             {
                 Hediff hediff = hediffs[i];
 
-                if (hediff != null && hediff.def == def && !hediff.IsPermanent())
+                // Visible for the same reason the two temperature hediffs are tested for it: this column should
+                // never name something the health tab does not show.
+                if (hediff != null && hediff.def == def && hediff.Visible && !hediff.IsPermanent())
                     return true;
             }
 

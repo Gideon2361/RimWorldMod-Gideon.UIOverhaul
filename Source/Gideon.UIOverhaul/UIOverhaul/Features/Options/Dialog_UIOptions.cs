@@ -2352,6 +2352,34 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "of its skill range, its worker restriction, or the work type being switched off for "
                 + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
 
+            WidgetToggle(view, ref y, palette, settings, Indent, "Highlight ore while the mine tool is out",
+                settings.showMineableOverlay, value => settings.showMineableOverlay = value,
+                "Shades every ore vein on the map in the colour of what it yields, but only while the Mine or "
+                + "Mine vein tool is selected.\n\nRimWorld draws ore as rock with a slightly different texture, "
+                + "which at anything but full zoom is no difference at all, so finding the compacted steel in a "
+                + "mountain means hovering cell by cell.\n\nPlain stone is not shaded: on a mountain map that "
+                + "would be the same as shading nothing.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Trade");
+
+            DrawBeaconRadius(view, ref y, palette, settings);
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Plants");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Mark blighted crops for cutting",
+                settings.autoCutBlightedPlants, value => settings.autoCutBlightedPlants = value,
+                "The moment a crop catches blight it is designated to be cut, wherever it is: in the field, in a "
+                + "hydroponics basin, or one plant in the middle of a healthy row.\n\nA blighted plant yields "
+                + "nothing at all, and it spreads to its neighbours while it stands, so cutting it is the only "
+                + "answer the game has. This saves you finding them among the healthy plants and dragging over "
+                + "each one.\n\nA pending harvest order on the plant is replaced, since it cannot yield. A plant "
+                + "you have set to never be cut is left alone. Blight already on the map when you switch this on "
+                + "is left alone too; from then on, new blight is marked.");
+
             y += 8f;
 
             GroupLabel(view, ref y, palette, "Animals");
@@ -2471,6 +2499,63 @@ namespace Gideon.UIOverhaul.Features.Options
 
         /// <summary>Whether the default ingredient radius has been dragged somewhere that is not on disk yet.</summary>
         private bool radiusUnsaved;
+
+        /// <summary>
+        /// How far an orbital trade beacon reaches.
+        ///
+        /// <b>Shown to one decimal, because vanilla's own number has one.</b> 7.9 is not a tidy figure and
+        /// rounding it to 8 in the readout would leave the default looking like something this mod had changed.
+        /// The slider steps in tenths for the same reason: the player can put it back exactly where it started.
+        ///
+        /// <b>Saved on mouse up rather than on every frame of the drag,</b> which is what the ingredient radius
+        /// above does and for the same reason: a slider writes a file per pixel otherwise.
+        /// </summary>
+        private void DrawBeaconRadius(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            float current = Mathf.Clamp(settings.tradeBeaconRadius, Trade.TradeBeaconRadius.Minimum,
+                Trade.TradeBeaconRadius.Maximum);
+
+            string suffix = Mathf.Approximately(current, Trade.TradeBeaconRadius.Default)
+                ? " (RimWorld's own)"
+                : string.Empty;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Orbital trade beacons reach: " + current.ToString("0.#") + " tiles" + suffix);
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f), current,
+                Trade.TradeBeaconRadius.Minimum, Trade.TradeBeaconRadius.Maximum, false, null, null, null, 0.1f);
+
+            y += 26f;
+
+            GUI.color = palette.TextSecondary;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight * 2f),
+                "What a beacon covers, what it can sell, and the outline drawn while you place one all follow "
+                + "this. Walls and doors still stop it: a beacon reaches through open floor only, as it does in "
+                + "the base game.");
+
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight * 2f + 6f;
+
+            if (!Mathf.Approximately(chosen, settings.tradeBeaconRadius))
+            {
+                settings.tradeBeaconRadius = chosen;
+                beaconUnsaved = true;
+            }
+
+            if (!beaconUnsaved || Input.GetMouseButton(0))
+                return;
+
+            beaconUnsaved = false;
+            settings.Save();
+        }
+
+        /// <summary>Whether the beacon radius has been dragged somewhere that is not on disk yet.</summary>
+        private bool beaconUnsaved;
 
         /// <summary>
         /// The typeface, with each choice drawn in itself.
