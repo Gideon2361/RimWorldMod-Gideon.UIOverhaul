@@ -2,6 +2,7 @@
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Pawns.Templates;
 using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
@@ -46,6 +47,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// is not a short word, where a time assignment is one of four the game names itself.
         /// </summary>
         private const float AreaColumnWidth = 150f;
+
+        /// <summary>Five tool buttons and the padding either side of them.</summary>
+        private const float EditColumnWidth = 5f * PawnTools.ButtonSize + 4f * PawnTools.ButtonGap + 16f;
 
         private const float RowHeight = 62f;
         private const float BarHeight = 14f;
@@ -425,6 +429,41 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Tooltip = "Where each pawn is allowed to be. Unrestricted lets them use the whole map.",
                 DrawCell = DrawAreaCell
             });
+
+            // The whole pawn in one place, which is what the three bands underneath cannot offer: each of those
+            // copies its own part, and copying a colonist wholesale means expanding the row and clicking three
+            // buttons. Here it is one, and it is on the row rather than inside it, so a dozen pawns can be
+            // templated without a dozen expand-and-collapse cycles.
+            Grid.Columns.Add(new UIDesignatorTabColumn
+            {
+                Label = "Edit",
+                Width = EditColumnWidth,
+                Tooltip = "Clear, copy, paste and template everything about a pawn at once: their work "
+                          + "priorities, their schedule and their policies.\n\nThe bands under an expanded row "
+                          + "have the same four tools for each part on its own.",
+                DrawCell = DrawEditToolsCell
+            });
+        }
+
+        /// <summary>
+        /// The whole-pawn tool row, on the row itself.
+        ///
+        /// Scoped to <see cref="PawnTemplateScope.Everything"/>, so a template saved here carries the priorities,
+        /// the schedule and the policies, and one applied here writes all three.
+        /// </summary>
+        private static void DrawEditToolsCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = data.Payload as Pawn;
+
+            if (pawn == null)
+                return;
+
+            // The top band only, like every other cell here: an expanded row's cell is as tall as the row plus
+            // its bands, and a toolbar centred in that would float somewhere down beside the work grid.
+            Rect band = TopBand(cell);
+
+            PawnTools.Row(new Rect(band.x + 4f, band.y, band.width - 8f, band.height), pawn,
+                PawnTemplateScope.Everything, palette);
         }
 
         /// <summary>Reused between frames, so a rebuild does not allocate a list per map.</summary>
@@ -1173,7 +1212,15 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             if (policies > 0f)
             {
-                PolicyStrip.Draw(new Rect(area.x, y, area.width, policies), pawn, palette);
+                // Narrowed by the toolbar before the chips are laid out. PolicyStrip drops the chips that do not
+                // fit rather than squeezing them, so drawing the tools over the full width would have silently
+                // cost the player the last policy on the line.
+                float tools = PawnTools.WidthFor(PawnTemplateScope.Policies);
+
+                PolicyStrip.Draw(new Rect(area.x, y, area.width - tools - 8f, policies), pawn, palette);
+
+                PawnTools.Row(new Rect(area.xMax - tools, y, tools, policies), pawn,
+                    PawnTemplateScope.Policies, palette);
 
                 y += policies + BandGap;
             }
@@ -1202,8 +1249,16 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Rect picker = new Rect(strip.x, strip.y + 6f, ScheduleStrip.BrushWidth, ScheduleStrip.CellHeight);
             ScheduleStrip.DrawBrushPicker(picker, palette);
 
-            Rect hours = new Rect(picker.xMax + gap, strip.y + 6f, strip.xMax - picker.xMax - gap,
-                ScheduleStrip.CellHeight);
+            // The same tools the work grid carries, scoped to the schedule. Taken off the right before the hours
+            // are laid out rather than drawn over them: twenty four cells divided into whatever is left is fine,
+            // and twenty four cells with a toolbar on top of the last two is not.
+            float tools = PawnTools.WidthFor(PawnTemplateScope.Schedule);
+
+            PawnTools.Row(new Rect(strip.xMax - tools, strip.y + 6f, tools, ScheduleStrip.CellHeight), pawn,
+                PawnTemplateScope.Schedule, palette);
+
+            Rect hours = new Rect(picker.xMax + gap, strip.y + 6f,
+                strip.xMax - picker.xMax - gap - tools - gap, ScheduleStrip.CellHeight);
 
             ScheduleStrip.DrawHours(hours, palette,
                 hour => pawn.timetable.GetAssignment(hour),

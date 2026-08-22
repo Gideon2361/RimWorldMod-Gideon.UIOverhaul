@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -22,6 +23,23 @@ namespace Gideon.UIOverhaul.Features.Pawns
     internal enum PawnHealthState
     {
         Healthy,
+
+        /// <summary>A corpse. Grey, no badge: nothing about a body is a job to queue.</summary>
+        Dead,
+
+        /// <summary>
+        /// Down, but already in a bed and with nothing else the matter. Blue, no badge.
+        ///
+        /// <b>Separated from <see cref="Downed"/> because the two ask for opposite things.</b> A pawn on the
+        /// floor needs somebody to drop what they are doing and carry them; a pawn in a bed has already had that
+        /// done and is waiting to get better. Badging the second one 911 puts a red emergency marker on every
+        /// hospital bed in a colony that is recovering from a raid, which is precisely when the marker most needs
+        /// to mean something.
+        ///
+        /// Nothing is hidden by this: it is the last state tested, so an untended wound, an infection, a heart
+        /// attack or anything else the game calls life threatening still wins the line and keeps its own badge.
+        /// </summary>
+        Recovering,
 
         /// <summary>
         /// Standing somewhere outside what this pawn can comfortably take, with nothing yet wrong with them.
@@ -198,6 +216,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         public static PawnHealthSummary For(Pawn pawn)
         {
+            // <b>First, because none of the triage below means anything about a corpse.</b> A dead pawn still has
+            // hediffs, still has a bleed rate frozen at the moment of death, and still stands somewhere cold, so
+            // every test in this method has an opinion about them and all of those opinions are wrong. The one
+            // fact worth the line is how far gone the body is.
+            if (pawn.Dead)
+                return new PawnHealthSummary(PawnHealthState.Dead, DeadLabel(pawn), DeadDetail(pawn));
+
             bool downed = pawn.Downed;
             bool needsTending = pawn.health?.hediffSet?.HasTendableHediff(false) ?? false;
             float bleedRate = pawn.health?.hediffSet?.BleedRateTotal ?? 0f;
@@ -234,7 +259,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (vacuum)
                 return new PawnHealthSummary(PawnHealthState.Vacuum, "In Vacuum, Unprotected", detail);
 
-            if (downed)
+            // <b>Only a pawn who still needs carrying.</b> Downed is an emergency because somebody has to stop
+            // what they are doing and rescue them, which is vanilla's own reading -- Alert_ColonistNeedsRescuing
+            // ignores a pawn already in a bed for exactly this reason. One who has been carried there is waiting
+            // to heal, and a red 911 on every hospital bed after a raid is a marker that has stopped meaning
+            // anything.
+            //
+            // Falling through rather than returning a quieter state here is the other half of it: everything
+            // below this line -- frostbite, a mental break, a life threatening condition, an infection, an
+            // untended wound -- is a real reason to raise the alarm about somebody in a bed, and each of them
+            // now gets to. Only when none of them applies does the pawn read as recovering, at the very bottom
+            // of this method.
+            if (downed && !InBed(pawn))
                 return new PawnHealthSummary(PawnHealthState.Downed, "Downed", detail);
 
             // Above tending, because all three progress while a doctor walks over and the cure is a warmer or
@@ -288,7 +324,69 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     return new PawnHealthSummary(PawnHealthState.Temperature, "Too Hot", detail);
             }
 
+            // Everything that could have been wrong has now been asked. A pawn still down at this point is in a
+            // bed with nothing else the matter, which is a state worth naming and not worth alarming about.
+            if (downed)
+                return new PawnHealthSummary(PawnHealthState.Recovering, "In Bed", detail);
+
             return new PawnHealthSummary(PawnHealthState.Healthy, "Healthy", detail);
+        }
+
+        /// <summary>
+        /// What a corpse's line says: how far the body has gone, which is the only reading that changes.
+        ///
+        /// The stage comes from the corpse's own rot comp rather than from a time calculation of ours, so a body
+        /// in a freezer reads fresh for as long as the game says it is.
+        /// </summary>
+        private static string DeadLabel(Pawn pawn)
+        {
+            return UIGuard.Try("Pawns.DeadLabel", () =>
+            {
+                Corpse corpse = pawn.Corpse;
+
+                CompRottable rot = corpse != null ? corpse.TryGetComp<CompRottable>() : null;
+
+                if (rot == null)
+                    return "Dead";
+
+                switch (rot.Stage)
+                {
+                    case RotStage.Rotting:
+                        return "Rotting";
+
+                    case RotStage.Dessicated:
+                        return "Dessicated";
+
+                    default:
+                        return "Dead";
+                }
+            }, "Dead", null);
+        }
+
+        /// <summary>How long ago, for the tooltip, since the line itself has room for one word.</summary>
+        private static string DeadDetail(Pawn pawn)
+        {
+            return UIGuard.Try("Pawns.DeadDetail", () =>
+            {
+                Corpse corpse = pawn.Corpse;
+
+                if (corpse == null || corpse.Age <= 0)
+                    return "Dead.";
+
+                return "Dead for " + corpse.Age.ToStringTicksToPeriod(false, false, false) + ".";
+            }, "Dead.", null);
+        }
+
+        /// <summary>
+        /// Whether this pawn is in a bed, by RimWorld's own test.
+        ///
+        /// <c>RestUtility.InBed</c> rather than a check for a bed at the pawn's cell: it also covers being
+        /// carried into one, sleeping spots, and the caravan and space cases, and it is the same method vanilla's
+        /// rescue alert uses to decide the same thing.
+        /// </summary>
+        private static bool InBed(Pawn pawn)
+        {
+            return UIGuard.Try("Pawns.InBed", () => pawn.InBed(), false, null);
         }
 
         /// <summary>
@@ -317,6 +415,15 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 case PawnHealthState.NeedsTending:
                 case PawnHealthState.Temperature:
                     return palette.Warning;
+
+                // Blue rather than green or amber: nothing is wrong, but nothing is finished either, and this is
+                // the palette's colour for "here is something" -- the same weight the TEND badge carries.
+                case PawnHealthState.Recovering:
+                    return palette.Accent;
+
+                // Grey, which is the one thing on this scale that is not a call to action at all.
+                case PawnHealthState.Dead:
+                    return palette.TextDisabled;
 
                 default:
                     return palette.Success;

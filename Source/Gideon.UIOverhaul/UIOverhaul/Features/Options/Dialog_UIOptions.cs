@@ -1029,6 +1029,27 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += RowHeight + 12f;
 
+            GroupLabel(view, ref y, palette, "Inspect pane");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Use the rebuilt inspect pane",
+                settings.richInspectPane, value => settings.richInspectPane = value,
+                "The panel at the bottom left, showing whatever you have selected.\n\nRimWorld gives it a name, "
+                + "a job sentence and a row of tab buttons, at one fixed height. This mod fills it: a portrait, "
+                + "the same condition reading the colonists tab uses, needs with each pawn's own break "
+                + "thresholds marked, what is impaired, the skill grid, and the assignment chips.\n\nHealth, "
+                + "Gear, Social, Needs, Bio and Log are drawn inside the pane instead of opening a window over "
+                + "it. Every other tab, including modded ones and a building's bills and storage, still opens "
+                + "its own window exactly as it does now.\n\nDrag the grip on the pane's top edge to resize it. "
+                + "Drag it all the way down and you get RimWorld's own pane back at RimWorld's own size, so this "
+                + "switch is only needed to put the tab buttons and the vanilla layout back as well.");
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "The pane's height is set by dragging its top edge, and remembered here.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 12f;
+
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
                 "The minimap and its corner, size and position are with the other widgets, under Desktop "
@@ -1183,6 +1204,14 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 Find.WindowStack.Add(new FloatMenu(options));
             });
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(indent, y, view.width - indent, RowHeight * 2f),
+                "This is the rate at normal speed. Running the game faster stretches it, and pausing stretches "
+                + "it further, so the tiles never compete with the simulation for a frame.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight * 2f;
         }
 
         /// <summary>
@@ -1315,7 +1344,8 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "to. Drag it to make the tab bigger or smaller, and the size is remembered for that tab.\n\n"
                 + "How well a tab uses the extra room is up to the tab: most lists and grids fill it, and a few "
                 + "are laid out at a fixed size and will simply have space around them.\n\nThe inspect pane is "
-                + "left alone, because it resizes itself to fit whatever you have selected.");
+                + "left alone here, because it sizes itself to fit whatever you have selected. It has a grip of "
+                + "its own on its top edge, under Panels.");
 
             int stored = UIGuard.Try("Options.CountTabSizes", () => TabSizes.Count, 0, null);
 

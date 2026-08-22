@@ -87,6 +87,23 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         /// <summary>A tile unused for this long is released, so folding a group eventually frees its memory.</summary>
         private const float IdleSeconds = 6f;
 
+        /// <summary>
+        /// The most tiles one frame may render, however far behind the schedule has fallen.
+        ///
+        /// <b>Without this the budget makes a slow frame slower.</b> The share is <c>count * deltaTime /
+        /// interval</c>, so a frame that took twice as long asks for twice as many renders -- which takes longer
+        /// still, which asks for more again. It is a feedback loop that turns a single hitch into a stutter, and
+        /// it bites hardest at high game speed, which is exactly when frames are already long. Four is enough to
+        /// keep a colony of twelve current at the default interval on any frame rate worth playing at.
+        /// </summary>
+        private const int MaxPerFrame = 4;
+
+        /// <summary>
+        /// The shortest interval any of the settings can ask for, which is also what "every frame" falls back to
+        /// once the game is running fast enough for that to be a bad idea.
+        /// </summary>
+        private const float FastestInterval = 0.05f;
+
         private sealed class Tile
         {
             internal RenderTexture Texture;
@@ -134,19 +151,101 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             }
         }
 
-        /// <summary>Seconds between refreshes of one tile, or zero for every frame.</summary>
+        /// <summary>
+        /// Seconds between refreshes of one tile, or zero for every frame.
+        ///
+        /// <b>Stretched by the game speed, which is the point of <see cref="SpeedFactor"/>.</b> The setting is
+        /// what the player wants at normal speed; at triple speed the same interval means the same number of
+        /// renders per real second competing with a simulation doing three times the work per frame.
+        /// </summary>
         private static float Interval
         {
             get
             {
+                float chosen;
+
                 switch (UIOverhaulSettingsFile.Current?.pawnViewRefresh ?? PawnViewRefresh.Ms250)
                 {
-                    case PawnViewRefresh.Ms500: return 0.5f;
-                    case PawnViewRefresh.Ms125: return 0.125f;
-                    case PawnViewRefresh.Ms50: return 0.05f;
-                    case PawnViewRefresh.EveryFrame: return 0f;
-                    default: return 0.25f;
+                    case PawnViewRefresh.Ms500:
+                        chosen = 0.5f;
+
+                        break;
+
+                    case PawnViewRefresh.Ms125:
+                        chosen = 0.125f;
+
+                        break;
+
+                    case PawnViewRefresh.Ms50:
+                        chosen = FastestInterval;
+
+                        break;
+
+                    case PawnViewRefresh.EveryFrame:
+                        chosen = 0f;
+
+                        break;
+
+                    default:
+                        chosen = 0.25f;
+
+                        break;
                 }
+
+                float factor = SpeedFactor;
+
+                // "Every frame" is the one setting with no interval to stretch, so above normal speed it becomes
+                // the fastest interval there is, stretched like the others. Left alone at normal speed and while
+                // paused, where it is a deliberate choice and costs nothing anybody notices.
+                if (chosen <= 0f)
+                    return factor <= 1f ? 0f : FastestInterval * factor;
+
+                return chosen * factor;
+            }
+        }
+
+        /// <summary>
+        /// How much to stretch the refresh interval for the speed the game is running at.
+        ///
+        /// <b>Tied to the speed button rather than to the tick rate.</b> RimWorld's own multipliers are 1, 3, 6
+        /// and 15, and stretching a quarter-second interval to a second and a half at superfast would leave the
+        /// bar showing pawns half a room from where they are. One step per button is the trade the player
+        /// actually made when they pressed it: faster game, less current picture.
+        ///
+        /// <b>Paused is slowed too, and that one is free.</b> Nothing on the map is moving, so a tile rendered
+        /// four times a second is drawing the same image four times. A tile that has never been rendered still
+        /// gets its first picture immediately -- <see cref="Schedule"/> lets a blank tile through whatever the
+        /// interval says -- so pausing never leaves the bar full of portraits waiting for a clock.
+        /// </summary>
+        private static float SpeedFactor
+        {
+            get
+            {
+                return UIGuard.Try("Bar.SpeedFactor", () =>
+                {
+                    TickManager ticks = Find.TickManager;
+
+                    if (ticks == null)
+                        return 1f;
+
+                    switch (ticks.CurTimeSpeed)
+                    {
+                        case TimeSpeed.Paused:
+                            return 4f;
+
+                        case TimeSpeed.Fast:
+                            return 2f;
+
+                        case TimeSpeed.Superfast:
+                            return 3f;
+
+                        case TimeSpeed.Ultrafast:
+                            return 4f;
+
+                        default:
+                            return 1f;
+                    }
+                }, 1f, null);
             }
         }
 
@@ -255,9 +354,14 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             float interval = Interval;
             float now = Time.realtimeSinceStartup;
 
+            // Capped as well as clamped, and the cap is the half that matters under load: the share below is
+            // proportional to how long the last frame took, so a frame that ran slowly asks for more renders,
+            // which makes the next one slower again. See MaxPerFrame. "Every frame" is exempt, because a player
+            // who asked for every frame has said what they want and the cap would quietly refuse it.
             int budget = interval <= 0f
                 ? Wanted.Count
-                : Mathf.Clamp(Mathf.CeilToInt(Wanted.Count * Time.deltaTime / interval), 1, Wanted.Count);
+                : Mathf.Clamp(Mathf.CeilToInt(Wanted.Count * Time.deltaTime / interval), 1,
+                    Mathf.Min(Wanted.Count, MaxPerFrame));
 
             Scheduled.Clear();
 

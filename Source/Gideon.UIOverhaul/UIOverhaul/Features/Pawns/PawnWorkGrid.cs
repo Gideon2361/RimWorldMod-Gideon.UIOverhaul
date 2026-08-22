@@ -146,7 +146,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextDisabled;
 
-                float tools = 5f * ToolButtonSize + 4f * ToolButtonGap;
+                float tools = PawnTools.WidthFor(PawnTemplateScope.Priorities);
 
                 Widgets.LabelEllipses(new Rect(rect.x, rect.y, Mathf.Max(0f, rect.width - tools - 12f),
                         rect.height),
@@ -154,8 +154,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
                         ? "WORK PRIORITIES   left click raises, right click lowers"
                         : "WORK   manual priorities are off, so work is only on or off");
 
-                Tools(new Rect(rect.xMax - tools, rect.y + (rect.height - ToolButtonSize) * 0.5f, tools,
-                    ToolButtonSize), pawn, palette);
+                // The row itself is PawnTools, shared with the schedule band, the policy band and the pawn row's
+                // own column. Scoped to Priorities here, so it templates priorities and nothing else whatever
+                // the template the player picks happens to carry.
+                PawnTools.Row(new Rect(rect.xMax - tools, rect.y, tools, rect.height), pawn,
+                    PawnTemplateScope.Priorities, palette);
             }
             finally
             {
@@ -165,49 +168,6 @@ namespace Gideon.UIOverhaul.Features.Pawns
             }
         }
 
-        /// <summary>
-        /// The same five tools the work tab's row carries, scoped to priorities.
-        ///
-        /// <b>Shared with the work tab rather than reimplemented.</b> They go through <see cref="WorkPanel"/>'s own
-        /// methods, so the clipboard is one clipboard: copying a pawn's priorities in the work tab and pasting them
-        /// here is obviously wanted, and two clipboards would have been a bug nobody reported because nobody would
-        /// guess it was possible.
-        ///
-        /// Every template action is scoped to <see cref="PawnTemplateScope.Priorities"/>, so these template
-        /// priorities and nothing else, whatever else the template the player picks happens to carry.
-        /// </summary>
-        private static void Tools(Rect rect, Pawn pawn, UIColorPaletteDef palette)
-        {
-            const float step = ToolButtonSize + ToolButtonGap;
-
-            float x = rect.x;
-
-            if (IconAction(new Rect(x, rect.y, ToolButtonSize, ToolButtonSize), WorkToolIcons.Clear, "0", palette,
-                    "Clear every work priority for " + pawn.LabelShortCap))
-                WorkPanel.ConfirmClearPriorities(pawn);
-
-            if (IconAction(new Rect(x + step, rect.y, ToolButtonSize, ToolButtonSize), WorkToolIcons.Copy, "C",
-                    palette, "Copy " + pawn.LabelShortCap + "'s priorities"))
-                WorkPanel.CopyPriorities(pawn);
-
-            // Nothing to paste is a disabled button rather than a hidden one: a tool that appears once you have
-            // used another tool is a tool nobody finds.
-            if (IconAction(new Rect(x + step * 2f, rect.y, ToolButtonSize, ToolButtonSize), WorkToolIcons.Paste,
-                    "P", palette, WorkPanel.PasteTooltip(pawn), !WorkPanel.HasClipboard))
-                WorkPanel.PastePriorities(pawn);
-
-            if (IconAction(new Rect(x + step * 3f, rect.y, ToolButtonSize, ToolButtonSize), WorkToolIcons.Save,
-                    "S", palette, "Save " + pawn.LabelShortCap + "'s priorities as a template"))
-            {
-                PawnTemplate saved = PawnTemplateStore.CaptureFrom(pawn, PawnTemplateScope.Priorities);
-
-                Find.WindowStack.Add(new Dialog_PawnTemplates(null, PawnTemplateScope.Priorities, saved));
-            }
-
-            if (IconAction(new Rect(x + step * 4f, rect.y, ToolButtonSize, ToolButtonSize), WorkToolIcons.Apply,
-                    "A", palette, "Apply a saved priority template to " + pawn.LabelShortCap))
-                Find.WindowStack.Add(new Dialog_PawnTemplates(pawn, PawnTemplateScope.Priorities));
-        }
 
         private static void Notice(Rect rect, Pawn pawn, UIColorPaletteDef palette)
         {
@@ -384,43 +344,5 @@ namespace Gideon.UIOverhaul.Features.Pawns
             return new Color(color.r, color.g, color.b, alpha);
         }
 
-        /// <summary>
-        /// A themed icon button, with a glyph where the art is missing and an optional disabled state.
-        ///
-        /// A local copy for the same reason the templates window has one: a control earns its place in the
-        /// framework once a third caller wants it.
-        /// </summary>
-        private static bool IconAction(Rect r, Texture2D icon, string fallbackGlyph, UIColorPaletteDef palette,
-            string tooltip, bool disabled = false)
-        {
-            TooltipHandler.TipRegion(r, (TipSignal) tooltip);
-
-            bool over = !disabled && Mouse.IsOver(r);
-
-            UIElementPainter.PaintButton(r, palette, over, over && Input.GetMouseButton(0));
-
-            Color previous = GUI.color;
-
-            GUI.color = disabled ? palette.TextDisabled : over ? palette.TextPrimary : palette.TextSecondary;
-
-            if (icon != null)
-            {
-                GUI.DrawTexture(r.ContractedBy(3f), icon, ScaleMode.ScaleToFit);
-            }
-            else
-            {
-                TextAnchor previousAnchor = Text.Anchor;
-
-                Text.Anchor = TextAnchor.MiddleCenter;
-
-                Widgets.Label(r, fallbackGlyph);
-
-                Text.Anchor = previousAnchor;
-            }
-
-            GUI.color = previous;
-
-            return !disabled && Widgets.ButtonInvisible(r);
-        }
     }
 }

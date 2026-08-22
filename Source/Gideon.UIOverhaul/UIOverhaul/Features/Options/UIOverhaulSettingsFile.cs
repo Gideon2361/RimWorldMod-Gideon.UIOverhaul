@@ -271,6 +271,32 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showArchitectInfoPanel = true;
 
         /// <summary>
+        /// Whether the inspect pane is this mod's rebuilt one.
+        ///
+        /// <b>On by default, and it has a floor rather than needing to be switched off.</b> The pane can be
+        /// dragged down to RimWorld's own 165 pixels, at which point it shows a name, a condition and the inspect
+        /// string, which is what the game shows. This switch exists for somebody who wants the vanilla pane
+        /// itself back, chips and portrait included, usually because another mod is drawing into the same space.
+        ///
+        /// Off also hands the tab row back, so an ITab that this replaces opens its own window again.
+        /// </summary>
+        public bool richInspectPane = true;
+
+        /// <summary>
+        /// How tall the inspect pane is, in pixels.
+        ///
+        /// Written by the grip on the pane's top edge rather than by any control in the options window, and
+        /// clamped where it is read rather than here: a hand-edited number larger than the screen would put the
+        /// grip needed to drag it back off the top of it. See <c>InspectPaneMetrics.Height</c>.
+        ///
+        /// <b>The default is 300 rather than vanilla's 165,</b> which is the smallest height that fits a header,
+        /// a body and the inspect string at once. Shipping at the floor would mean an install that never finds
+        /// the grip never sees the feature, and a feature nobody discovers is one that was not built; shipping
+        /// tall means the pane covers more map than somebody may want, and that is one drag to fix.
+        /// </summary>
+        public float inspectPaneHeight = 300f;
+
+        /// <summary>
         /// Whether room and zone names are drawn onto the floor, and renameable.
         ///
         /// <b>On by default.</b> It is the whole point of the feature that it works before anybody configures
@@ -830,6 +856,16 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showArchitectInfoPanel = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "richInspectPane":
+                            settings.richInspectPane = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        // Invariant, like every other number in this file: a height written on a machine that
+                        // uses a comma for the decimal point should still parse here.
+                        case "inspectPaneHeight":
+                            settings.inspectPaneHeight = ParseFloat(value, 300f);
+                            break;
+
                         case "showMinimapWidget":
                             settings.showMinimapWidget = !value.EqualsIgnoreCase("false");
                             break;
@@ -1163,6 +1199,9 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("showStuffDetails", showStuffDetails ? "true" : "false");
                     writer.WriteElementString("showArchitectInfoPanel",
                         showArchitectInfoPanel ? "true" : "false");
+                    writer.WriteElementString("richInspectPane", richInspectPane ? "true" : "false");
+                    writer.WriteElementString("inspectPaneHeight",
+                        inspectPaneHeight.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("showMinimapWidget",
                         showMinimapWidget ? "true" : "false");
                     writer.WriteElementString("minimapCorner", minimapCorner.ToString());
