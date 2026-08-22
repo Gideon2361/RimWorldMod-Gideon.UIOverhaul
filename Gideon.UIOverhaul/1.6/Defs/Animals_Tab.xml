@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The animals tab: one list for the colony's own animals and for the wildlife standing outside, grouped
+    by species rather than by creature.
+
+    order 40 is where vanilla's Animals button sat, so the bar reads the way it always did for a player
+    who has not rearranged it. Vanilla's Animals and Wildlife buttons are suppressed from our bar in
+    UIButtonBarConfig.Suppressed, and their hotkeys are redirected here by
+    Patch_MainTabsRoot_ToggleTab_Animals, which also chooses which half of the list opens: F4 lands on the
+    colony, F5 on the wildlife.
+
+    No defaultHotKey of our own, deliberately. F4 and F5 already reach this tab through the redirect, and a
+    third binding on the same keys would be a conflict the player has to go and resolve for no gain.
+
+    validWithoutMap is false: every row is read off a map's animals, so there is nothing to show from the
+    world view. closesWorldView matches vanilla's two buttons, since choosing this tab is a statement about
+    a colony rather than about the planet.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Animals</defName>
+    <label>animals</label>
+    <description>Every animal the colony owns and every animal it can see, one row per species: what they produce, what they eat, what the pasture will carry through winter, and what hunting them would yield. Hunting and taming are ordered by the number you want rather than by ticking a row per creature, and hunting bills keep a meat or leather stock topped up on their own.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Animals.MainTabWindow_Animals</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <closesWorldView>true</closesWorldView>
+    <iconPath>UI/MainButtonIcons/Animals</iconPath>
+    <order>40</order>
+  </MainButtonDef>
+
+</Defs>

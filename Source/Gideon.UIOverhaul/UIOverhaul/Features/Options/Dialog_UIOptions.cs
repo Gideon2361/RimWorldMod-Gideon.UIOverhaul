@@ -2351,6 +2351,22 @@ namespace Gideon.UIOverhaul.Features.Options
                 "Marks a bill red in the bills window when no colonist is allowed to start it, whether because "
                 + "of its skill range, its worker restriction, or the work type being switched off for "
                 + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Animals");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Let an allowed area keep livestock",
+                settings.penAnimalsUseAreas, value => settings.penAnimalsUseAreas = value,
+                "RimWorld refuses an allowed area to any animal that roams, which is every animal the pen system "
+                + "exists for: cows, sheep, chickens, muffalo. Turn this on and they can be given one like any "
+                + "other animal, from this mod's animals tab or RimWorld's.\n\nThe whole AI honors it, so an area "
+                + "keeps a cow out of your crops or off a bridge.\n\nIt also stops them wandering off the map. "
+                + "Livestock with an area, or standing in a pen meant for them, no longer starts roaming, and one "
+                + "already on its way turns back the moment you give it either. RimWorld's own rule only counts "
+                + "ropes and a fully enclosed pen, so a fence with a gap in it loses you the herd.\n\nThis is the "
+                + "one setting here that changes what pawns are allowed to do rather than how something is drawn, "
+                + "which is why it starts switched off.");
         }
 
         /// <summary>

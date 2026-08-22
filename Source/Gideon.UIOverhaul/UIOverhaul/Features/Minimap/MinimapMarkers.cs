@@ -20,6 +20,16 @@ namespace Gideon.UIOverhaul.Features.Minimap
         internal int X;
         internal int Z;
         internal MinimapMarkerKind Kind;
+
+        /// <summary>
+        /// Whether this animal hunts.
+        ///
+        /// <b>A flag beside the kind rather than a kind of its own,</b> because the two answer different questions
+        /// and a predator can be either. A warg on the far ridge is wildlife; the same warg in a manhunter pack is
+        /// a hostile, and trading the red away for a paw colour would lose the more urgent of the two facts. So the
+        /// kind keeps deciding the colour and this decides the shape.
+        /// </summary>
+        internal bool Predator;
     }
 
     /// <summary>
@@ -118,7 +128,13 @@ namespace Gideon.UIOverhaul.Features.Minimap
                 if (kind == MinimapMarkerKind.Hostile)
                     hostileCount++;
 
-                Markers.Add(new MinimapMarker { X = cell.x, Z = cell.z, Kind = kind });
+                Markers.Add(new MinimapMarker
+                {
+                    X = cell.x,
+                    Z = cell.z,
+                    Kind = kind,
+                    Predator = pawn.RaceProps != null && pawn.RaceProps.predator
+                });
             }
         }
 

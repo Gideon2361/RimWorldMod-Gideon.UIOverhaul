@@ -1,3 +1,4 @@
+using System;
 using Gideon.UIFramework.Helpers;
 using RimWorld;
 using Verse;
@@ -103,7 +104,16 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// manager is worth having here rather than in the column heading: it takes a map, and with several maps on
         /// screen a heading button would have to guess which one was meant.
         /// </summary>
-        internal static void Choose(Pawn pawn)
+        /// <param name="changed">
+        /// Called after the choice is written, for a caller that caches what it drew.
+        ///
+        /// <b>Passed down to the menu's own callback rather than run when the menu opens,</b> which is the whole
+        /// reason it is a parameter: the write happens whenever the player clicks an entry, not when the list
+        /// appears. The animals tab needs this because its roster rebuilds on a tick timer and ticks do not pass
+        /// while the game is paused: without it, an area assigned during a pause left the row reading exactly what
+        /// it read before, which looks like the assignment failing.
+        /// </param>
+        internal static void Choose(Pawn pawn, Action changed = null)
         {
             UIGuard.Try("Pawns.AreaMenu", () =>
             {
@@ -112,7 +122,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 if (map?.areaManager == null || pawn.playerSettings == null)
                     return;
 
-                AreaUtility.MakeAllowedAreaListFloatMenu(area => Set(pawn, area), true, true, map);
+                AreaUtility.MakeAllowedAreaListFloatMenu(area =>
+                {
+                    Set(pawn, area);
+
+                    changed?.Invoke();
+                }, true, true, map);
             }, "The area list could not be built, so nothing was changed.");
         }
 

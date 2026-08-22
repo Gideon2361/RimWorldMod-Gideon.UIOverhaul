@@ -62,10 +62,33 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// draws nothing opens onto empty background. Each part answers for its own height, so a pawn who has
         /// neither simply does not grow.
         /// </summary>
+        /// <summary>
+        /// How much taller this pawn's row becomes when it is opened: the day, the standing orders, and the work
+        /// priorities.
+        ///
+        /// <b>Measured per pawn rather than fixed.</b> None of the three applies to everybody. An animal has no
+        /// timetable and no policies, a guest has no configurable food, a mech can never be given work, and a row
+        /// charged for a band that then draws nothing opens onto empty background. Each part answers for its own
+        /// height, so a pawn who has none of them simply does not grow.
+        ///
+        /// <b>The work grid needs a width to answer,</b> because how many columns fit decides how many rows there
+        /// are. The columns' own width is that answer: it is what the row is laid out across, and it is known
+        /// before the row is sized.
+        /// </summary>
         private static float ExpansionHeightFor(Pawn pawn)
         {
-            return ScheduleHeightFor(pawn) + PolicyStrip.HeightFor(pawn);
+            return ScheduleHeightFor(pawn) + PolicyStrip.HeightFor(pawn)
+                   + PawnWorkGrid.HeightFor(pawn, ExpansionWidth()) + BandGap * 2f;
         }
+
+        /// <summary>The width the bands under a row are laid out in.</summary>
+        private static float ExpansionWidth()
+        {
+            return Mathf.Max(120f, Grid.ColumnsWidth - RowCard.AccentWidth - 16f);
+        }
+
+        /// <summary>Between the three bands, so they read as three things rather than one block.</summary>
+        private const float BandGap = 6f;
 
         private static float ScheduleHeightFor(Pawn pawn)
         {
@@ -103,29 +126,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
             {
                 EnsureColumns();
 
-                float wanted = Grid.RequestedWidth + WindowChrome;
-
-                // The window grows for the pane rather than the grid shrinking into it. The columns are fixed
-                // widths, so taking 330px off the grid would clip a column or force a horizontal scrollbar under a
-                // table that had been fitting perfectly -- the row you clicked would move to make room for the
-                // panel describing it.
-                if (paneFor != null)
-                    wanted += PawnWorkPane.PaneWidth + PaneGap;
-
-                return Mathf.Min(wanted, UI.screenWidth - 16f);
+                // Nothing to widen for since 2026-08-22. The work priorities used to be a 330px pane beside the
+                // table, which the window had to grow for and then shrink back from; they are drawn inside the
+                // opened row now, so the tab asks for the width its columns need and keeps it.
+                return Mathf.Min(Grid.RequestedWidth + WindowChrome, UI.screenWidth - 16f);
             }
         }
-
-        /// <summary>Gap between the grid and the pane, matching the architect tab's.</summary>
-        private const float PaneGap = 8f;
-
-        /// <summary>
-        /// Width the work pane needs, or zero when it is closed.
-        ///
-        /// Read by the window every frame to decide how much wider than the player's own size it should be.
-        /// See <see cref="Tabs.IUITabWidthReservation"/>.
-        /// </summary>
-        internal static float PaneReservation => paneFor == null ? 0f : PawnWorkPane.PaneWidth + PaneGap;
 
         internal static float WindowHeight => Mathf.Min(760f, UI.screenHeight * 0.8f);
 
@@ -140,27 +146,21 @@ namespace Gideon.UIOverhaul.Features.Pawns
         ///
         /// A single field rather than a set that is cleared before each add, so "only one is open" is a thing
         /// the type cannot express otherwise, rather than a rule some future call site has to remember.
+        ///
+        /// <b>It is now the only such field.</b> There was a second, for the pawn the work pane was open for, kept
+        /// separate because a pane could be closed on its own. With the priorities inside the row there is one
+        /// state again: the row is open or it is not.
         /// </summary>
         private static Pawn expandedPawn;
 
         private static readonly List<Pawn> Roster = new List<Pawn>();
 
         /// <summary>
-        /// The pawn the work pane is open for, or null when it is closed.
+        /// Drops the fold state for a pawn who no longer exists.
         ///
-        /// <b>Kept beside <see cref="expandedPawn"/> rather than derived from it.</b> They move together today,
-        /// since one row is open at a time and opening it opens the pane. They are still two ideas: the pane can
-        /// be closed on its own, and a later change that opens it from somewhere other than a row would have
-        /// nothing to say about which row is unfolded.
-        /// </summary>
-        private static Pawn paneFor;
-
-        /// <summary>
-        /// Drops the pane and the fold state for a pawn who no longer exists.
-        ///
-        /// Subscribed rather than swept, so a colonist who dies while their pane is open is gone from it in the same
-        /// frame. A destroyed pawn in <see cref="paneFor"/> would otherwise be asked for their priorities on the
-        /// next draw, which is exactly the read the caches now throw <c>InvalidCacheRequest</c> for.
+        /// Subscribed rather than swept, so a colonist who dies while their row is open is gone from it in the same
+        /// frame. A destroyed pawn left in <see cref="expandedPawn"/> would otherwise be asked for their priorities
+        /// on the next draw, which is exactly the read the caches now throw <c>InvalidCacheRequest</c> for.
         /// </summary>
         /// <remarks>
         /// Wrapped, because a static constructor that throws takes the whole type with it: every later access
@@ -178,9 +178,6 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 {
                     if (expandedPawn == pawn)
                         expandedPawn = null;
-
-                    if (paneFor == pawn)
-                        paneFor = null;
                 };
             }
             catch (System.Exception ex)
@@ -204,31 +201,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             Rect content = inRect.ContractedBy(6f);
 
-            // Above everything, spanning the grid and the pane both. The filters govern what the whole tab is
-            // about, so putting them inside the grid's own area would read as a property of the table rather
-            // than of the view.
+            // Above the table. The filters govern what the whole tab is about, so putting them inside the grid's
+            // own area would read as a property of the table rather than of the view.
             Rect filters = new Rect(content.x, content.y, content.width, FilterBarHeight);
             DrawFilterBar(filters, palette);
 
             content = new Rect(content.x, filters.yMax + FilterBarGap, content.width,
                 Mathf.Max(0f, content.height - FilterBarHeight - FilterBarGap));
-
-            // The pane takes its width off the right before the grid is laid out, so the grid draws into what is
-            // left rather than being covered by it -- the same order the architect tab's option pane uses.
-            if (paneFor != null)
-            {
-                Rect pane = new Rect(content.xMax - PawnWorkPane.PaneWidth, content.y,
-                    PawnWorkPane.PaneWidth, content.height);
-
-                content = new Rect(content.x, content.y,
-                    content.width - PawnWorkPane.PaneWidth - PaneGap, content.height);
-
-                // The window grows on the next frame rather than this one, since its rect is settled outside the
-                // GUI pass. So the frame a pane opens on draws the grid one pane narrower and then it widens: a
-                // single frame of a tighter table, rather than a pane drawn over the top of one.
-                if (!PawnWorkPane.Draw(pane, paneFor, palette))
-                    Close(paneFor);
-            }
 
             Grid.Draw(content, palette);
 
@@ -592,11 +571,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 }
             }
 
-            // A pane for a pawn who has no row is a panel pointing at nothing -- they have joined a caravan, been
-            // captured, or left with a transport pod. Not a destroyed pawn, which PawnLifecycle handles directly;
-            // this is the milder case of a colonist who still exists but is no longer listed.
-            if (paneFor != null && !Roster.Contains(paneFor))
-                paneFor = null;
+            // An open row for a pawn who is no longer listed would be a fold nobody can reach to close: they have
+            // joined a caravan, been captured, or left with a transport pod. Not a destroyed pawn, which
+            // PawnLifecycle handles directly; this is the milder case of a colonist who still exists.
+            if (expandedPawn != null && !Roster.Contains(expandedPawn))
+                expandedPawn = null;
 
             // No sweeping here any more. The readings live in PawnAttributes as shared per-attribute caches, and
             // holding a departed colonist is handled where it belongs: UICacheController prunes keys whose subject
@@ -690,17 +669,28 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         /// <summary>
-        /// The row's hit target: everything in the band past the portrait, which owns its own click.
+        /// The row's hit target: the band between the portrait and the area column, both of which own their clicks.
         ///
-        /// A single rect starting past the portrait rather than the band with a hole in it. What is given up is
-        /// the arrow and the margins around it, and the arrow has its own hit target covering that -- so between
-        /// the two, the whole band toggles except the face.
+        /// A single rect between the two rather than the band with two holes in it. What is given up is the arrow
+        /// and the margins around it, and the arrow has its own hit target covering that -- so between them, the
+        /// whole band toggles except the face and the area button.
+        ///
+        /// <b>The area column was swallowed until 2026-08-22.</b> Reported by Aaron: its dropdown opened and shut
+        /// the row instead of the area menu. Same cause as the portrait before it -- this background is drawn
+        /// before any cell, so its ButtonInvisible is the first one under the cursor and takes the click -- and the
+        /// same fix, which is to cut the cell out by geometry rather than to hope for a draw order.
+        ///
+        /// <b>Measured from the columns, not from the band.</b> The band is as wide as the *window*: the control
+        /// lays rows out across <c>Mathf.Max(ColumnsWidth, available)</c>, so on a tab dragged wider than its
+        /// columns the band has slack on the right and <c>band.xMax - AreaColumnWidth</c> would cut a strip of
+        /// empty space while leaving the real column live. The columns' own width is where the column is.
         /// </summary>
         private static Rect RowClickZone(Rect band)
         {
             float left = PortraitFrame(band).xMax + PortraitInset;
+            float right = Mathf.Min(band.xMax, band.x + Grid.ColumnsWidth - AreaColumnWidth);
 
-            return new Rect(left, band.y, Mathf.Max(0f, band.xMax - left), band.height);
+            return new Rect(left, band.y, Mathf.Max(0f, right - left), band.height);
         }
 
         /// <summary>Whether the cursor is over anything that toggles the row, for tinting the arrow.</summary>
@@ -724,35 +714,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static void Toggle(Pawn pawn)
         {
-            if (expandedPawn == pawn)
-            {
-                expandedPawn = null;
-                Close(pawn);
-            }
-            else
-            {
-                expandedPawn = pawn;
-                Open(pawn);
-            }
+            expandedPawn = expandedPawn == pawn ? null : pawn;
 
             SoundDefOf.Click.PlayOneShotOnCamera();
-        }
-
-        private static void Open(Pawn pawn)
-        {
-            if (paneFor == pawn)
-                return;
-
-            paneFor = pawn;
-
-            // A new pawn starts at the top of their list rather than at wherever the previous one was scrolled to.
-            PawnWorkPane.Reset();
-        }
-
-        private static void Close(Pawn pawn)
-        {
-            if (paneFor == pawn)
-                paneFor = null;
         }
 
         private static void DrawPawnCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
@@ -1186,18 +1150,38 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (pawn == null)
                 return;
 
-            Rect area = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight,
-                row.width - RowCard.AccentWidth - 16f, ExpansionHeightFor(pawn));
+            // Laid out across the columns rather than across the row, which is wider: the control gives a row the
+            // whole window when the tab has been dragged past its columns, and a work grid that used that width
+            // would run out under the empty space to the right of the table.
+            Rect area = new Rect(row.x + RowCard.AccentWidth + 8f, row.y + RowHeight, ExpansionWidth(),
+                ExpansionHeightFor(pawn));
 
+            float y = area.y;
             float schedule = ScheduleHeightFor(pawn);
 
-            DrawScheduleStrip(new Rect(area.x, area.y, area.width, schedule), pawn, palette);
+            // Each band is offset by what the one above actually took, not by a constant. A pawn with no timetable
+            // still has policies, and an arrangement that assumed the schedule was always there would leave them
+            // floating below a gap.
+            if (schedule > 0f)
+            {
+                DrawScheduleStrip(new Rect(area.x, y, area.width, schedule), pawn, palette);
 
-            // Offset by what the schedule actually took, not by the constant. A pawn with no timetable still
-            // has policies, and an arrangement that assumed the schedule was always there would have left them
-            // floating below a gap -- or, in the earlier shape of this method, skipped them entirely.
-            PolicyStrip.Draw(new Rect(area.x, area.y + schedule, area.width, PolicyStrip.HeightFor(pawn)),
-                pawn, palette);
+                y += schedule + BandGap;
+            }
+
+            float policies = PolicyStrip.HeightFor(pawn);
+
+            if (policies > 0f)
+            {
+                PolicyStrip.Draw(new Rect(area.x, y, area.width, policies), pawn, palette);
+
+                y += policies + BandGap;
+            }
+
+            float work = PawnWorkGrid.HeightFor(pawn, area.width);
+
+            if (work > 0f)
+                PawnWorkGrid.Draw(new Rect(area.x, y, area.width, work), pawn, palette);
         }
 
         /// <summary>

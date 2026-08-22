@@ -48,6 +48,17 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
 
         private const float SearchHeight = UITextBoxControl.DefaultHeight;
         private const float ToolbarHeight = 24f;
+
+        private const float TemplateBarHeight = 24f;
+
+        /// <summary>
+        /// The shortest panel that still gets the template buttons.
+        ///
+        /// Below this the tree is short enough that four rows matter more than the buttons do, and the same
+        /// templates are reachable from any full sized filter anyway. 260 is the height the hunting bill's item
+        /// filter is drawn at, which is the case this threshold exists to leave alone.
+        /// </summary>
+        private const float TemplateBarMinPanelHeight = 300f;
         private const float ReadoutWidth = 80f;
 
         /// <summary>Vanilla's own range slider geometry, so a pinned slider is the size players know.</summary>
@@ -207,8 +218,89 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
                 y += Gap;
             }
 
-            DrawTree(new Rect(inner.x, y, inner.width, Mathf.Max(0f, inner.yMax - y)), state, view, filter,
-                palette, forceHiddenDefs, showMentalBreakChanceRange, suppressSmallVolumeTags, map);
+            // The template bar sits under the tree, and the tree gives up the room for it. Only where there is
+            // room to give: this panel is drawn at everything from a full storage tab to a 260 pixel column inside
+            // the hunting bill, and two buttons are not worth four rows of a short tree.
+            float templates = rect.height >= TemplateBarMinPanelHeight ? TemplateBarHeight + Gap : 0f;
+
+            DrawTree(new Rect(inner.x, y, inner.width, Mathf.Max(0f, inner.yMax - y - templates)), state, view,
+                filter, palette, forceHiddenDefs, showMentalBreakChanceRange, suppressSmallVolumeTags, map);
+
+            if (templates > 0f)
+            {
+                DrawTemplateBar(new Rect(inner.x, inner.yMax - TemplateBarHeight, inner.width, TemplateBarHeight),
+                    filter, parentFilter, palette);
+            }
+        }
+
+        /// <summary>
+        /// Saving the filter as a template and loading one back.
+        ///
+        /// <b>Asked for on 2026-08-22 for the storage tab,</b> where a colony's third shelf wants the filter its
+        /// first two already have and there was no way to say so. It lands in every filter in the game because
+        /// this panel replaces every filter in the game, which is a bonus rather than the aim: a bill's ingredient
+        /// filter is worth templating for the same reason.
+        ///
+        /// <b>Two buttons rather than one.</b> They open the same window, since saving and loading are one list
+        /// seen from two sides, but a player looking to save should not have to learn that. Which one was pressed
+        /// only decides whether the name box arrives filled in.
+        /// </summary>
+        private static void DrawTemplateBar(Rect rect, ThingFilter filter, ThingFilter parentFilter,
+            UIColorPaletteDef palette)
+        {
+            float half = (rect.width - Gap) * 0.5f;
+            string origin = Origin(filter);
+
+            if (Button(new Rect(rect.x, rect.y, half, rect.height), "Save as template", palette))
+                Dialog_FilterTemplates.Open(filter, parentFilter, origin, null, true);
+
+            if (Button(new Rect(rect.x + half + Gap, rect.y, half, rect.height), "Load template", palette))
+                Dialog_FilterTemplates.Open(filter, parentFilter, origin, null, false);
+        }
+
+        /// <summary>
+        /// What to call the filter being saved, which becomes the template's suggested name.
+        ///
+        /// A filter does not know what owns it, so this is the best honest answer: its own summary when it has one,
+        /// which is what RimWorld shows for a stockpile, and "Filter" when it does not. Nothing is inferred from
+        /// the caller, because the same panel is drawn for a dozen different owners.
+        /// </summary>
+        private static string Origin(ThingFilter filter)
+        {
+            return UIGuard.Try("Filters.TemplateOrigin", () =>
+            {
+                string summary = filter?.customSummary;
+
+                return summary.NullOrEmpty() ? "Filter" : summary;
+            }, "Filter", null);
+        }
+
+        private static bool Button(Rect rect, string label, UIColorPaletteDef palette)
+        {
+            bool over = Mouse.IsOver(rect);
+
+            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = palette.TextPrimary;
+
+                Widgets.Label(rect, label);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+
+            return Widgets.ButtonInvisible(rect);
         }
 
         /// <summary>

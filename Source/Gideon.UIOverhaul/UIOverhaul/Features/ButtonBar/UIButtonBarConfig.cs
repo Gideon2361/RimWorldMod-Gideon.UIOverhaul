@@ -148,9 +148,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// <summary>
         /// Buttons removed from the bar outright, whatever the player's saved layout says.
         ///
-        /// <b>Only the vanilla menu, and only because this mod replaced it.</b> Escape now opens our own
-        /// settings window, which carries saving, loading, options and quitting, so vanilla's menu button is a
-        /// second door into a room the player has already been shown.
+        /// <b>The vanilla menu, because this mod replaced it.</b> Escape now opens our own settings window, which
+        /// carries saving, loading, options and quitting, so vanilla's menu button is a second door into a room
+        /// the player has already been shown.
+        ///
+        /// <b>And vanilla's two animal tabs, because one tab replaced both.</b> Their buttons would open windows
+        /// that <c>Patch_MainTabsRoot_ToggleTab_Animals</c> redirects anyway, so leaving them on the bar would be
+        /// three buttons for one list. Pressing F4 or F5 still works and lands on the right half of ours, which
+        /// is the reason the redirect exists rather than only this.
+        ///
+        /// Conditioned on our tab actually being in the def database. Without that check, a mod folder whose XML
+        /// failed to load would take the animals screen away entirely rather than falling back to the game's.
         ///
         /// Suppressed rather than hidden by default, and the difference matters: hidden is the player's setting
         /// to change, and a button whose window nothing opens any more should not be something they can put
@@ -159,8 +167,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         /// </summary>
         public static bool Suppressed(string defName)
         {
-            return !defName.NullOrEmpty()
-                   && string.Equals(defName, "Menu", StringComparison.OrdinalIgnoreCase);
+            if (defName.NullOrEmpty())
+                return false;
+
+            if (string.Equals(defName, "Menu", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!string.Equals(defName, "Animals", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(defName, "Wildlife", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return Animals.AnimalTabs.Available;
         }
 
         public bool IsHidden(string defName)

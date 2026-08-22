@@ -55,6 +55,14 @@ namespace Gideon.UIOverhaul.Features.Minimap
         private static readonly Dictionary<Map, Baked> Cache = new Dictionary<Map, Baked>();
 
         /// <summary>
+        /// The last bake reading written to the log for each map, so the same one is not written again.
+        ///
+        /// Keyed by map beside the picture cache and pruned with it, because a map that has been left and
+        /// returned to is worth a fresh line: its terrain sampling starts over.
+        /// </summary>
+        private static readonly Dictionary<Map, string> Reported = new Dictionary<Map, string>();
+
+        /// <summary>
         /// The picture for this map, rebaked if it has gone stale. Null when there is nothing to draw.
         /// </summary>
         internal static Texture2D For(Map map)
@@ -224,12 +232,37 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// about the code is guesswork. One line naming which branch dominated, and the terrain actually under
         /// the middle of the map, turns the next report into a fact rather than another theory.
         ///
-        /// Off unless <c>debugLogging</c> is set, and once per bake rather than per cell.
+        /// Off unless <c>debugLogging</c> is set.
+        ///
+        /// <b>Once per map, and again only when the reading changes.</b> It used to write a line on every bake,
+        /// which is one every five seconds for as long as the game runs: ninety five lines in eight minutes of
+        /// Aaron's log on 2026-08-22, where they buried a real exception that had been reported in the middle of
+        /// them. A diagnostic that drowns the thing it is meant to help you find is doing harm.
+        ///
+        /// <b>What counts as a change is deliberately narrow.</b> Fogged and structure counts move constantly as
+        /// the colony explores and builds, so keying on those would print every time again. The signature is the
+        /// three numbers that say whether the sampling is working: how many terrains were sampled, how many fell
+        /// back to a guess, and how many distinct colours came out. Those settle once a map is loaded and only
+        /// move when something new appears, which is exactly when another line is worth reading.
+        ///
+        /// <b>The cell walk happens after that decision, not before it.</b> Counting fogged, structure and
+        /// missing cells is a pass over the whole map, and it exists only to fill in the line. Doing it first
+        /// would leave the expensive half running every five seconds to produce nothing.
         /// </summary>
         private static void Report(Map map, TerrainDef[] terrain, Building[] edifices, FogGrid fog, IntVec3 size)
         {
-            if (!UIDebug.Enabled)
+            if (!UIDebug.Enabled || map == null)
                 return;
+
+            string signature = MinimapTerrainColors.Sampled + "/" + MinimapTerrainColors.Fallbacks + "/"
+                               + MinimapTerrainColors.Distinct;
+
+            string last;
+
+            if (Reported.TryGetValue(map, out last) && last == signature)
+                return;
+
+            Reported[map] = signature;
 
             int cells = size.x * size.z;
             int fogged = 0;
@@ -401,6 +434,7 @@ namespace Gideon.UIOverhaul.Features.Minimap
                 {
                     Release(Cache[map]);
                     Cache.Remove(map);
+                    Reported.Remove(map);
                 }
             }, null);
         }
@@ -412,6 +446,10 @@ namespace Gideon.UIOverhaul.Features.Minimap
                 Release(pair.Value);
 
             Cache.Clear();
+
+            // What has been logged goes with the pictures, so the first bake of the next game says what it saw
+            // rather than being silenced by a reading from the last one.
+            Reported.Clear();
 
             // Sampled terrain colours go too. They are keyed by TerrainDef, which survives a reload, but a mod
             // list change between games can retire a def and there is no reason to hold the old ones.

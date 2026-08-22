@@ -318,6 +318,27 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool warnStalledBills = true;
 
         /// <summary>
+        /// Whether livestock can be given an allowed area, which RimWorld refuses.
+        ///
+        /// <b>Off by default, and that is not caution for its own sake.</b> This is the only setting in this file
+        /// that changes what the game's pawns are allowed to do rather than how something is drawn: vanilla gates
+        /// the area control on <c>Pawn_PlayerSettings.SupportsAllowedAreas</c>, which refuses any animal with a
+        /// <c>roamMtbDays</c>, because livestock is meant to be held by a pen. Turning it on means a cow can be
+        /// given an area, and every part of the AI that asks whether a cell is forbidden honors it, since they all
+        /// go through the same test.
+        ///
+        /// <b>It also holds them in, which took a second change.</b> Vanilla's roaming state asks about ropes and
+        /// the reachable map edge and never about areas, so livestock with an area would have been given somewhere
+        /// to be and no reason to stay: they walk off the map after day five regardless. Asked for and closed on
+        /// the same day, so this setting now covers both halves. See <c>LivestockRoaming</c>: an area with
+        /// anything in it, or standing in a pen that accepts them, counts as being kept, and a roam already under
+        /// way ends when either becomes true.
+        ///
+        /// Asked for on 2026-08-22, with the default named in the same sentence.
+        /// </summary>
+        public bool penAnimalsUseAreas;
+
+        /// <summary>
         /// How many bills one workbench may hold.
         ///
         /// <b>A setting rather than a number of ours,</b> asked for on 2026-08-19. It was a hard 120 written into
@@ -876,6 +897,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.warnStalledBills = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Read the strict way round, so anything but an explicit true leaves the game's own rules
+                        // alone. This one changes behavior rather than appearance and defaults off.
+                        case "penAnimalsUseAreas":
+                            settings.penAnimalsUseAreas = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "maxBillsPerBench":
                             int bills;
 
@@ -1106,6 +1133,7 @@ namespace Gideon.UIOverhaul.Features.Options
                         compressAutosaves ? "true" : "false");
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
+                    writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
                     writer.WriteElementString("maxBillsPerBench",
                         maxBillsPerBench.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("favoriteRecipes", favoriteRecipes ?? string.Empty);

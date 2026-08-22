@@ -284,6 +284,30 @@ namespace Gideon.UIOverhaul.Features.Minimap
 
         internal static int Fallbacks => fallbackCount;
 
+        /// <summary>
+        /// How many distinct colours the cache holds, which is the third number that says whether a bake worked.
+        ///
+        /// <b>Separated out of <see cref="Describe"/> so it can be asked cheaply.</b> The bake's report is now
+        /// only written when the reading has actually changed, and deciding that must not cost the string it is
+        /// deciding whether to build. This walks a dictionary of a few dozen entries; Describe builds a sentence.
+        /// </summary>
+        internal static int Distinct
+        {
+            get
+            {
+                HashSet<int> distinct = new HashSet<int>();
+
+                foreach (KeyValuePair<BuildableDef, Color32> pair in Cache)
+                {
+                    Color32 c = pair.Value;
+
+                    distinct.Add((c.r << 16) | (c.g << 8) | c.b);
+                }
+
+                return distinct.Count;
+            }
+        }
+
         internal static void Clear()
         {
             Cache.Clear();

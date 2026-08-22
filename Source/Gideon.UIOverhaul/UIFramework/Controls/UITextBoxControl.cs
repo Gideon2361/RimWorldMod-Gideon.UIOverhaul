@@ -241,6 +241,29 @@ namespace Gideon.UIFramework.Controls
             if (showClear)
                 inner.xMax -= IconSize + EdgePad;
 
+            // A single line box is never given a lane shorter than one line of the font it is drawing.
+            //
+            // IMGUI clips text to the rect it is handed, and the edge padding takes eight pixels off the height:
+            // a 22 pixel box, which is what a 24 pixel row leaves room for, becomes a 14 pixel lane, and Small
+            // needs 22. Both the placeholder and the typed value lose their top and bottom, which is what Aaron
+            // screenshotted on the animals tab's slaughter limits on 2026-08-22. The padding is there to keep
+            // text off the frame horizontally, which is a real problem; vertically it was only ever costing
+            // height.
+            //
+            // The lane grows about the box's own center rather than moving the frame, so a caller's layout is
+            // unaffected and the text stays centered in the box it can see. Multiline is left alone: there the
+            // rect is the paragraph's own area and its height is the caller's decision.
+            if (!Multiline)
+            {
+                float line = Verse.Text.LineHeight;
+
+                if (inner.height < line)
+                {
+                    inner.y = rect.y + (rect.height - line) * 0.5f;
+                    inner.height = line;
+                }
+            }
+
             Verse.Text.Anchor = Multiline ? TextAnchor.UpperLeft : TextAnchor.MiddleLeft;
 
             string before = text;

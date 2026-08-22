@@ -29,13 +29,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
     internal static class PolicyStrip
     {
         private const float CellHeight = 24f;
-        private const float CaptionHeight = 14f;
         private const float TopPad = 4f;
         private const float BottomPad = 6f;
-        private const float Gap = 8f;
+        private const float Gap = 6f;
+
+        /// <summary>Room either side of a chip's text.</summary>
+        private const float ChipPadding = 20f;
+
+        /// <summary>The caret's lane inside a chip.</summary>
+        private const float CaretWidth = 14f;
 
         /// <summary>How much taller an expanded row has to be to fit this.</summary>
-        internal const float Height = TopPad + CaptionHeight + CellHeight + BottomPad;
+        internal const float Height = TopPad + CellHeight + BottomPad;
 
         /// <summary>
         /// The height this pawn's strip actually needs, which is nothing when they have no policies.
@@ -50,8 +55,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
             return pawn != null && Slots(pawn).Count > 0 ? Height : 0f;
         }
 
-        /// <summary>Below this there is not enough width for a policy name, so nothing is drawn.</summary>
-        private const float MinimumPickerWidth = 90f;
+        /// <summary>Below this a chip cannot say anything useful, so it is left out of the line.</summary>
+        private const float MinimumChipWidth = 74f;
 
         /// <summary>One picker: what it is called, what it currently says, and what opens its menu.</summary>
         private struct Slot
@@ -61,6 +66,19 @@ namespace Gideon.UIOverhaul.Features.Pawns
             internal Action Open;
         }
 
+        /// <summary>
+        /// The standing orders as chips, sized to what they say.
+        ///
+        /// <b>Chips rather than five equal buttons, from the mockup Aaron approved on 2026-08-22.</b> The old
+        /// arrangement split the row's whole width into five columns whatever the words were, so "Food: Lavish"
+        /// got the same 200 pixels as "Drugs: Social drugs only" and the strip read as furniture. A chip is as
+        /// wide as its own text, which puts the five of them in about half the width and lets the eye read them as
+        /// a sentence about the pawn rather than as a toolbar.
+        ///
+        /// <b>What does not fit is dropped from the right, not squeezed.</b> A chip narrower than its own name is
+        /// a chip that says nothing, so on a tab dragged narrow the last ones are left out and the ones that
+        /// remain are still readable.
+        /// </summary>
         internal static void Draw(Rect rect, Pawn pawn, UIColorPaletteDef palette)
         {
             if (pawn == null)
@@ -71,20 +89,41 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (slots.Count == 0)
                 return;
 
-            float width = (rect.width - Gap * (slots.Count - 1)) / slots.Count;
+            GameFont previousFont = Text.Font;
 
-            // A picker too narrow to show a policy name is worse than no picker: it reads as a row of broken
-            // buttons. The strip is left empty until the tab is wide enough to say something.
-            if (width < MinimumPickerWidth)
-                return;
+            Text.Font = GameFont.Tiny;
+
+            float x = rect.x;
 
             for (int i = 0; i < slots.Count; i++)
             {
-                Rect cell = new Rect(rect.x + i * (width + Gap), rect.y + TopPad, width,
-                    CaptionHeight + CellHeight);
+                float width = Mathf.Max(MinimumChipWidth, WidthOf(slots[i]));
 
-                DrawSlot(cell, slots[i], palette);
+                if (x + width > rect.xMax)
+                    break;
+
+                DrawChip(new Rect(x, rect.y + TopPad, width, CellHeight), slots[i], palette);
+
+                x += width + Gap;
             }
+
+            Text.Font = previousFont;
+        }
+
+        /// <summary>
+        /// How wide a chip wants to be: its caption, its value, the caret and the padding around them.
+        ///
+        /// Measured at Tiny, which is what <see cref="Draw"/> has set before it asks. Measuring under a different
+        /// font than the one that draws is how a label ends up ellipsised inside a chip sized for it.
+        /// </summary>
+        private static float WidthOf(Slot slot)
+        {
+            return Text.CalcSize(Caption(slot)).x + ChipPadding + CaretWidth;
+        }
+
+        private static string Caption(Slot slot)
+        {
+            return slot.Label.NullOrEmpty() ? slot.Caption : slot.Caption + ": " + slot.Label;
         }
 
         /// <summary>
@@ -205,48 +244,59 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// <summary>
         /// One picker: a caption, and a button that reads as a drop-down rather than as a command.
         /// </summary>
-        private static void DrawSlot(Rect rect, Slot slot, UIColorPaletteDef palette)
+        /// <summary>
+        /// One chip: an outline, the caption in dim text, the value in bright text, and a caret.
+        ///
+        /// Outlined rather than filled, so five of them in a line read as labels with values in them rather than
+        /// as five buttons competing with the work grid underneath. The hover fill is what says they are clickable
+        /// at the moment somebody is about to click.
+        /// </summary>
+        private static void DrawChip(Rect rect, Slot slot, UIColorPaletteDef palette)
         {
-            GameFont previousFont = Text.Font;
+            bool over = Mouse.IsOver(rect);
+
+            UIElementPainter.OutlineRounded(rect, over ? palette.Accent : palette.Border,
+                over ? palette.SurfaceRaised : palette.PanelBackground);
+
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
 
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = palette.TextDisabled;
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleLeft;
 
-            // Measured rather than given the constant, because Widgets.Label clips instead of overflowing and
-            // Tiny renders taller than a 14 pixel row at some UI scales.
-            Rect caption = new Rect(rect.x + 2f, rect.y, Mathf.Max(0f, rect.width - 2f),
-                Mathf.Max(CaptionHeight, UIFonts.LineHeightOf(GameFont.Tiny)));
+                float x = rect.x + 8f;
+                float room = Mathf.Max(0f, rect.xMax - CaretWidth - x);
 
-            if (caption.width >= 24f)
-                Widgets.LabelEllipses(caption, slot.Caption);
+                // The caption and the value are drawn as two runs so the value can be the brighter of the two:
+                // "Food" is the label of the setting and "Lavish meals" is the answer, and the answer is what
+                // somebody scanning the row is looking for.
+                GUI.color = palette.TextDisabled;
 
-            Rect button = new Rect(rect.x, rect.y + CaptionHeight, rect.width, CellHeight);
-            bool over = Mouse.IsOver(button);
+                string caption = slot.Caption + (slot.Label.NullOrEmpty() ? string.Empty : ": ");
+                float captionWidth = Mathf.Min(room, Text.CalcSize(caption).x);
 
-            UIElementPainter.PaintButton(button, palette, over, over && Input.GetMouseButton(0));
+                Widgets.Label(new Rect(x, rect.y, captionWidth, rect.height), caption);
 
-            Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = palette.TextPrimary;
+                GUI.color = palette.TextPrimary;
 
-            // The caret's room is taken out of the label rather than drawn over it, so a long policy name ends
-            // in an ellipsis instead of running underneath the arrow.
-            Rect label = new Rect(button.x + 7f, button.y, Mathf.Max(0f, button.width - 24f), button.height);
+                Rect value = new Rect(x + captionWidth, rect.y, Mathf.Max(0f, room - captionWidth), rect.height);
 
-            if (label.width >= 24f)
-                Widgets.LabelEllipses(label, slot.Label);
+                if (value.width >= 12f && !slot.Label.NullOrEmpty())
+                    Widgets.LabelEllipses(value, slot.Label);
 
-            Text.Anchor = TextAnchor.MiddleRight;
-            GUI.color = palette.TextDisabled;
-            Widgets.Label(new Rect(button.x, button.y, Mathf.Max(0f, button.width - 7f), button.height), "▾");
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = over ? palette.Accent : palette.TextDisabled;
 
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
+                Widgets.Label(new Rect(rect.x, rect.y, Mathf.Max(0f, rect.width - 6f), rect.height), "▾");
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
 
-            if (Widgets.ButtonInvisible(button))
+            if (Widgets.ButtonInvisible(rect))
                 slot.Open();
         }
 

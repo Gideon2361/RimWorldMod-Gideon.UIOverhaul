@@ -63,6 +63,9 @@ namespace Gideon.UIOverhaul.Features.Minimap
         private static readonly Color32 HostileColor = new Color32(229, 77, 51, 255);
         private static readonly Color32 AnimalColor = new Color32(204, 166, 51, 255);
 
+        /// <summary>The bloom under a predator's paw. Warmer than the hostile red, so the two do not read as one.</summary>
+        private static readonly Color BloomRed = new Color(0.90f, 0.24f, 0.18f);
+
         private static bool collapsed;
 
         /// <summary>Whether the header is being dragged, and where it was grabbed relative to the panel.</summary>
@@ -407,10 +410,79 @@ namespace Gideon.UIOverhaul.Features.Minimap
 
                 Vector2 point = CellToPixel(fitted, size, marker.X, marker.Z);
 
+                if (marker.Predator)
+                {
+                    DrawPredator(point, dot, ColorOf(marker.Kind));
+
+                    continue;
+                }
+
                 Widgets.DrawBoxSolid(
                     new Rect(point.x - dot * 0.5f, point.y - dot * 0.5f, dot, dot),
                     ColorOf(marker.Kind));
             }
+        }
+
+        /// <summary>Under the paw: three discs, widening and fading. Aaron's faint red bloom, 2026-08-22.</summary>
+        private static readonly float[] BloomScale = { 2.4f, 1.7f, 1.15f };
+
+        private static readonly float[] BloomAlpha = { 0.10f, 0.14f, 0.20f };
+
+        /// <summary>
+        /// A predator: a soft red bloom with a paw print over it.
+        ///
+        /// <b>Bigger than a dot, deliberately.</b> A marker is normally one or two pixels, which is right for a
+        /// squirrel and useless for the thing that eats your huskies. The glyph is drawn several times a dot's
+        /// width because the whole point of marking predators is that they should catch the eye before anything
+        /// else on the panel does.
+        ///
+        /// <b>The bloom is three stacked discs rather than a gradient texture.</b> Each is drawn at its own alpha,
+        /// so the alphas accumulate towards the middle and the result is a real falloff, built from the shared
+        /// disc mask this mod already ships. Baking a radial gradient would have meant a second texture that only
+        /// this feature uses.
+        ///
+        /// <b>The paw takes the marker's own colour, and the bloom is always red.</b> The colour says whose it is
+        /// and whether it is hostile; the bloom says only "something here hunts", which is a red statement whether
+        /// the animal is currently angry or not.
+        /// </summary>
+        private static void DrawPredator(Vector2 point, float dot, Color color)
+        {
+            float paw = Mathf.Max(11f, dot * 3.5f);
+
+            Color previous = GUI.color;
+
+            if (UIShapes.Disc != null)
+            {
+                for (int i = 0; i < BloomScale.Length; i++)
+                {
+                    float size = paw * BloomScale[i];
+
+                    GUI.color = new Color(BloomRed.r, BloomRed.g, BloomRed.b, BloomAlpha[i]);
+
+                    GUI.DrawTexture(new Rect(point.x - size * 0.5f, point.y - size * 0.5f, size, size),
+                        UIShapes.Disc);
+                }
+            }
+
+            Texture2D glyph = MinimapGlyphs.Paw;
+
+            if (glyph == null)
+            {
+                // The bake failed, so the bloom stands on its own and the animal keeps an ordinary dot. Marked
+                // rather than missing, which is the more useful half of the pair to keep.
+                GUI.color = previous;
+
+                Widgets.DrawBoxSolid(new Rect(point.x - dot * 0.5f, point.y - dot * 0.5f, dot, dot), color);
+
+                return;
+            }
+
+            GUI.color = color;
+
+            GUI.DrawTexture(new Rect(point.x - paw * 0.5f, point.y - paw * 0.5f, paw, paw), glyph,
+                ScaleMode.ScaleToFit);
+
+            GUI.color = previous;
         }
 
         private static Color ColorOf(MinimapMarkerKind kind)

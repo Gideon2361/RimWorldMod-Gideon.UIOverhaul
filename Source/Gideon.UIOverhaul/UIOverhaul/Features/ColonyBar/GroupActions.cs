@@ -19,6 +19,12 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
     ///
     /// <b>Area is offered per map.</b> An area belongs to one map and a group can straddle two, so a group whose
     /// members are split gets one entry per map rather than one entry that silently only reaches some of them.
+    ///
+    /// <b>Six of these rows are internal because the animals tab composes its own menu from them.</b> A species
+    /// group is a group of pawns, so allowed area, medical care, select all and the shared value reader are the
+    /// same operations there. What that tab does not take is the rows that would be inert on an animal: apparel,
+    /// drugs, reading and food are all humanlike only, and a menu entry that silently does nothing is worse than
+    /// a missing one. See <see cref="Animals.AnimalGroupActions"/> for the rows that are animal specific.
     /// </summary>
     internal static class GroupActions
     {
@@ -82,7 +88,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         }
 
         /// <summary>A row that reads back a value and opens another menu when pressed.</summary>
-        private static FloatMenuOption Sub(string caption, string value, Action open)
+        internal static FloatMenuOption Sub(string caption, string value, Action open)
         {
             string label = value.NullOrEmpty() ? caption + "..." : caption + ": " + value;
 
@@ -91,7 +97,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
         // ------------------------------------------------------------------ area
 
-        private static void Areas(List<Pawn> members, Action changed, List<FloatMenuOption> options)
+        internal static void Areas(List<Pawn> members, Action changed, List<FloatMenuOption> options)
         {
             List<Map> maps = new List<Map>();
 
@@ -313,7 +319,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
         // ------------------------------------------------------------------ medical care
 
-        private static void Care(List<Pawn> members, Action changed)
+        internal static void Care(List<Pawn> members, Action changed)
         {
             List<FloatMenuOption> options = new List<FloatMenuOption>();
 
@@ -336,7 +342,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             Find.WindowStack.Add(new FloatMenu(options));
         }
 
-        private static string CareLabel(List<Pawn> members)
+        internal static string CareLabel(List<Pawn> members)
         {
             return Shared(members, p => p?.playerSettings == null ? null : p.playerSettings.medCare.GetLabel());
         }
@@ -359,7 +365,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             changed?.Invoke();
         }
 
-        private static void Select(List<Pawn> members)
+        internal static void Select(List<Pawn> members)
         {
             Find.Selector?.ClearSelection();
 
@@ -417,7 +423,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         /// Pawns with nothing to report are skipped rather than counted as a disagreement, so a group holding one
         /// animal does not make every policy row read "mixed" forever.
         /// </summary>
-        private static string Shared(List<Pawn> members, Func<Pawn, string> read)
+        internal static string Shared(List<Pawn> members, Func<Pawn, string> read)
         {
             return UIGuard.Try("Bar.SharedValue", () =>
             {

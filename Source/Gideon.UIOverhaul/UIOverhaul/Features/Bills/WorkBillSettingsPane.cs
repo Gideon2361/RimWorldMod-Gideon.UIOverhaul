@@ -8,8 +8,12 @@ using Verse;
 namespace Gideon.UIOverhaul.Features.Bills
 {
     /// <summary>
-    /// The four settings a production bill carries beyond its recipe and its count: what it may consume, how far
-    /// to look for it, who may work it, and how good they have to be.
+    /// The settings a production bill carries beyond its recipe and its count: what it may consume, how far to
+    /// look for it, where the products go, who may work it, and how good they have to be.
+    ///
+    /// <b>Where the products go arrived last, on 2026-08-22.</b> It was the one control RimWorld's own dialog had
+    /// that this pane did not, which meant a player who moved to our window lost the setting that decides whether
+    /// a hundred meals pile up on the kitchen floor. See <see cref="BillStoreMode"/>.
     ///
     /// <b>One pane, two hosts.</b> It opens from a bill row as <see cref="Dialog_WorkBillSettings"/> and it is the
     /// last step of <see cref="Dialog_AddWorkBill"/>. Extracted rather than written twice, because the two would
@@ -68,11 +72,33 @@ namespace Gideon.UIOverhaul.Features.Bills
             Ingredients(ingredients, bill, palette);
         }
 
+        /// <summary>Where the last draw of the settings column ended, which is what the next one scrolls.</summary>
+        private float settingsHeight = 420f;
+
+        private Vector2 settingsScroll;
+
+        /// <summary>
+        /// The settings column.
+        ///
+        /// <b>Scrolled, since the output section arrived.</b> Aaron's screenshot of 2026-08-22 showed the skill
+        /// line cut in half by the bottom of the column: five sections no longer fit a fixed height panel on every
+        /// window size, and the one that fell off the end was the last one drawn rather than the least important.
+        ///
+        /// The height is measured rather than predicted, for the reason the species pane's is: what fits depends
+        /// on which sections this bill even has, and a formula that has to be updated whenever a section is added
+        /// is a formula that will eventually be wrong by exactly one section.
+        /// </summary>
         private void Settings(Rect rect, Bill_Production bill, UIColorPaletteDef palette, bool showRepeats)
         {
             Widgets.DrawBoxSolid(rect, GzpPalette.BG);
 
-            Rect inner = rect.ContractedBy(Pad);
+            Rect outer = rect.ContractedBy(Pad);
+            Rect view = new Rect(0f, 0f, outer.width - (settingsHeight > outer.height ? 18f : 0f),
+                settingsHeight);
+
+            Widgets.BeginScrollView(outer, ref settingsScroll, view);
+
+            Rect inner = new Rect(0f, 0f, view.width, view.height);
             float y = inner.y;
 
             // No Recipe line: the host's own title is the bill's label, which is the recipe's name plus whatever
@@ -113,6 +139,14 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             y += noteHeight + 10f;
 
+            Heading(inner, ref y, "OUTPUT");
+
+            float output = BillStoreMode.HeightFor(bill);
+
+            BillStoreMode.Draw(new Rect(inner.x, y, inner.width, output), bill, palette);
+
+            y += output + 10f;
+
             Heading(inner, ref y, "WORKER");
 
             if (GzpPalette.GrayButton(new Rect(inner.x, y, inner.width, 28f), BillActions.WorkerLabel(bill)))
@@ -121,6 +155,10 @@ namespace Gideon.UIOverhaul.Features.Bills
             y += 34f;
 
             Skill(inner, ref y, bill, palette);
+
+            Widgets.EndScrollView();
+
+            settingsHeight = y + 4f;
         }
 
         /// <summary>
