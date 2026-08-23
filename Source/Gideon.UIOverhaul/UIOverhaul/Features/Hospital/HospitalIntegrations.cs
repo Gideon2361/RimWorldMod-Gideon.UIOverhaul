@@ -171,6 +171,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
             {
                 Type extensions = GenTypes.GetTypeInAnyAssembly("ColonyHospital.ColonyHospitalExtensions");
                 Type utility = GenTypes.GetTypeInAnyAssembly("ColonyHospital.HospitalUtility");
+                Type text = GenTypes.GetTypeInAnyAssembly("ColonyHospital.CHText");
                 Type component = GenTypes.GetTypeInAnyAssembly("ColonyHospital.HospitalMapComponent");
                 Type record = GenTypes.GetTypeInAnyAssembly("ColonyHospital.PatientRecord");
 
@@ -179,13 +180,15 @@ namespace Gideon.UIOverhaul.Features.Hospital
                         BindingFlags.Public | BindingFlags.Static);
 
                 if (utility != null)
-                {
                     colonyHospitalComponentFor = utility.GetMethod("ComponentFor",
                         BindingFlags.Public | BindingFlags.Static);
 
-                    colonyHospitalStatusLabel = utility.GetMethod("StatusLabel",
+                // StatusLabel lives on CHText rather than on HospitalUtility, which is where 14157 looked for it
+                // and quietly found nothing. Their text and their logic are separate classes, and the status
+                // column is text.
+                if (text != null)
+                    colonyHospitalStatusLabel = text.GetMethod("StatusLabel",
                         BindingFlags.Public | BindingFlags.Static);
-                }
 
                 if (component != null)
                     colonyHospitalGetRecord = component.GetMethod("GetRecord",

@@ -54,7 +54,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
             // reason a corpse should not drop to a hit points bar the way it used to.
             float leftY = dead
                 ? Remains(left, view.y, pawn, palette)
-                : Needs(left, view.y, pawn, palette, NeedsShown);
+                : Vitals(left, view.y, pawn, palette);
+
+            if (!dead)
+                leftY = Needs(left, leftY, pawn, palette, NeedsShown);
 
             leftY = animal && !dead
                 ? Training(left, leftY, pawn, palette)
@@ -85,6 +88,57 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 y = Assignment(view, y, pawn, palette);
 
             return y - view.y;
+        }
+
+        /// <summary>
+        /// The two bars everything else is read against: how hurt they are, and how close they are to breaking.
+        ///
+        /// <b>Mood needed drawing explicitly, and that is why it was missing.</b> RimWorld's own
+        /// <c>Mood</c> need declares <c>showOnNeedList false</c>, because vanilla draws it as the headline of its
+        /// Needs tab rather than as one row among the others. Every need list in this mod filters on
+        /// <c>ShowOnNeedList</c> and so correctly left it out, which meant the single most important bar about a
+        /// colonist appeared nowhere at all.
+        ///
+        /// <b>Health gets the four step scale</b> from <see cref="InspectPaneParts.Vital"/> rather than the three
+        /// step one the needs use: a need at 60 percent is fine and a colonist at 60 percent is not.
+        /// </summary>
+        private static float Vitals(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        {
+            bool anything = false;
+
+            float health = UIGuard.Try("Inspector.Vitals", () =>
+                pawn.health != null ? pawn.health.summaryHealth.SummaryHealthPercent : -1f, -1f, null);
+
+            Need_Mood mood = UIGuard.Try("Inspector.VitalsMood",
+                () => pawn.needs != null ? pawn.needs.mood : null, null, null);
+
+            if (health < 0f && mood == null)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Condition", null, palette);
+
+            if (health >= 0f)
+            {
+                y = InspectPaneParts.Need(view, y, "Health", InspectPaneParts.Percent(health),
+                    InspectPaneParts.Vital(health, palette), health, InspectPaneParts.Vital(health, palette),
+                    null, null, palette);
+
+                anything = true;
+            }
+
+            if (mood != null)
+            {
+                float level = UIGuard.Try("Inspector.MoodLevel", () => mood.CurLevelPercentage, 0f, null);
+
+                // The break thresholds ride on this bar for the same reason they ride on the Needs body's:
+                // 34 percent is comfortable for one colonist and a tantrum for another.
+                y = InspectPaneParts.Need(view, y, "Mood", InspectPaneParts.Percent(level) + Arrow(mood),
+                    MoodColor(pawn, level, palette), level, palette.Mood, MoodTicks(pawn), null, palette);
+
+                anything = true;
+            }
+
+            return anything ? y + InspectPaneParts.BlockGap : y;
         }
 
         /// <summary>
@@ -196,10 +250,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (all == null || all.Count == 0)
                 return y;
 
-            Need_Mood mood = pawn.needs.mood;
-
-            y = InspectPaneParts.Cap(view, y, "Needs",
-                mood != null ? "mood " + InspectPaneParts.Percent(mood.CurLevelPercentage) : null, palette);
+            // No mood in the caption any more: it has its own bar in the Condition block above, and a percentage
+            // repeated two inches apart is one the eye stops reading in both places.
+            y = InspectPaneParts.Cap(view, y, "Needs", null, palette);
 
             int drawn = 0;
 
@@ -321,10 +374,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (pawn.health == null)
                 return y;
 
-            float summary = UIGuard.Try("Inspector.HealthPercent",
-                () => pawn.health.summaryHealth.SummaryHealthPercent, 1f, null);
-
-            y = InspectPaneParts.Cap(view, y, "Body", InspectPaneParts.Percent(summary), palette);
+            // The overall percentage is the Health bar's job now, up in the Condition block. This caption stays
+            // bare rather than repeating it.
+            y = InspectPaneParts.Cap(view, y, "Body", null, palette);
 
             int rows = 0;
 

@@ -30,7 +30,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <summary>Whether the capacities list is currently expanded to include the healthy ones.</summary>
         private static bool showAllCapacities;
 
-        internal static float Draw(Rect view, Pawn pawn, UIColorPaletteDef palette)
+        /// <param name="operations">
+        /// Whether to list the queued operations. The hospital tab turns this off because it draws its own
+        /// operations block immediately underneath, with the buttons that queue and cancel them; two lists of
+        /// the same bills, one of them inert, is worse than either.
+        /// </param>
+        internal static float Draw(Rect view, Pawn pawn, UIColorPaletteDef palette, bool operations = true)
         {
             if (pawn.health == null)
                 return 0f;
@@ -44,7 +49,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             float leftY = Conditions(left, view.y, pawn, palette);
 
-            leftY = Operations(left, leftY, pawn, palette);
+            if (operations)
+                leftY = Operations(left, leftY, pawn, palette);
 
             Rect second = split ? right : left;
             float secondY = split ? view.y : leftY;

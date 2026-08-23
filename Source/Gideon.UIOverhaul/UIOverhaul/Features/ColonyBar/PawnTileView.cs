@@ -63,6 +63,29 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         private const int ResolutionY = 124;
 
         /// <summary>
+        /// The altitude at which the map stops being the world and starts being the interface.
+        ///
+        /// <b>Everything above this is drawn for the player, not by the colony.</b> RimWorld stacks its draws by
+        /// height rather than by Unity layer, and the top four bands are all interface: the world clipper, the
+        /// white pawn silhouettes it fades in when you zoom out, the map data overlays a designator paints, and
+        /// the meta overlays that include the selection bracket. None of that is a thing standing in a room, and
+        /// a tile is a window onto the room.
+        ///
+        /// <b>They arrive in the tiles because a mesh submitted with <c>Graphics.DrawMesh</c> belongs to the
+        /// frame rather than to a camera.</b> The map interface submits them during Update and every camera that
+        /// renders afterwards picks them up, ours included -- which is why a selected colonist wore his brackets
+        /// in the bar, and why zooming out put a white cut-out over every face at once.
+        ///
+        /// <b>So the tile camera's near plane is dropped to sit under them.</b> Clipping is geometry and happens
+        /// before any of these materials get a say, which matters: the bracket's shader ignores the depth buffer
+        /// entirely, so nothing painted over it would have hidden it. Cut between the world clipper and the
+        /// silhouettes, which keeps everything the colony actually put there -- lighting, weather, fog, motes --
+        /// and loses the four bands that exist only to be clicked on.
+        /// </summary>
+        private static readonly float InterfaceFloor =
+            (AltitudeLayer.WorldClipper.AltitudeFor() + AltitudeLayer.Silhouettes.AltitudeFor()) * 0.5f;
+
+        /// <summary>
         /// Half the view's height in cells, which is what an orthographic camera's size means.
         ///
         /// <b>Framed on the pawn, not on the room.</b> 1.0 shows two cells top to bottom and about one and a half
@@ -410,6 +433,10 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                 return;
 
             RenderTexture previous = RenderTexture.active;
+
+            // Set once rather than per tile: every tile is rendered from the same height, so the plane that
+            // separates the world from the interface drawn over it is the same for all of them.
+            tile.nearClipPlane = Mathf.Max(main.nearClipPlane, main.transform.position.y - InterfaceFloor);
 
             foreach (Pawn pawn in due)
             {

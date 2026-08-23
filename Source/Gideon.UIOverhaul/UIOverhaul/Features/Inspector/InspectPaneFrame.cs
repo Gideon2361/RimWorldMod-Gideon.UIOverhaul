@@ -207,6 +207,18 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             float conditionWidth = ConditionWidth(pawn, palette);
 
+            // The sex, immediately before the name, in the accent for male and the mood colour for female. Drawn
+            // here rather than in the qualifier because it belongs with the name: a glyph read at the same moment
+            // as who somebody is, rather than a word found afterwards in a line of small grey text.
+            //
+            // It takes its room off the front of the name lane, so a long name ellipses a little sooner instead
+            // of running underneath it. On the compact header, where the whole pane has collapsed to a name and a
+            // condition, it is left out: that form exists to say as little as possible.
+            if (full)
+                nameX += UIGuard.Try("Inspector.GenderGlyph",
+                    () => GenderGlyphs.Draw(new Rect(nameX, 0f, GenderGlyphs.Size, CompactHeaderHeight), pawn,
+                        palette), 0f, "The inspect pane's gender glyph is missing.");
+
             // On the full header the condition has the second line to itself, so the name may run the whole
             // width. On the compact one they share a line, and the name gives way.
             Rect nameRect = new Rect(nameX, 0f,

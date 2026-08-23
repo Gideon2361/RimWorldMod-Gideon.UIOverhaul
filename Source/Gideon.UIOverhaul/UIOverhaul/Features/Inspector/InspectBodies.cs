@@ -133,7 +133,11 @@ namespace Gideon.UIOverhaul.Features.Inspector
         ///
         /// Two forms, because the useful answer differs. For a person it is their short backstory title and their
         /// age, which is how a colonist is told apart from the other eleven at a glance. For an animal it is the
-        /// species, the sex and the age, since the name is a nickname and the species is the fact.
+        /// species and the age, since the name is a nickname and the species is the fact.
+        ///
+        /// <b>The sex is not here any more.</b> It moved to a glyph before the name in 14158, and saying it twice
+        /// on one line spends the qualifier's width -- which was always tight -- on something the reader has
+        /// already been told. See <see cref="GenderGlyphs"/>.
         /// </summary>
         internal static string Qualifier(Pawn pawn)
         {
@@ -142,16 +146,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             return UIGuard.Try("Inspector.Qualifier", () =>
             {
-                string sex = pawn.gender == Gender.None ? null : pawn.gender.GetLabel().CapitalizeFirst();
-
                 if (pawn.RaceProps != null && pawn.RaceProps.Humanlike)
                 {
                     string age = pawn.ageTracker != null
                         ? pawn.ageTracker.AgeBiologicalYears.ToString()
                         : null;
 
-                    return JoinAll(pawn.story != null ? pawn.story.TitleShortCap : null,
-                        Join(sex, age, ", "), FactionOf(pawn));
+                    return JoinAll(pawn.story != null ? pawn.story.TitleShortCap : null, age, FactionOf(pawn));
                 }
 
                 string kind = pawn.KindLabel.NullOrEmpty() ? pawn.def.label : pawn.KindLabel;
@@ -159,8 +160,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     ? pawn.ageTracker.AgeBiologicalYearsFloat.ToString("0.0") + "y"
                     : null;
 
-                return JoinAll(kind.NullOrEmpty() ? null : kind.CapitalizeFirst(), Join(sex, years, " "),
-                    FactionOf(pawn));
+                return JoinAll(kind.NullOrEmpty() ? null : kind.CapitalizeFirst(), years, FactionOf(pawn));
             }, null, null);
         }
 

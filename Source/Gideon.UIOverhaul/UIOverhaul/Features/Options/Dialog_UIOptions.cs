@@ -1629,6 +1629,20 @@ namespace Gideon.UIOverhaul.Features.Options
 
             LetterWidthSlider(view, ref y, palette, settings);
 
+            GroupLabel(view, ref y, palette, "Mental breaks");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Announce every break, and say how long",
+                settings.mentalBreakLetters, value => settings.mentalBreakLetters = value,
+                "RimWorld only writes a letter for a mental break whose state has begin-letter text of its own, "
+                + "so a colonist can wander off in a daze with nothing on the stack to say so. And none of the "
+                + "letters it does send says how long the break runs.\n\nThis sends one for the breaks that "
+                + "stayed silent, and adds the expected duration to all of them.\n\nThe duration is a range "
+                + "because the game decides it as one: a break ends at its maximum age, or earlier on a random "
+                + "roll once it is past its minimum. Where there is no maximum the letter says so and gives the "
+                + "average instead of inventing a number.\n\nOff restores RimWorld exactly.");
+
+            y += 8f;
+
             GroupLabel(view, ref y, palette, "Alerts");
 
             WidgetToggle(view, ref y, palette, settings, Indent, "Draw alerts as cards",
@@ -2609,10 +2623,15 @@ namespace Gideon.UIOverhaul.Features.Options
                 Rect row = new Rect(Indent, y, Mathf.Min(420f, view.width - Indent - 10f), 38f);
                 bool chosen = settings.roomLabelFace == face;
 
+                // Composited rather than handed over translucent: an outline is painted as two fills, so an
+                // overlay given as the inside lands on the border colour instead of on the panel and comes out
+                // very nearly solid. The chosen row was reading as a block of accent rather than as a tinted one.
                 if (chosen)
-                    UIElementPainter.OutlineRounded(row, palette.Accent, palette.SelectionOverlay);
+                    UIElementPainter.OutlineRounded(row, palette.Accent,
+                        UIElementPainter.Composite(palette.PanelBackground, palette.SelectionOverlay));
                 else if (Mouse.IsOver(row))
-                    UIElementPainter.OutlineRounded(row, palette.Border, palette.HoverOverlay);
+                    UIElementPainter.OutlineRounded(row, palette.Border,
+                        UIElementPainter.Composite(palette.PanelBackground, palette.HoverOverlay));
                 else
                     UIElementPainter.OutlineRounded(row, palette.Border, palette.PanelBackground);
 

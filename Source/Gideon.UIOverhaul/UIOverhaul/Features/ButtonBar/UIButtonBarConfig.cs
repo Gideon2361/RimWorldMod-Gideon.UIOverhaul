@@ -173,6 +173,13 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             if (string.Equals(defName, "Menu", StringComparison.OrdinalIgnoreCase))
                 return true;
 
+            // Colony Hospital's tab, when ours is present: its content moves into ours, so leaving its button on
+            // the bar would be two doors into one screen. Conditioned on our tab existing for the same reason the
+            // animal ones are, and on their mod being loaded so the name cannot collide with anything else.
+            if (string.Equals(defName, Hospital.HospitalIntegrations.ColonyHospitalTabDefName,
+                    StringComparison.OrdinalIgnoreCase))
+                return Hospital.HospitalIntegrations.ColonyHospitalLoaded && Hospital.HospitalTabs.Available;
+
             if (!string.Equals(defName, "Animals", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(defName, "Wildlife", StringComparison.OrdinalIgnoreCase))
                 return false;

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The hospital tab: every patient the colony has, sorted into what you would do about each one.
+
+    order 41 puts it immediately after our animals tab (40), so the two census screens that answer
+    "who is in trouble" sit together in the bar.
+
+    No defaultHotKey. Vanilla has no hospital tab and therefore no key a player already presses for
+    one, and inventing a binding is a conflict somebody has to go and resolve for no gain.
+
+    Colony Hospital's own tab is suppressed in UIButtonBarConfig.Suppressed and redirected here by
+    Patch_MainTabsRoot_ToggleTab_Hospital, but only when that mod is loaded and this def exists.
+    With neither hospital mod installed nothing is suppressed and nothing is redirected.
+
+    validWithoutMap is false: every row is read off a map's pawns, so there is nothing to show from
+    the world view.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Hospital</defName>
+    <label>hospital</label>
+    <description>Every patient the colony has, in the order you would treat them: who is critical, who is being treated and how it is going, who is waiting on a surgeon, and who is simply getting better. Operations are queued from a two pane picker that shows the surgeon and the odds before you commit, and standing orders deliver medication on a schedule with a nurse's name against them.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Hospital.MainTabWindow_Hospital</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <closesWorldView>true</closesWorldView>
+
+    <!--
+      No file extension and no Textures prefix: RimWorld's ContentFinder takes a path relative to
+      Textures and appends the extension itself. The existing Medical icon, which is already in the
+      same flat grayscale as the rest of this mod's main button icons and so tints with the palette.
+    -->
+    <iconPath>UI/MainButtonIcons/Medical</iconPath>
+
+    <order>41</order>
+  </MainButtonDef>
+
+</Defs>

@@ -131,6 +131,25 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
+        /// One translucent color laid over an opaque one, as an opaque color.
+        ///
+        /// <b>This exists because <see cref="OutlineRounded"/> cannot take a translucent inside and the mistake
+        /// is an easy one to make.</b> The outline is painted as two fills, so anything translucent handed to it
+        /// as the inside is composited over the <i>border colour</i> rather than over the surface: passing a
+        /// selection overlay produces a row filled almost solid with the accent, which is what happened in the
+        /// operation picker and in two rows of the options window.
+        ///
+        /// The palette's overlay roles are all translucent by design, so the fix is to composite them here
+        /// against whatever is actually behind the control and hand the result over opaque.
+        /// </summary>
+        internal static Color Composite(Color background, Color overlay)
+        {
+            Color solid = new Color(overlay.r, overlay.g, overlay.b, 1f);
+
+            return Color.Lerp(background, solid, Mathf.Clamp01(overlay.a));
+        }
+
+        /// <summary>
         /// Runs <paramref name="paint"/>, reporting once and disabling all of our element painting if it
         /// throws. Returns what a Harmony prefix should return: false when we painted, true to let the
         /// original method run.

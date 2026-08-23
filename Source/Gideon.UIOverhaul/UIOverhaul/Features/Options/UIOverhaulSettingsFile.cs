@@ -489,6 +489,18 @@ namespace Gideon.UIOverhaul.Features.Options
 
         public bool restyleAlerts = true;
 
+        /// <summary>
+        /// Whether every mental break raises a letter, and whether those letters say how long it lasts.
+        ///
+        /// <b>On by default, because the half it adds is the half you act on.</b> RimWorld stays silent for any
+        /// break whose state class writes no begin-letter text, and none of the letters it does send says how
+        /// long the break runs -- which is the one fact that decides between arresting them, waiting, and going
+        /// to fix the room.
+        ///
+        /// Off restores RimWorld exactly: the breaks it announces, worded the way it words them.
+        /// </summary>
+        public bool mentalBreakLetters = true;
+
         /// <summary>Messages start where vanilla puts them: top left, clear of the resource readout.</summary>
         public NotificationDock messageDock = NotificationDock.TopLeft;
 
@@ -1045,6 +1057,10 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.restyleLetters = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "mentalBreakLetters":
+                            settings.mentalBreakLetters = !value.EqualsIgnoreCase("false");
+                            break;
+
                         case "restyleAlerts":
                             settings.restyleAlerts = !value.EqualsIgnoreCase("false");
                             break;
@@ -1249,6 +1265,8 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("restyleMessages", restyleMessages ? "true" : "false");
                     writer.WriteElementString("restyleLetters", restyleLetters ? "true" : "false");
                     writer.WriteElementString("restyleAlerts", restyleAlerts ? "true" : "false");
+                    writer.WriteElementString("mentalBreakLetters",
+                        mentalBreakLetters ? "true" : "false");
                     writer.WriteElementString("messageDock", messageDock.ToString());
                     writer.WriteElementString("letterDock", letterDock.ToString());
                     writer.WriteElementString("alertDock", alertDock.ToString());

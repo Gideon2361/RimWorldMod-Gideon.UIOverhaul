@@ -541,6 +541,30 @@ namespace Gideon.UIOverhaul.Features.Inspector
             return fraction <= 0.45f ? palette.Warning : palette.Accent;
         }
 
+        /// <summary>
+        /// The colour for a vital sign, on four steps rather than <see cref="Level"/>'s three.
+        ///
+        /// <b>Health earns the extra step because it is the one number you watch fall.</b> A need at 60 percent
+        /// is fine and a colonist at 60 percent is not, so the scale has to say something between "fine" and
+        /// "hurt": green, yellow, orange, red.
+        ///
+        /// <b>The orange is mixed from the palette rather than written as a literal,</b> so a theme that restates
+        /// what warning and danger look like gets a matching step between them instead of one hardcoded colour
+        /// sitting in the middle of its own scheme.
+        /// </summary>
+        internal static Color Vital(float fraction, UIColorPaletteDef palette)
+        {
+            if (fraction >= 0.85f)
+                return palette.Success;
+
+            if (fraction >= 0.6f)
+                return palette.Warning;
+
+            return fraction >= 0.35f
+                ? Color.Lerp(palette.Warning, palette.Danger, 0.5f)
+                : palette.Danger;
+        }
+
         /// <summary>A percentage in the form the rest of the pane writes them.</summary>
         internal static string Percent(float fraction)
         {

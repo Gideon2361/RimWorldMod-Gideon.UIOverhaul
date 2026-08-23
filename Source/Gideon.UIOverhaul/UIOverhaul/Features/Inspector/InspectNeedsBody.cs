@@ -61,6 +61,14 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             y = InspectPaneParts.Cap(view, y, "Needs", all.Count + " tracked", palette);
 
+            // Mood first and drawn by hand, because RimWorld's own Mood def declares showOnNeedList false: it is
+            // the headline of vanilla's needs tab rather than a row in its list, so the loop below will never
+            // reach it however the list is ordered.
+            Need_Mood mood = pawn.needs.mood;
+
+            if (mood != null)
+                y = InspectOverview.DrawNeed(view, y, mood, pawn, palette, NoteFor(mood, pawn));
+
             for (int i = 0; i < all.Count; i++)
             {
                 Need need = all[i];
