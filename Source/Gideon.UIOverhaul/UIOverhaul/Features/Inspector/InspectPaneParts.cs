@@ -500,7 +500,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 Text.Font = GameFont.Tiny;
                 Text.WordWrap = false;
 
-                float width = Mathf.Min(view.width, Text.CalcSize(text ?? string.Empty).x + 14f);
+                // Capped against the room left from where this chip actually starts, not against the column's
+                // full width. Clamping to view.width let a chip placed halfway along a line run off the end of
+                // the column and be clipped by the group: "Great memory" came out as "Great mem" with nothing to
+                // say a word had been lost.
+                float room = Mathf.Max(24f, view.xMax - x);
+
+                float width = Mathf.Min(room, TagWidth(text));
                 float height = UIFonts.LineHeightOf(GameFont.Tiny) + 5f;
 
                 Rect chip = new Rect(x, y, width, height);
@@ -513,7 +519,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 Text.Anchor = TextAnchor.MiddleCenter;
                 GUI.color = filled ? palette.WindowBackground : color;
 
-                Widgets.Label(chip, text ?? string.Empty);
+                // Ellipsed rather than clipped, for the case the cap above still bites: a column too narrow for
+                // the longest trait in the game.
+                //
+                // <b>Given the whole chip, not an inset one.</b> Widgets.LabelEllipses holds thirteen pixels of
+                // its rect back for the dots, so inset padding stacks on top of that reserve and every chip
+                // ellipses whatever its size: a chip measured at text plus fourteen and then handed a rect
+                // twelve narrower had eleven pixels less than its own text needed, and "Perfect memory" came out
+                // as "Perfect me..." in a chip with room to spare. The reserve is the padding.
+                UIRichText.Label(chip, text ?? string.Empty);
 
                 return chip;
             }
@@ -524,6 +538,67 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
             }
+        }
+
+        /// <summary>
+        /// How wide a chip wants to be, so a flow can decide where it goes before drawing it.
+        ///
+        /// <b>Measured through <see cref="UIRichText.WidthOf"/> rather than off <c>CalcSize</c> alone,</b> because
+        /// that is the figure the drawing side will judge it against: <c>LabelEllipses</c> holds thirteen pixels
+        /// back for the dots, so a chip sized to the bare text ellipses text that would have fitted. The six on
+        /// top is the visible padding, and everything else is the reserve.
+        /// </summary>
+        internal static float TagWidth(string text)
+        {
+            GameFont previousFont = Text.Font;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.WordWrap = false;
+
+                return UIRichText.WidthOf(text ?? string.Empty) + 6f;
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>
+        /// One chip in a wrapping row of them, placed before it is drawn.
+        ///
+        /// <b>The wrap has to be decided in front of the chip, not behind it.</b> All four chip rows in the pane
+        /// drew at the current x and then asked whether the <i>next</i> one would fit, so the one that did not fit
+        /// had already been drawn overhanging the column. Measuring first is the whole fix, and it lives here
+        /// because four callers had the same eight lines and therefore the same bug.
+        ///
+        /// <paramref name="x"/>, <paramref name="y"/> and <paramref name="rowHeight"/> are the flow's running
+        /// state: seed x at the column's left edge and the other two at zero, and read y back afterwards.
+        /// </summary>
+        internal static Rect Chip(Rect view, ref float x, ref float y, ref float rowHeight, string text,
+            Color color, bool filled, UIColorPaletteDef palette, float gap = 4f)
+        {
+            float wanted = TagWidth(text);
+
+            // Wrapped only when something has already been placed on this line: a chip wider than the whole
+            // column has nowhere better to go, and moving it to a fresh line it also overflows would cost a blank
+            // line and fix nothing. Tag ellipses that one instead.
+            if (x > view.x && x + wanted > view.xMax)
+            {
+                x = view.x;
+                y += rowHeight + gap;
+                rowHeight = 0f;
+            }
+
+            Rect chip = Tag(view, x, y, text, color, filled, palette);
+
+            rowHeight = Mathf.Max(rowHeight, chip.height);
+            x = chip.xMax + gap;
+
+            return chip;
         }
 
         /// <summary>

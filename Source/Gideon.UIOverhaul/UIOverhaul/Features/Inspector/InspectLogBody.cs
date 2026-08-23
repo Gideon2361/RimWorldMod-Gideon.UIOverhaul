@@ -45,33 +45,35 @@ namespace Gideon.UIOverhaul.Features.Inspector
             return y - view.y;
         }
 
-        /// <summary>The three chips, laid across the top of the body.</summary>
+        /// <summary>
+        /// The three chips, laid across the top of the body.
+        ///
+        /// Through the shared flow rather than by hand, so a narrow column wraps them onto a second line instead
+        /// of running the third one off the edge. Three short words rarely need it; the pane can be dragged to
+        /// its floor, and one control that wraps everywhere is better than one that wraps in three places.
+        /// </summary>
         private static float Filters(Rect view, float y, UIColorPaletteDef palette)
         {
             float x = view.x;
             float height = 0f;
 
-            height = Mathf.Max(height, Chip(view, ref x, y, InspectPaneState.LogFilter.All, "All", palette));
-            height = Mathf.Max(height, Chip(view, ref x, y, InspectPaneState.LogFilter.Combat, "Combat", palette));
-            height = Mathf.Max(height, Chip(view, ref x, y, InspectPaneState.LogFilter.Social, "Social", palette));
+            Chip(view, ref x, ref y, ref height, InspectPaneState.LogFilter.All, "All", palette);
+            Chip(view, ref x, ref y, ref height, InspectPaneState.LogFilter.Combat, "Combat", palette);
+            Chip(view, ref x, ref y, ref height, InspectPaneState.LogFilter.Social, "Social", palette);
 
             return y + height + 8f;
         }
 
-        private static float Chip(Rect view, ref float x, float y, InspectPaneState.LogFilter filter, string label,
-            UIColorPaletteDef palette)
+        private static void Chip(Rect view, ref float x, ref float y, ref float rowHeight,
+            InspectPaneState.LogFilter filter, string label, UIColorPaletteDef palette)
         {
             bool selected = InspectPaneState.Log == filter;
 
-            Rect chip = InspectPaneParts.Tag(view, x, y, label,
-                selected ? palette.Accent : palette.Border, selected, palette);
+            Rect chip = InspectPaneParts.Chip(view, ref x, ref y, ref rowHeight, label,
+                selected ? palette.Accent : palette.Border, selected, palette, 5f);
 
             if (Widgets.ButtonInvisible(chip))
                 InspectPaneState.Log = filter;
-
-            x = chip.xMax + 5f;
-
-            return chip.height;
         }
 
         /// <summary>

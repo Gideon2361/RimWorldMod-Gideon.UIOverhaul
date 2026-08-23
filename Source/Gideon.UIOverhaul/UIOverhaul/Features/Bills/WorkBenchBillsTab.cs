@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
+using Gideon.UIOverhaul.Features.Inspector;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -39,10 +40,57 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// </summary>
         internal const float Width = 520f;
 
-        /// <summary>Vanilla's own height, which the growing zone tab also matches.</summary>
-        internal const float Height = 480f;
+        /// <summary>
+        /// The shortest the tab is drawn, which is vanilla's own height and holds five cards.
+        ///
+        /// <b>A floor rather than the height, since 14159.</b> A fixed 480 meant a bench with two bills got a
+        /// pane two thirds empty and a bench with twelve got five of them behind a scrollbar, inside a pane that
+        /// was itself scrolling. Sizing to the contents fixes both ends at once and is what several of RimWorld's
+        /// own tabs do.
+        /// </summary>
+        internal const float MinHeight = 480f;
+
         private const float RowGap = 6f;
         private const float Pad = 10f;
+
+        /// <summary>
+        /// What the tab spends on everything that is not the list: the padding and the button row.
+        ///
+        /// Derived from the layout below rather than written beside it, for the reason the inspect pane's own
+        /// chrome had to be: a second copy of a layout is wrong the first time either copy is edited.
+        /// </summary>
+        private const float Chrome = Pad * 2f + 30f + 8f;
+
+        /// <summary>
+        /// The tallest it grows on its own, which is eight cards.
+        ///
+        /// <b>A ceiling of its own, under the one the screen imposes.</b> Sixty bills would otherwise ask for a
+        /// pane the height of the monitor, and clicking a workbench should not blank the map: past eight cards
+        /// the list scrolls, which is what a list is for. Eight is where a bench stops being something you read
+        /// and starts being something you search.
+        /// </summary>
+        private const float MaxHeight = 8f * (WorkBillRow.RowHeight + RowGap) + Chrome;
+
+        /// <summary>
+        /// How tall this bench's tab wants to be: enough for every card, within what the screen can show.
+        ///
+        /// <b>Bounded by what the inspect pane could actually give it,</b> so the tab never asks for a size that
+        /// puts it into a scroll view. The pane's own arithmetic is the authority on that; with the rebuilt pane
+        /// switched off the same figure is a sane ceiling anyway, since RimWorld hangs the tab window upward from
+        /// the bottom of the screen and a taller one would run off the top.
+        /// </summary>
+        internal static float HeightFor(Building_WorkTable bench)
+        {
+            int count = bench != null && bench.billStack != null ? bench.billStack.Count : 0;
+
+            float wanted = count * (WorkBillRow.RowHeight + RowGap) + Chrome;
+
+            float ceiling = Mathf.Min(MaxHeight, InspectPaneMetrics.TallestTab);
+
+            // Max before Clamp, because on a short screen the ceiling can fall below the floor and Clamp with a
+            // reversed range returns the wrong end of it.
+            return Mathf.Round(Mathf.Clamp(wanted, MinHeight, Mathf.Max(MinHeight, ceiling)));
+        }
 
         private static Vector2 scroll;
         private static bool dragging;
@@ -55,10 +103,13 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         internal static void Draw(Building_WorkTable bench)
         {
-            Rect tab = new Rect(0f, 0f, Width, Height);
-
             if (bench == null)
                 return;
+
+            // The same figure the tab reported through UpdateSize, so the drawing and the pane agree about how
+            // much room there is. Recomputed rather than remembered: a bill deleted from a row changes it, and
+            // this is the frame that has to reflect it.
+            Rect tab = new Rect(0f, 0f, Width, HeightFor(bench));
 
             if (bench.thingIDNumber != shownFor)
             {

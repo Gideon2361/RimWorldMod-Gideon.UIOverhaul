@@ -119,20 +119,11 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     ? disabled[i].label
                     : disabled[i].labelShort;
 
-                Rect chip = InspectPaneParts.Tag(view, x, y, label.CapitalizeFirst(), palette.Danger, false,
-                    palette);
-
-                rowHeight = Mathf.Max(rowHeight, chip.height);
-
-                x = chip.xMax + 4f;
-
-                // Wrapped by hand rather than clipped: a pawn incapable of six things would otherwise show three
-                // and give no sign that the other three exist.
-                if (x > view.xMax - 50f && i < disabled.Count - 1)
-                {
-                    x = view.x;
-                    y += rowHeight + 4f;
-                }
+                // Wrapped rather than clipped: a pawn incapable of six things would otherwise show three and give
+                // no sign that the other three exist. The flow measures each chip before placing it, which is
+                // what stops the one that does not fit being drawn overhanging the column first.
+                InspectPaneParts.Chip(view, ref x, ref y, ref rowHeight, label.CapitalizeFirst(), palette.Danger,
+                    false, palette);
             }
 
             return y + rowHeight + InspectPaneParts.BlockGap;
@@ -164,27 +155,17 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
                 bool suppressed = UIGuard.Try("Inspector.TraitSuppressed", () => trait.Suppressed, false, null);
 
-                Rect chip = InspectPaneParts.Tag(view, x, y,
+                Rect chip = InspectPaneParts.Chip(view, ref x, ref y, ref rowHeight,
                     UIGuard.Try("Inspector.TraitLabel", () => trait.LabelCap, "?", null),
                     suppressed ? palette.TextDisabled : palette.Accent, false, palette);
 
-                if (Mouse.IsOver(chip))
-                {
-                    string tip = UIGuard.Try("Inspector.TraitTip", () => trait.TipString(pawn), null, null);
+                if (!Mouse.IsOver(chip))
+                    continue;
 
-                    if (!tip.NullOrEmpty())
-                        TooltipHandler.TipRegion(chip, (TipSignal) tip);
-                }
+                string tip = UIGuard.Try("Inspector.TraitTip", () => trait.TipString(pawn), null, null);
 
-                rowHeight = Mathf.Max(rowHeight, chip.height);
-
-                x = chip.xMax + 4f;
-
-                if (x > view.xMax - 50f && i < traits.Count - 1)
-                {
-                    x = view.x;
-                    y += rowHeight + 4f;
-                }
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(chip, (TipSignal) tip);
             }
 
             return y + rowHeight + InspectPaneParts.BlockGap;

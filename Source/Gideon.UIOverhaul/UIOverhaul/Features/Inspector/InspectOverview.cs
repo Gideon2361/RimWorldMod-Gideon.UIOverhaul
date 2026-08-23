@@ -215,19 +215,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 if (trait == null)
                     continue;
 
-                Rect chip = InspectPaneParts.Tag(view, x, y,
+                InspectPaneParts.Chip(view, ref x, ref y, ref rowHeight,
                     UIGuard.Try("Inspector.CorpseTrait", () => trait.LabelCap, "?", null),
                     palette.Accent, false, palette);
-
-                rowHeight = Mathf.Max(rowHeight, chip.height);
-
-                x = chip.xMax + 4f;
-
-                if (x > view.xMax - 50f && i < traits.Count - 1)
-                {
-                    x = view.x;
-                    y += rowHeight + 4f;
-                }
             }
 
             return y + rowHeight + InspectPaneParts.BlockGap;

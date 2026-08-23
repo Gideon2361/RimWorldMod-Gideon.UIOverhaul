@@ -58,6 +58,29 @@ namespace Gideon.UIOverhaul.Features.Inspector
         private const float CornerButton = InspectPaneUtility.CornerButtonsSize;
 
         /// <summary>
+        /// Everything a pane of a given height spends on something other than its body.
+        ///
+        /// <b>Derived from the constants above rather than written down beside them.</b> It was a literal 112 in
+        /// <see cref="InspectPaneMetrics"/> and the real figure is 153, so a foreign tab asking for 480 pixels was
+        /// given 421 and drew itself into a scroll view: a workbench's bills tab came out with our scrollbar, the
+        /// horizontal bar that one forced, and the tab's own list bar, three of them around a panel that was 41
+        /// pixels short. A second copy of a layout is wrong the first time either copy is edited, and this one
+        /// was wrong from the day the footer gained a maximum.
+        ///
+        /// The grip and the half margin are the window's; the rest is what <see cref="Draw"/> lays out above and
+        /// below the body. The footer is counted at its maximum, since that is what a pane tall enough to matter
+        /// will give it.
+        /// </summary>
+        internal static float Chrome
+        {
+            get
+            {
+                return InspectPaneMetrics.GripHeight + InnerMargin * 0.5f + HeaderHeight + 4f + MaxFooterHeight
+                       + 6f;
+            }
+        }
+
+        /// <summary>
         /// How tall the last body actually drew.
         ///
         /// <b>Remembered rather than predicted.</b> A formula for a section's height is wrong the first time a

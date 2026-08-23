@@ -116,11 +116,27 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <summary>
         /// Everything the pane puts around its body: the grip, the header, the gaps and the inspect string.
         ///
-        /// Used to work out how tall the pane has to be for a tab that states its own size. Deliberately a single
-        /// number rather than a reference to the frame's four constants, which are private to it and are about
-        /// laying out a body rather than about reserving room for one.
+        /// <b>Asked of the frame rather than written down here.</b> This was a literal 112 on the reasoning that
+        /// the frame's constants are private and are about laying a body out rather than reserving room for one.
+        /// That was wrong twice over: the real figure is 153, so every foreign tab was given 41 pixels less than
+        /// it asked for and drew itself into a scroll view -- and a number that has to agree with a layout it
+        /// cannot see is a number that goes stale the first time either side is edited.
         /// </summary>
-        private const float Chrome = 112f;
+        private static float Chrome
+        {
+            get { return InspectPaneFrame.Chrome; }
+        }
+
+        /// <summary>
+        /// The tallest a tab can ask to be and still be drawn whole.
+        ///
+        /// Offered so a tab of ours can size itself to its contents without having to know what the pane spends
+        /// on chrome, and without guessing at a number that would go stale the same way the one above did.
+        /// </summary>
+        internal static float TallestTab
+        {
+            get { return Mathf.Max(VanillaHeight, Ceiling - Chrome); }
+        }
 
         /// <summary>
         /// How tall the pane has to be for what it is currently showing.

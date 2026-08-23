@@ -20,8 +20,10 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// each built once when its def is resolved, so a postfix here runs a few dozen times at startup and never
     /// again. Setting the field from the draw path instead would write it sixty times a second.
     ///
-    /// <b>Height is left alone.</b> The pane grows upward from the bottom of the screen and 480 already holds
-    /// five cards; taller would start covering the map for no gain, since the list scrolls.
+    /// <b>Height is the bench's own, and only its floor is set here.</b> The constructor runs at startup with no
+    /// bench selected, so all it can honestly say is the minimum; the real figure depends on how many bills the
+    /// bench being looked at holds and is set by <see cref="Patch_BillsTabHeight"/> each time the size is asked
+    /// for.
     /// </summary>
     [HarmonyPatch(typeof(ITab_Bills), MethodType.Constructor)]
     internal static class Patch_BillsTabSize
@@ -51,8 +53,56 @@ namespace Gideon.UIOverhaul.Features.Bills
                     return;
                 }
 
-                Size.SetValue(__instance, new Vector2(WorkBenchBillsTab.Width, WorkBenchBillsTab.Height));
+                Size.SetValue(__instance, new Vector2(WorkBenchBillsTab.Width, WorkBenchBillsTab.MinHeight));
             }, "The bills tab keeps RimWorld's narrower pane, so its right hand column is cut off.");
+        }
+
+        internal static void Apply(InspectTabBase tab, Vector2 size)
+        {
+            if (Size != null)
+                Size.SetValue(tab, size);
+        }
+    }
+
+    /// <summary>
+    /// Sizes the bills tab to the bench it is about to show.
+    ///
+    /// <b>A fixed height is wrong at both ends.</b> A bench with two bills got a pane two thirds empty, and one
+    /// with twelve got five cards behind a scrollbar. Aaron reported the second on 2026-08-22, with the tab's own
+    /// list bar, the inspect pane's, and the horizontal bar that one forced, all on screen at once.
+    ///
+    /// <b><c>UpdateSize</c> is the seam RimWorld provides for exactly this,</b> and it is the right one rather
+    /// than a convenient one: it is what <c>InspectTabBase.TabRect</c> calls before laying the tab out, and what
+    /// this mod's own pane calls before deciding how tall to grow. Both therefore get the figure before it is
+    /// needed rather than a frame late.
+    ///
+    /// <b>Patched on the base rather than on <c>ITab_Bills</c>,</b> which does not override it: naming the
+    /// subclass would fail to find a method to patch. The type test costs one check per tab per frame and nothing
+    /// else runs for anything that is not a bills tab.
+    /// </summary>
+    [HarmonyPatch(typeof(InspectTabBase), "UpdateSize")]
+    internal static class Patch_BillsTabHeight
+    {
+        [HarmonyPostfix]
+        public static void Postfix(InspectTabBase __instance)
+        {
+            if (!(__instance is ITab_Bills))
+                return;
+
+            UIGuard.Try("Bills.TabHeight", () =>
+            {
+                Building_WorkTable bench = Find.Selector == null
+                    ? null
+                    : Find.Selector.SingleSelectedThing as Building_WorkTable;
+
+                // Nothing selected leaves the floor in place. This is called while the pane is closing as well as
+                // while it is open, and shrinking to nothing on the way out would make the pane jump.
+                if (bench == null)
+                    return;
+
+                Patch_BillsTabSize.Apply(__instance,
+                    new Vector2(WorkBenchBillsTab.Width, WorkBenchBillsTab.HeightFor(bench)));
+            }, "The bills tab keeps its minimum height, so a bench with many bills scrolls its list.");
         }
     }
 

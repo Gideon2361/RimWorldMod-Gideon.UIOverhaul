@@ -147,7 +147,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 // Ellipsed rather than clipped. IMGUI cuts a centred label off at both ends, so a segment whose
                 // label does not fit reads as the middle of a word with nothing to say a word was lost.
-                UIRichText.Label(rect.ContractedBy(4f), label);
+                UIRichText.Label(rect, label);
             }
             finally
             {
@@ -204,7 +204,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 // Ellipsed rather than clipped, which is what turned "Default care: herbal medicine or worse"
                 // into "ault care: herbal medicine or wo" on the hospital strip: a centred label too wide for
                 // its rect loses both ends and gives no sign that it did.
-                UIRichText.Label(rect.ContractedBy(6f), label);
+                UIRichText.Label(rect, label);
             }
             finally
             {
@@ -240,7 +240,10 @@ namespace Gideon.UIOverhaul.Features.Hospital
             {
                 Text.Font = GameFont.Tiny;
 
-                return Mathf.Min(ceiling, Text.CalcSize(text ?? string.Empty).x + 12f);
+                // Through WidthOf rather than off CalcSize, because that is the figure the drawing side judges it
+                // against: LabelEllipses holds thirteen pixels back for the dots, so a pill sized to the bare
+                // text ellipses at every size however much room it has. The six on top is the visible padding.
+                return Mathf.Min(ceiling, UIRichText.WidthOf(text ?? string.Empty) + 6f);
             }
             finally
             {
@@ -275,7 +278,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 Text.Font = GameFont.Tiny;
                 Text.WordWrap = false;
 
-                float width = Mathf.Min(ceiling, Text.CalcSize(text).x + 12f);
+                float width = Mathf.Min(ceiling, UIRichText.WidthOf(text) + 6f);
                 float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
 
                 Rect pill = new Rect(x, y, width, height);
@@ -290,7 +293,9 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 // Ellipsed rather than clipped: IMGUI cuts a centred label off at both ends, so a capped pill
                 // whose text does not fit would read as the middle of a word with no sign anything was lost.
-                UIRichText.Label(new Rect(pill.x + 5f, pill.y, pill.width - 10f, pill.height), text);
+                // Given the whole pill, since LabelEllipses already holds back the thirteen pixels that serve
+                // as its padding; insetting on top of that reserve ellipses every pill whatever its size.
+                UIRichText.Label(pill, text);
 
                 return pill;
             }
