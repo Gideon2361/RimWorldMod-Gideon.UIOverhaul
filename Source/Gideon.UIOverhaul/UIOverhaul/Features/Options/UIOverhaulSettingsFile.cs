@@ -418,6 +418,32 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool characterEditor;
 
         /// <summary>
+        /// Whether this mod manages the music.
+        ///
+        /// <b>On, and off means absent.</b> With this false nothing is patched, the game picks songs the way it
+        /// always did, and there is no window and no strip -- not a disabled one. Playlists the player made are
+        /// kept, because switching a feature off is not a request to delete their library.
+        ///
+        /// <b>The one setting in this mod that another mod can force.</b> Two music players driving RimWorld's one
+        /// audio source means two songs competing for it, so <c>MusicRivals</c> stands ours down when RimTunes,
+        /// Music Manager, Music Expanded Framework or anything else patching the music manager is loaded. That
+        /// override is not written here: this stays whatever the player set, so removing the other mod gives them
+        /// their choice back rather than a silently disabled feature.
+        ///
+        /// Defaults on, so it reads the permissive way round: only an explicit false turns it off.
+        /// </summary>
+        public bool musicPlayer = true;
+
+        /// <summary>
+        /// Whether the now playing strip is drawn in the corner with the other readouts.
+        ///
+        /// Its own setting like every other row down there, because somebody who wants the player but not a
+        /// permanent readout over their map has nowhere else to say so. The window and the playback are
+        /// unaffected; this hides one block.
+        /// </summary>
+        public bool showMusicWidget = true;
+
+        /// <summary>
         /// How many bills one workbench may hold.
         ///
         /// <b>A setting rather than a number of ours,</b> asked for on 2026-08-19. It was a hard 120 written into
@@ -1010,6 +1036,16 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.characterEditor = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Both default on, so both read the permissive way: absent means the player gets the
+                        // feature rather than having it withheld by a config file written before it existed.
+                        case "musicPlayer":
+                            settings.musicPlayer = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "showMusicWidget":
+                            settings.showMusicWidget = !value.EqualsIgnoreCase("false");
+                            break;
+
                         // Defaults on, so it is read the other way round: only an explicit false turns it off.
                         case "autoCutBlightedPlants":
                             settings.autoCutBlightedPlants = !value.EqualsIgnoreCase("false");
@@ -1270,6 +1306,8 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
                     writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
                     writer.WriteElementString("characterEditor", characterEditor ? "true" : "false");
+                    writer.WriteElementString("musicPlayer", musicPlayer ? "true" : "false");
+                    writer.WriteElementString("showMusicWidget", showMusicWidget ? "true" : "false");
                     writer.WriteElementString("autoCutBlightedPlants",
                         autoCutBlightedPlants ? "true" : "false");
                     writer.WriteElementString("showMineableOverlay",

@@ -161,6 +161,12 @@ namespace Gideon.UIOverhaul.Features.Panel
             y -= BlockGap;
 
             y = DrawMainBlock(x, y, map, palette, settings);
+
+            // Immediately above the date and weather, which is the readout it belongs next to: what is playing
+            // is the same kind of fact as what the weather is doing. Below the conditions, because a cold snap is
+            // something to act on and a song is not.
+            y = Music.MusicStrip.Draw(x, y, palette, settings);
+
             y = DrawConditions(x, y, map, palette, settings);
             y = DrawReadouts(x, y, map, palette, settings);
 

@@ -1516,6 +1516,16 @@ namespace Gideon.UIOverhaul.Features.Options
             if (settings.showMinimapWidget)
                 DrawMinimapOptions(view, ref y, palette, settings, indent * 2f);
 
+            WidgetToggle(view, ref y, palette, settings, indent, "Now playing",
+                settings.showMusicWidget, value => settings.showMusicWidget = value,
+                "A strip in the corner saying what is playing, with skip, pause and a way to change "
+                + "playlist.\n\nIt also names the gap: RimWorld leaves eighty five to a hundred and five seconds "
+                + "of silence between songs in peacetime and nothing on screen says that is deliberate, so the "
+                + "strip counts it down and offers to end it.\n\nSwitching this off hides the strip only. The "
+                + "music window and playback are unaffected, and the window is still reachable from the speaker "
+                + "in the play settings row.",
+                !settings.musicPlayer || Music.MusicRivals.Any);
+
             WidgetToggle(view, ref y, palette, settings, indent, "Colonist bar",
                 settings.showGroupedColonistBar, value => settings.showGroupedColonistBar = value,
                 "Replaces RimWorld's colonist bar with named groups you can fold away.\n\nFold a group to stop "
@@ -2462,6 +2472,34 @@ namespace Gideon.UIOverhaul.Features.Options
             GUI.color = palette.TextPrimary;
 
             y += RowHeight + 6f;
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Music");
+
+            string rival = Music.MusicRivals.Detected;
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Enable the music player",
+                settings.musicPlayer && rival == null, value => settings.musicPlayer = value,
+                "Replaces RimWorld's hidden music system with one you can see: your own playlists, music from "
+                + "your drive in ogg, wav, mp3, mp4 or m4a, and every song your mods added -- including the ones "
+                + "the game will never choose on its own.\n\nOpen it from the speaker in the play settings row, "
+                + "the strip in the corner, or the main menu.\n\nWith this off nothing is patched and nothing is "
+                + "watching: the game picks songs the way it always did, and there is no window and no strip. "
+                + "Playlists you made are kept and come back if you switch it on again.",
+                rival != null);
+
+            // The reason a locked toggle is locked, which is the one thing a player cannot work out for
+            // themselves. Not an explanation of the control: without this line the feature reads as broken.
+            if (rival != null)
+            {
+                GUI.color = palette.Warning;
+                Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                    "Switched off: " + rival + " is loaded and manages music itself.");
+                GUI.color = palette.TextPrimary;
+
+                y += RowHeight + 6f;
+            }
         }
 
         /// <summary>

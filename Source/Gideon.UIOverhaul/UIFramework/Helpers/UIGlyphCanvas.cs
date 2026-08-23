@@ -89,6 +89,46 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
+        /// A filled convex polygon, from points given in order. Three of them is a triangle.
+        ///
+        /// <b>Why this exists.</b> The obvious way to fill a triangle here was three thick capsules along its
+        /// edges, and it does not work: at the thickness needed to close the middle, the round caps bulge past
+        /// every corner and a play arrow comes out as a blob. A real half-plane test gives sharp corners and a
+        /// one-pixel edge like every other primitive, and it is what the transport icons -- play, skip, the
+        /// speaker cone -- are all made of.
+        ///
+        /// <b>Convex only, and points in order.</b> The coverage is the furthest-outside edge, which is the
+        /// signed distance to a convex polygon and is meaningless for a concave one. Winding does not matter:
+        /// the sign is taken from the polygon's own area so clockwise and counter-clockwise both fill.
+        /// </summary>
+        internal UIGlyphCanvas Polygon(params float[] xy)
+        {
+            if (xy == null || xy.Length < 6 || xy.Length % 2 != 0)
+                return this;
+
+            int count = xy.Length / 2;
+            float[] points = new float[xy.Length];
+
+            for (int i = 0; i < xy.Length; i++)
+                points[i] = xy[i] * Resolution;
+
+            // Twice the signed area. Its sign says which way the points wind, which is what lets the edge test
+            // below treat both directions as inside.
+            float area = 0f;
+
+            for (int i = 0; i < count; i++)
+            {
+                int next = (i + 1) % count;
+
+                area += points[i * 2] * points[next * 2 + 1] - points[next * 2] * points[i * 2 + 1];
+            }
+
+            float winding = area >= 0f ? 1f : -1f;
+
+            return Paint((px, py) => PolygonCoverage(px, py, points, count, winding), false);
+        }
+
+        /// <summary>
         /// A six-spoke snowflake: three capsules crossing at a point.
         ///
         /// Six rather than the four a plus sign would give, because four reads as a cross and this has to be
@@ -214,6 +254,49 @@ namespace Gideon.UIFramework.Helpers
 
             if (thickness > 0f)
                 distance = Mathf.Abs(distance) - thickness * Resolution * 0.5f;
+
+            return Mathf.Clamp01(0.5f - distance / EdgeSoftness);
+        }
+
+        /// <summary>
+        /// Coverage of a convex polygon at a pixel, in the same units the other two work in.
+        ///
+        /// The distance to a convex polygon is the largest of the perpendicular distances to its edge lines,
+        /// negative inside. Each edge's normal is scaled by the winding so both point outward whichever way the
+        /// points were given.
+        /// </summary>
+        private static float PolygonCoverage(float px, float py, float[] points, int count, float winding)
+        {
+            float distance = float.NegativeInfinity;
+
+            for (int i = 0; i < count; i++)
+            {
+                int next = (i + 1) % count;
+
+                float ax = points[i * 2];
+                float ay = points[i * 2 + 1];
+                float ex = points[next * 2] - ax;
+                float ey = points[next * 2 + 1] - ay;
+
+                float length = Mathf.Sqrt(ex * ex + ey * ey);
+
+                // A repeated point contributes no edge. Skipped rather than dividing by zero, which would make
+                // the whole polygon vanish.
+                if (length <= 0f)
+                    continue;
+
+                // The outward normal of this edge, unit length.
+                float nx = ey / length * winding;
+                float ny = -ex / length * winding;
+
+                float edge = (px - ax) * nx + (py - ay) * ny;
+
+                if (edge > distance)
+                    distance = edge;
+            }
+
+            if (float.IsNegativeInfinity(distance))
+                return 0f;
 
             return Mathf.Clamp01(0.5f - distance / EdgeSoftness);
         }

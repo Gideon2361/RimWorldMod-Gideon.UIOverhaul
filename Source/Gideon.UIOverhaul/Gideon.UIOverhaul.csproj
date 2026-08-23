@@ -20,7 +20,7 @@
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
              The first three move when the game does; the last increments on every change. -->
-        <Version>1.6.4871.14160</Version>
+        <Version>1.6.4871.14161</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -83,6 +83,28 @@
             <HintPath>$(RimWorldManagedDir)\UnityEngine.TextRenderingModule.dll</HintPath>
             <Private>false</Private>
         </Reference>
+        <Reference Include="UnityEngine.AudioModule">
+            <HintPath>$(RimWorldManagedDir)\UnityEngine.AudioModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestModule">
+            <HintPath>$(RimWorldManagedDir)\UnityEngine.UnityWebRequestModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+            <HintPath>$(RimWorldManagedDir)\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
+        <!-- RimWorld ships this in its own managed folder and loads it every session, so the music player's
+             mp4 and m4a support costs no new dependency and nothing extra in the download: Unity has no AAC
+             decoder on the desktop, and NAudio's Media Foundation reader hands those two formats to Windows.
+             Private false like every other game reference, so no copy of it lands in Assemblies. -->
+        <Reference Include="NAudio">
+            <HintPath>$(RimWorldManagedDir)\NAudio.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
         <Reference Include="0Harmony">
             <HintPath>$(HarmonyAssemblyDir)\0Harmony.dll</HintPath>
             <Private>false</Private>

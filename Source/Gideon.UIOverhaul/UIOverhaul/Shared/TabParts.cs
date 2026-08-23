@@ -249,6 +249,60 @@ namespace Gideon.UIOverhaul.Shared
         private const float IconInset = 4f;
 
         /// <summary>How wide a row of <paramref name="segments"/> icon segments comes out.</summary>
+        /// <summary>
+        /// A square icon control that looks exactly like a segment and behaves like a switch.
+        ///
+        /// <b>A separate control rather than a flag on <see cref="Segment"/>, because they answer different
+        /// questions.</b> A segment is one of a set and its contract is that clicking the one already chosen does
+        /// nothing -- there is no "unchoose" in a row of mutually exclusive options, and firing there would let a
+        /// stray click deselect a mode that has to have some value. A toggle is a single setting with two states
+        /// and its whole point is that the same click turns it off again.
+        ///
+        /// <b>They were the same control once and it produced a one-way switch.</b> Shuffle was drawn as a
+        /// segment, so it could be turned on and never off: the click landed, the frame lit, and the callback was
+        /// suppressed by the very rule that makes a segment a segment. Repeat had it too. If a control's off
+        /// state is reached by pressing it again, it is this one and not that one.
+        /// </summary>
+        internal static void IconToggle(Rect rect, Texture2D icon, bool on, UIColorPaletteDef palette,
+            Action toggled, string tooltip, bool disabled = false)
+        {
+            bool over = !disabled && Mouse.IsOver(rect);
+
+            SegmentFrame(rect, on, over, palette);
+
+            if (icon != null)
+            {
+                float side = Mathf.Max(8f, Mathf.Min(rect.height, rect.width) - IconInset * 2f);
+                Rect frame = new Rect(rect.center.x - side * 0.5f, rect.center.y - side * 0.5f, side, side);
+
+                Color previous = GUI.color;
+
+                GUI.color = on
+                    ? palette.WindowBackground
+                    : disabled
+                        ? palette.TextDisabled
+                        : over
+                            ? palette.TextPrimary
+                            : palette.TextSecondary;
+
+                GUI.DrawTexture(frame, icon);
+
+                GUI.color = previous;
+            }
+
+            if (!tooltip.NullOrEmpty() && Mouse.IsOver(rect))
+                TooltipHandler.TipRegion(rect, (TipSignal) tooltip);
+
+            bool clicked = Widgets.ButtonInvisible(rect);
+
+            if (!clicked || disabled)
+                return;
+
+            toggled();
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
         internal static float IconSegmentsWidth(int segments, float height)
         {
             return segments <= 0
@@ -326,6 +380,44 @@ namespace Gideon.UIOverhaul.Shared
         /// find out where it goes paints a stray copy at the first position, which is a bug that only shows on
         /// rows where the two positions differ.
         /// </summary>
+        /// <summary>
+        /// A one-line label filling the height of a row, centred in it, ellipsed rather than wrapped.
+        ///
+        /// <b>Why the height matters, and why this is a helper rather than a rect at each call site.</b> A line
+        /// of Small text is about twenty two pixels tall and a label rect any shorter than that clips the bottom
+        /// of the line -- so the descenders go and only the descenders go. "Depths" reads as "Deoths" and "Engi"
+        /// as "Enqi", which does not look like a layout fault at all: it looks like a font problem, or like the
+        /// mod is showing the wrong text. It was written five times as an eighteen or twenty pixel rect before
+        /// that was understood, so the row's own height is passed in and the vertical centring happens here.
+        ///
+        /// Anchored middle-left, which is what makes taking the full row height safe: the text sits on the row's
+        /// centre line however tall the row is.
+        /// </summary>
+        internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Font = font;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
+                GUI.color = color;
+
+                UIRichText.Label(band, text);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+        }
+
         internal static float PillWidth(string text, float ceiling = 9999f)
         {
             GameFont previousFont = Text.Font;
