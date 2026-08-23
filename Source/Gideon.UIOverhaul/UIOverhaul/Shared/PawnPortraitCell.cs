@@ -37,7 +37,17 @@ namespace Gideon.UIOverhaul.Shared
         /// whose row carries a wash has to pass the average of it rather than the flat card color -- see the
         /// crop note below.
         /// </param>
-        public static void Draw(Rect frame, Pawn pawn, UIColorPaletteDef palette, Color behind)
+        /// <param name="jumpOnClick">
+        /// False for a caller that owns the click itself.
+        ///
+        /// <b>It exists because a pending jump outlives the frame that asked for it.</b> The request sits in
+        /// <see cref="PawnCameraJump"/> until some panel calls Resolve, so a portrait clicked inside a window that
+        /// never resolves would fire the next time any other panel did -- closing that panel and jumping the
+        /// camera for a click made minutes earlier somewhere else. The character editor's roster wants the click
+        /// for switching pawn and must not leave one behind.
+        /// </param>
+        public static void Draw(Rect frame, Pawn pawn, UIColorPaletteDef palette, Color behind,
+            bool jumpOnClick = true)
         {
             Color previous = GUI.color;
 
@@ -70,9 +80,10 @@ namespace Gideon.UIOverhaul.Shared
             GUI.DrawTexture(frame, UIShapes.DiscCutout);
             GUI.color = previous;
 
-            // Unconditional, so this control's id cannot come and go between frames. A conditional control is
-            // how a neighbor's id gets shifted, which is a fault worth not reintroducing anywhere.
-            if (Widgets.ButtonInvisible(frame))
+            // The button is unconditional even when the jump is not, so this control's id cannot come and go
+            // between frames. A conditional control is how a neighbor's id gets shifted, which is a fault worth
+            // not reintroducing anywhere.
+            if (Widgets.ButtonInvisible(frame) && jumpOnClick)
                 PawnCameraJump.Request(pawn);
         }
 

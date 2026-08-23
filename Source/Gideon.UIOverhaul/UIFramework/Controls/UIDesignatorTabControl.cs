@@ -128,6 +128,21 @@ namespace Gideon.UIFramework.Controls
         /// room for its name and reads better level, even where the narrow ones do not.
         /// </summary>
         public bool RotateLabel = true;
+
+        /// <summary>
+        /// Whether this column's cells take their own clicks, and so must be cut out of any hit test the panel
+        /// lays over a whole row.
+        ///
+        /// <b>Declared by the column rather than counted by the panel, because a count goes stale.</b> A panel
+        /// whose rows are clickable has to exclude the columns holding controls, and the obvious way to write
+        /// that -- subtract the width of the last column -- is right exactly until somebody adds another column
+        /// after it. That is not hypothetical: the pawns tab's area dropdown was swallowed by its row twice, the
+        /// second time because an Edit column was added to its right and the subtraction still named the area.
+        ///
+        /// Reading it off the columns means the answer is recomputed the moment the columns change, which is the
+        /// only version of this that cannot rot. See <see cref="UIDesignatorTabControl.OwnedTailWidth"/>.
+        /// </summary>
+        public bool OwnsClicks;
     }
 
     /// <summary>
@@ -353,6 +368,39 @@ namespace Gideon.UIFramework.Controls
                     total += Columns[i].Width;
 
                 return total;
+            }
+        }
+
+        /// <summary>
+        /// Width of everything from the first column that owns its clicks to the right-hand end of the grid.
+        ///
+        /// <b>Everything after the first one, not only the ones marked.</b> A panel subtracts this from
+        /// <see cref="ColumnsWidth"/> to find where its row-wide hit test has to stop, and stopping short of a
+        /// control is the one failure that matters: the row's own <c>ButtonInvisible</c> is painted before any
+        /// cell, so it takes the click and the control underneath never sees it. Overshooting costs a strip of
+        /// row that no longer toggles, which nobody notices. So a plain column sitting between two interactive
+        /// ones is given up rather than carved around.
+        ///
+        /// Zero when no column owns its clicks, which leaves such a panel's hit test exactly as wide as its
+        /// columns.
+        /// </summary>
+        public float OwnedTailWidth
+        {
+            get
+            {
+                float tail = 0f;
+                bool counting = false;
+
+                for (int i = 0; i < Columns.Count; i++)
+                {
+                    if (Columns[i].OwnsClicks)
+                        counting = true;
+
+                    if (counting)
+                        tail += Columns[i].Width;
+                }
+
+                return tail;
             }
         }
 

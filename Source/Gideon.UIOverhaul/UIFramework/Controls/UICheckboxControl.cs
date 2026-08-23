@@ -99,6 +99,28 @@ namespace Gideon.UIFramework.Controls
         }
 
         /// <summary>
+        /// How wide a row has to be for this switch and this label to be drawn whole: the switch's slot, the gap
+        /// after it, and the text.
+        ///
+        /// <b>Here rather than at the call site, because the switch's slot is not the caller's to know.</b> A
+        /// toolbar that wrote down 138 pixels for "Include buried" was fourteen short of the label, and
+        /// <see cref="Draw"/> wrapped it into the row underneath -- which is what Aaron reported on 2026-08-23.
+        /// The three numbers that decide the answer are all private to this control, so a caller can only ever
+        /// guess at it.
+        ///
+        /// <b>Measured at the ambient font, because that is what <see cref="Draw"/> draws at.</b> This control
+        /// never sets <c>Text.Font</c> itself, so measuring at a font of our own would be measuring something
+        /// other than what appears. Callers that care set the font around both calls.
+        /// </summary>
+        public static float WidthFor(string label)
+        {
+            if (label.NullOrEmpty())
+                return BoxWidth + EdgePad * 2f;
+
+            return BoxWidth + EdgePad * 2f + LabelGap + UIRichText.WidthOf(label);
+        }
+
+        /// <summary>
         /// Draws a checkbox and reports whether it was just changed.
         ///
         /// The whole row is the hit target, as it is in vanilla, so a label is as clickable as its box.
@@ -136,15 +158,22 @@ namespace Gideon.UIFramework.Controls
                 GameFont previousFont = Text.Font;
                 TextAnchor previousAnchor = Text.Anchor;
                 Color previousColor = GUI.color;
+                bool previousWrap = Text.WordWrap;
 
                 Text.Anchor = TextAnchor.MiddleLeft;
+                Text.WordWrap = false;
                 GUI.color = disabled ? palette.TextDisabled
                     : hover ? palette.TextPrimary
                     : palette.TextSecondary;
 
-                Widgets.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.width - BoxWidth - EdgePad * 2f
-                                                                 - LabelGap), rect.height), label);
+                // Ellipsed rather than wrapped, which is what the notes on FitLabel have always claimed happens
+                // and what Widgets.Label does not do: a label a few pixels too wide put its second line on top
+                // of the row underneath, so the fault read as two overlapping controls rather than as a label
+                // short of room. UIRichText also closes any tag it cuts through. See UIRichText.
+                UIRichText.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.width - BoxWidth - EdgePad * 2f
+                                                                    - LabelGap), rect.height), label);
 
+                Text.WordWrap = previousWrap;
                 GUI.color = previousColor;
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;

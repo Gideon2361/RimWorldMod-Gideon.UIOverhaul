@@ -70,6 +70,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// The grip and the half margin are the window's; the rest is what <see cref="Draw"/> lays out above and
         /// below the body. The footer is counted at its maximum, since that is what a pane tall enough to matter
         /// will give it.
+        ///
+        /// <b>Still counted for a pawn, where the footer is no longer drawn.</b> See <see cref="ShowsFooter"/>.
+        /// One figure serves every selection, and the two ways to be wrong are not symmetrical: over-counting
+        /// leaves a foreign tab on a pawn seventy-eight pixels smaller than it could be, which nobody can see,
+        /// while under-counting puts a scroll view around a tab that fitted, which is the fault this was written
+        /// to end. If it is ever split, split it on the same test <c>ShowsFooter</c> uses and not on a second
+        /// reading of it.
         /// </summary>
         internal static float Chrome
         {
@@ -137,7 +144,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
                 float headerHeight = roomForBody ? HeaderHeight : CompactHeaderHeight;
 
-                Header(new Rect(0f, 0f, local.width, headerHeight), pane, pawn, palette, roomForBody);
+                Header(new Rect(0f, 0f, local.width, headerHeight), pane, thing, pawn, palette, roomForBody);
 
                 float y = headerHeight + 4f;
                 float remaining = local.height - y;
@@ -145,14 +152,19 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 if (remaining <= 0f)
                     return;
 
-                float footerHeight = remaining;
+                bool showFooter = contents && ShowsFooter(kind, roomForBody);
+
+                float footerHeight = showFooter ? remaining : 0f;
 
                 if (roomForBody)
                 {
-                    footerHeight = Mathf.Clamp(Mathf.Min(remaining - MinBodyHeight, MaxFooterHeight),
-                        MinFooterHeight, remaining);
+                    footerHeight = showFooter
+                        ? Mathf.Clamp(Mathf.Min(remaining - MinBodyHeight, MaxFooterHeight), MinFooterHeight,
+                            remaining)
+                        : 0f;
 
-                    Rect body = new Rect(0f, y, local.width, remaining - footerHeight - 6f);
+                    Rect body = new Rect(0f, y, local.width,
+                        remaining - footerHeight - (showFooter ? 6f : 0f));
 
                     // Somebody else's tab takes the whole body and is drawn at its own size. The pane has already
                     // been grown to fit it, so this is normally a straight draw rather than a scroll.
@@ -162,11 +174,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                         Body(body, thing, pawn, kind, palette);
                 }
 
-                // Only when RimWorld would have shown it. A multiple selection and a thing declaring
-                // hideInspect both come through here, and vanilla draws neither its contents nor its inspect
-                // string for them: the second is the one that matters, since a hidden thing's inspect string is
-                // hidden because the player is not supposed to be reading it yet.
-                if (contents)
+                if (showFooter)
                     Footer(new Rect(0f, local.yMax - footerHeight, local.width, footerHeight), palette);
             }
             finally
@@ -183,7 +191,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// used through a ref parameter, and a label laid out before asking would run underneath the info card
         /// button on anything with a long name.
         /// </summary>
-        private static void Header(Rect rect, IInspectPane pane, Pawn pawn, UIColorPaletteDef palette, bool full)
+        private static void Header(Rect rect, IInspectPane pane, Thing thing, Pawn pawn, UIColorPaletteDef palette,
+            bool full)
         {
             float lineEndWidth = 0f;
 
@@ -217,6 +226,11 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 UIGuard.Report("Inspector.PaneButtons", ex,
                     "The info card and rename buttons are missing from the inspect pane for this selection.");
             }
+
+            // Ours goes to the left of vanilla's, and takes its own room off the name lane the same way they do.
+            // Asked for 2026-08-23: an icon here rather than a button on the Bio panel, because the Bio panel
+            // does not exist on a corpse and a dead pawn is exactly the one you most want the editor for.
+            lineEndWidth += Editor.EditorButton.Draw(rect, lineEndWidth, thing, pawn, palette);
 
             float nameX = 0f;
 
@@ -272,7 +286,11 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     float used = Text.CalcSize(label).x + 8f;
 
                     Text.Font = GameFont.Tiny;
-                    GUI.color = palette.TextDisabled;
+
+                    // White, because every part of the qualifier now carries its own colour tag: the faction in
+                    // the game's own faction colour and the age dimmed. IMGUI multiplies a tag by GUI.color, so
+                    // tinting the line first would mute the one part of it that is meant to stand out.
+                    GUI.color = Color.white;
 
                     Rect after = new Rect(nameRect.x + used, nameRect.y, nameRect.width - used, nameRect.height);
 
@@ -417,6 +435,31 @@ namespace Gideon.UIOverhaul.Features.Inspector
             }
 
             lastBodyHeight = drawn;
+        }
+
+        /// <summary>
+        /// Whether vanilla's inspect string is drawn under the body.
+        ///
+        /// <b>Not under a pawn.</b> Asked for 2026-08-22, and the screenshot made the case: for a colonist the
+        /// block was four lines of things the pane had already said in better places. Sex is the glyph before the
+        /// name, age and faction are the qualifier beside it, the equipped weapon is the first row of Carrying,
+        /// and the current job is the line under the name. Repeating all of it in small grey text at the bottom
+        /// is the pane arguing with itself.
+        ///
+        /// <b>Everything that is not a pawn keeps it, and so does a pane dragged too short for a body.</b> For a
+        /// rock, a plant or a modded building whose comps write their whole state into that string, it is not a
+        /// duplicate of anything -- it is the only reading there is, and <see cref="InspectThingBody"/> is
+        /// written on the understanding that it can fall through to it. The compact pane is the documented way to
+        /// refuse this feature altogether, and refusing it has to leave RimWorld's own panel behind rather than
+        /// an empty box.
+        ///
+        /// <b>What a pawn loses with it,</b> because none of these are shown anywhere else yet: an inspiration
+        /// and its expiry, stun and stagger timers, a royal title, a trader's kind, ability cooldowns, and the
+        /// inspect lines some hediffs write.
+        /// </summary>
+        private static bool ShowsFooter(InspectBodyKind kind, bool roomForBody)
+        {
+            return !roomForBody || kind != InspectBodyKind.Pawn;
         }
 
         /// <summary>

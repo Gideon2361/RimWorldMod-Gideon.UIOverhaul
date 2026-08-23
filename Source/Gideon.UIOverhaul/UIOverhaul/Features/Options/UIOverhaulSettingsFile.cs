@@ -401,6 +401,23 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool penAnimalsUseAreas;
 
         /// <summary>
+        /// Whether the character editor exists at all.
+        ///
+        /// <b>Off, and off means absent rather than greyed.</b> Asked for on 2026-08-22 in those words: with this
+        /// false there is no button on a pawn's bio panel and no action on a corpse, not a disabled one. Every
+        /// other setting in this mod changes how something is drawn; this one is the only switch that decides
+        /// whether a tool that rewrites the save is reachable, and a player should have to decide that once
+        /// deliberately rather than discover it by clicking a greyed control.
+        ///
+        /// <b>Not gated on dev mode, which was considered and rejected.</b> Dev mode turns on a hundred other
+        /// things, most of them able to break a save by accident, and it is not somewhere somebody wanting to fix
+        /// one colonist's nickname should have to go -- nor somewhere they should have to stay.
+        ///
+        /// Read the strict way round, so anything but an explicit true leaves the editor absent.
+        /// </summary>
+        public bool characterEditor;
+
+        /// <summary>
         /// How many bills one workbench may hold.
         ///
         /// <b>A setting rather than a number of ours,</b> asked for on 2026-08-19. It was a hard 120 written into
@@ -987,6 +1004,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.penAnimalsUseAreas = value.EqualsIgnoreCase("true");
                             break;
 
+                        // The same strict reading, and for a stronger reason: this one decides whether a tool
+                        // that rewrites pawns exists. A malformed value must leave it absent.
+                        case "characterEditor":
+                            settings.characterEditor = value.EqualsIgnoreCase("true");
+                            break;
+
                         // Defaults on, so it is read the other way round: only an explicit false turns it off.
                         case "autoCutBlightedPlants":
                             settings.autoCutBlightedPlants = !value.EqualsIgnoreCase("false");
@@ -1246,6 +1269,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
                     writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
+                    writer.WriteElementString("characterEditor", characterEditor ? "true" : "false");
                     writer.WriteElementString("autoCutBlightedPlants",
                         autoCutBlightedPlants ? "true" : "false");
                     writer.WriteElementString("showMineableOverlay",

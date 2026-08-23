@@ -830,11 +830,16 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         }
 
         /// <summary>
-        /// Left click selects and jumps, right click moves the pawn between groups.
+        /// Left click selects; clicking somebody already selected jumps to them. Right click moves them between
+        /// groups.
         ///
-        /// <b>Selection is vanilla's, not a copy of it.</b> Clicking hands off to the selector and the camera
-        /// driver, so shift-click adds to a selection and a second click centres the view, exactly as vanilla's bar
-        /// behaves.
+        /// <b>Two stages rather than one, asked for on 2026-08-23.</b> It used to select and jump together, which
+        /// meant every glance at somebody's health cost the camera its position -- and getting it back meant
+        /// remembering where you had been looking. Checking a colonist and going to them are two different
+        /// intentions, so they are two clicks, and the first one is the cheap one.
+        ///
+        /// <b>Selection is still vanilla's, not a copy of it.</b> The selector and the camera driver do the work,
+        /// so shift-click adds to a selection and a jump handles a pawn in a caravan or on another map.
         /// </summary>
         private static void Clicks(Rect view, Pawn pawn, Block block)
         {
@@ -869,11 +874,51 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                     return;
                 }
 
-                // One call rather than select-then-jump: TryJumpAndSelect handles a pawn who is in a caravan or on
-                // another map, where selecting first and jumping after would select something on a map the camera
-                // is about to leave.
+                // Already the selection, so this is the second click and it means "take me to them". Still
+                // through TryJumpAndSelect rather than a bare jump: it handles a pawn in a caravan or on another
+                // map, where the target is not the pawn but whatever is holding them.
+                if (Selected(pawn))
+                {
+                    CameraJumper.TryJumpAndSelect(pawn);
+
+                    return;
+                }
+
+                // The first click. Selecting without moving the camera is the whole point of the two stages: the
+                // inspect pane fills in and whatever you were watching stays on screen.
+                //
+                // ClearSelection first, so one click replaces the selection rather than adding to it -- adding is
+                // what shift is for, above.
+                Find.Selector?.ClearSelection();
+
+                if (pawn.Spawned)
+                {
+                    Find.Selector?.Select(pawn);
+
+                    return;
+                }
+
+                // Not on a map to be selected: in a caravan, a pod, or a container. There is no first stage for
+                // them, so the click does the only thing it can.
                 CameraJumper.TryJumpAndSelect(pawn);
             }, null);
+        }
+
+        /// <summary>
+        /// Whether this pawn is the current selection, which is what makes a click a jump.
+        ///
+        /// <b>The only thing selected, not merely among the selection.</b> After a shift-click builds a squad of
+        /// four, clicking any of them should narrow to that one rather than jump: a jump would be acting on a
+        /// selection the player is still assembling.
+        /// </summary>
+        private static bool Selected(Pawn pawn)
+        {
+            return UIGuard.Try("Bar.IsSelected", () =>
+            {
+                Selector selector = Find.Selector;
+
+                return selector != null && selector.NumSelected == 1 && selector.SingleSelectedThing == pawn;
+            }, false, null);
         }
 
         private static string Tip(Pawn pawn, Block block)
@@ -883,7 +928,8 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                 : string.Empty;
 
             return pawn.LabelCap + "\n" + block.Name + where
-                   + "\n\nClick to select and jump. Shift-click to add to the selection."
+                   + "\n\nClick to select. Click again to jump to them."
+                   + "\nShift-click to add to the selection."
                    + "\nRight-click to move to another group.";
         }
 

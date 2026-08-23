@@ -47,6 +47,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
             secondY = Traits(second, secondY, pawn, palette);
             secondY = Standing(second, secondY, pawn, palette);
 
+            // No editor button here. It was one, until 2026-08-23: a button on this panel can only be reached on
+            // something that has this panel, and a corpse does not -- which made a dead pawn the one selection
+            // that could not open the editor. It is an icon in the pane's own corner now, beside the info card,
+            // where it works on every selection. See Editor.EditorButton.
             return (split ? Mathf.Max(leftY, secondY) : secondY) - view.y;
         }
 

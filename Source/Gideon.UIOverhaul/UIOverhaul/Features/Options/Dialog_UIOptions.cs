@@ -2439,6 +2439,29 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "ropes and a fully enclosed pen, so a fence with a gap in it loses you the herd.\n\nThis is the "
                 + "one setting here that changes what pawns are allowed to do rather than how something is drawn, "
                 + "which is why it starts switched off.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Pawns");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Enable the character editor",
+                settings.characterEditor, value => settings.characterEditor = value,
+                "Adds an Edit button to a colonist's bio panel that opens a window for changing anything about "
+                + "them: name, age, gender, looks, backstory, traits, skills, genes, health, needs, thoughts, "
+                + "gear and relationships. On a dead pawn it can also bring them back.\n\nThis one changes the "
+                + "game rather than the interface. Everything else in this mod reads your colony and hands it "
+                + "back better arranged; this writes to it, and there is no version of a character editor that "
+                + "is not a way to give somebody Shooting 20.\n\nWith it off the button does not exist -- not a "
+                + "greyed one, an absent one. Nothing is patched and nothing is watching. Changes you made while "
+                + "it was on are already part of your colony and stay that way.");
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Every change applies at once and can be reverted while the window is open. Resurrection "
+                + "cannot.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight + 6f;
         }
 
         /// <summary>

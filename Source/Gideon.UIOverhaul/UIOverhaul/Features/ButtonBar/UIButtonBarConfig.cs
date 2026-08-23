@@ -173,6 +173,12 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             if (string.Equals(defName, "Menu", StringComparison.OrdinalIgnoreCase))
                 return true;
 
+            // The character editor's own tab, whenever that tool is switched off -- which is its default. A
+            // MainButtonDef cannot be conditionally undefined, so this is what makes "absent, not greyed" true
+            // for the tab as well as for the button on a pawn's bio panel.
+            if (string.Equals(defName, "Gideon_CharacterEditor", StringComparison.OrdinalIgnoreCase))
+                return !Editor.EditorGate.Enabled;
+
             // Colony Hospital's tab, when ours is present: its content moves into ours, so leaving its button on
             // the bar would be two doors into one screen. Conditioned on our tab existing for the same reason the
             // animal ones are, and on their mod being loaded so the name cannot collide with anything else.

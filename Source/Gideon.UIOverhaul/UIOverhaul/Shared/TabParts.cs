@@ -6,17 +6,20 @@ using Verse;
 using RimWorld;
 using Verse.Sound;
 
-namespace Gideon.UIOverhaul.Features.Hospital
+namespace Gideon.UIOverhaul.Shared
 {
     /// <summary>
-    /// The small drawing vocabulary the hospital windows share.
+    /// The small drawing vocabulary this mod's main tabs and their dialogs share.
     ///
-    /// <b>Here rather than copied into each window, because a third caller is what earns a control.</b> The tab,
-    /// the operation picker and the standing order editor all draw section headings, explanatory notes, segmented
-    /// choices and plain buttons, and three near-identical copies is how the work grid's buttons ended up being
-    /// written three times before they were pulled out.
+    /// <b>Here rather than copied into each window, because a third caller is what earns a control.</b> Section
+    /// headings, explanatory notes, segmented choices, plain buttons and status pills are drawn by the hospital
+    /// tab, its two dialogs, the corpses tab and its grave picker, and near-identical copies of each is how the
+    /// work grid's buttons ended up being written three times before they were pulled out.
+    ///
+    /// <b>It began as HospitalParts and moved here when the corpses tab became the fourth caller.</b> The name
+    /// was the only thing wrong with it: nothing in here has ever known what a patient is.
     /// </summary>
-    internal static class HospitalParts
+    internal static class TabParts
     {
         internal const float RowGap = 4f;
 
@@ -127,11 +130,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
         {
             bool over = Mouse.IsOver(rect);
 
-            if (on)
-                UIElementPainter.FillRounded(rect, palette.Accent);
-            else
-                UIElementPainter.OutlineRounded(rect, palette.Border,
-                    over ? palette.SurfaceRaised : palette.PanelBackground);
+            SegmentFrame(rect, on, over, palette);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -164,6 +163,101 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             SoundDefOf.Click.PlayOneShotOnCamera();
         }
+
+        /// <summary>
+        /// The frame a segment is drawn in, filled when it is the current one.
+        ///
+        /// Shared by the worded segments and the icon ones so the two cannot drift into looking like different
+        /// controls, which they are not: only what sits inside them differs.
+        /// </summary>
+        private static void SegmentFrame(Rect rect, bool on, bool over, UIColorPaletteDef palette)
+        {
+            if (on)
+                UIElementPainter.FillRounded(rect, palette.Accent);
+            else
+                UIElementPainter.OutlineRounded(rect, palette.Border,
+                    over ? palette.SurfaceRaised : palette.PanelBackground);
+        }
+
+        /// <summary>
+        /// One choice in a segmented control whose choices are pictures rather than words.
+        ///
+        /// <b>For a set of modes the game already has art for,</b> which is the only case where dropping the words
+        /// is safe: a player has seen RimWorld's three hostility-response icons on every colonist's inspect pane,
+        /// so the picture is the thing they recognize and a column of them reads down the list at a glance. Three
+        /// worded segments would have cost a hundred and fifty pixels in every row to say what the filled segment
+        /// already says.
+        ///
+        /// <b>The name goes in the tooltip, and that is not optional.</b> An icon nobody can name is a puzzle, so
+        /// callers pass one; there is no sensible fallback this control could invent.
+        ///
+        /// <b>A disabled segment is drawn, not hidden.</b> Vanilla leaves the Attack mode out of its menu for a
+        /// pawn who cannot fight; a segmented control cannot do that without the remaining segments changing
+        /// width and position from one row to the next, which would move the control under the pointer while the
+        /// pointer is on it. Drawn dim with the reason on hover says more anyway.
+        /// </summary>
+        internal static void Segment(Rect rect, Texture2D icon, bool on, UIColorPaletteDef palette,
+            Action chosen, string tooltip, bool disabled = false)
+        {
+            bool over = !disabled && Mouse.IsOver(rect);
+
+            // Filled when it is the current choice even if it is disabled, because the control's first job is to
+            // say what the setting *is*. A pawn can be set to attack and then lose the ability to fight -- a
+            // trait, a hediff, a new xenotype -- and drawing that segment empty would show a row with no mode
+            // selected at all rather than a mode that can no longer be obeyed.
+            SegmentFrame(rect, on, over, palette);
+
+            if (icon != null)
+            {
+                // Square and centered, whatever the segment's proportions are. These are shaped glyphs on
+                // transparency, so stretching one to fill a wider-than-tall segment reads as a rendering fault
+                // rather than as a bigger icon.
+                float side = Mathf.Max(8f, Mathf.Min(rect.height, rect.width) - IconInset * 2f);
+                Rect frame = new Rect(rect.center.x - side * 0.5f, rect.center.y - side * 0.5f, side, side);
+
+                Color previous = GUI.color;
+
+                GUI.color = on
+                    ? palette.WindowBackground
+                    : disabled
+                        ? palette.TextDisabled
+                        : over
+                            ? palette.TextPrimary
+                            : palette.TextSecondary;
+
+                GUI.DrawTexture(frame, icon);
+
+                GUI.color = previous;
+            }
+
+            if (!tooltip.NullOrEmpty() && Mouse.IsOver(rect))
+                TooltipHandler.TipRegion(rect, (TipSignal) tooltip);
+
+            // Consumed even when nothing happens, so a click on a segment that is off-limits or already chosen
+            // does not fall through to whatever is underneath -- which on a table row is the row itself.
+            bool clicked = Widgets.ButtonInvisible(rect);
+
+            if (!clicked || disabled || on)
+                return;
+
+            chosen();
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>Room around an icon inside its segment.</summary>
+        private const float IconInset = 4f;
+
+        /// <summary>How wide a row of <paramref name="segments"/> icon segments comes out.</summary>
+        internal static float IconSegmentsWidth(int segments, float height)
+        {
+            return segments <= 0
+                ? 0f
+                : segments * height + (segments - 1) * SegmentGap;
+        }
+
+        /// <summary>Between segments in a row of them.</summary>
+        internal const float SegmentGap = 3f;
 
         /// <summary>
         /// A plain button.
@@ -252,6 +346,33 @@ namespace Gideon.UIOverhaul.Features.Hospital
         }
 
         /// <summary>
+        /// How wide a <see cref="Button"/> has to be for its label to fit.
+        ///
+        /// <b>Measured at the font the button actually draws at,</b> which is Small and not the Tiny that
+        /// <see cref="PillWidth"/> uses. Through <c>UIRichText.WidthOf</c>, so the thirteen pixel ellipsis reserve
+        /// is already in the figure -- a button sized off a bare <c>CalcSize</c> ellipses at every size.
+        ///
+        /// <b>This exists because splitting a row between two buttons on a fixed fraction is wrong.</b> The
+        /// corpses tab gave each of its two action buttons half of a hundred and fifty-two pixels and "Butcher all"
+        /// came out as "Butche...". Half of a row is the right width for exactly one pair of labels.
+        /// </summary>
+        internal static float ButtonWidth(string label, float padding = 16f)
+        {
+            GameFont previousFont = Text.Font;
+
+            try
+            {
+                Text.Font = GameFont.Small;
+
+                return UIRichText.WidthOf(label ?? string.Empty) + padding;
+            }
+            finally
+            {
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>
         /// A small pill carrying a word: a status, a count, a refusal.
         ///
         /// <b>The wash is composited rather than handed over translucent.</b> An outline is painted as two fills,
@@ -317,6 +438,115 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 return fallback;
 
             return Mathf.Clamp(value, min, max);
+        }
+
+        /// <summary>The caption above a value, at whatever Tiny currently means.</summary>
+        internal static float CaptionHeight
+        {
+            get { return UIFonts.LineHeightOf(GameFont.Tiny); }
+        }
+
+        /// <summary>The value under a caption.</summary>
+        internal static float ValueHeight
+        {
+            get { return UIFonts.LineHeightOf(GameFont.Small); }
+        }
+
+        /// <summary>
+        /// A right-aligned caption over a value, laid out from the right edge inwards.
+        ///
+        /// Returns the x the next one should end at, so a row of them packs against the right without any of
+        /// them needing to know how wide its neighbours came out.
+        ///
+        /// <b>Sized from its own text.</b> These carry colony figures whose width nobody can predict -- "2,410"
+        /// and "herbal 14  glitter 3" sit in the same strip -- and a fixed column for them is how the hospital
+        /// strip ended up truncating its own policy names.
+        /// </summary>
+        internal static float Readout(Rect bar, float right, string caption, string value,
+            UIColorPaletteDef palette, string tip = null, Color? valueColor = null)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.WordWrap = false;
+                Text.Font = GameFont.Tiny;
+
+                float width = Mathf.Max(Text.CalcSize(caption ?? string.Empty).x,
+                    Text.CalcSize(value ?? string.Empty).x) + 18f;
+
+                Rect cell = new Rect(right - width, bar.y, width, bar.height);
+
+                Text.Anchor = TextAnchor.UpperRight;
+                GUI.color = palette.TextDisabled;
+
+                Widgets.Label(new Rect(cell.x, cell.y, cell.width - 4f, CaptionHeight), caption);
+
+                Text.Font = GameFont.Small;
+                GUI.color = valueColor ?? palette.TextPrimary;
+
+                Widgets.Label(new Rect(cell.x, cell.y + CaptionHeight, cell.width - 4f, ValueHeight), value);
+
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(cell, (TipSignal) tip);
+
+                return cell.x;
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>
+        /// A dim caption over a bright value, which is the whole cell vocabulary of a tab with no heading row.
+        ///
+        /// The caption says what a heading row would have said, per cell, because one column means different
+        /// things on different rows: the same lane is "what we lost" over a colonist and "yield" over a muffalo.
+        /// </summary>
+        internal static void Labelled(Rect band, string caption, string value, Color color,
+            UIColorPaletteDef palette, string tip = null)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.WordWrap = false;
+                Text.Anchor = TextAnchor.UpperLeft;
+
+                Rect top = new Rect(band.x + 6f, band.y + 2f, Mathf.Max(0f, band.width - 10f), CaptionHeight);
+
+                Text.Font = GameFont.Tiny;
+                GUI.color = palette.TextDisabled;
+
+                if (!caption.NullOrEmpty())
+                    UIRichText.Label(top, caption);
+
+                Text.Font = GameFont.Small;
+                GUI.color = color;
+
+                if (!value.NullOrEmpty())
+                    UIRichText.Label(new Rect(top.x, top.yMax, top.width, ValueHeight), value);
+
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(band, (TipSignal) tip);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
         }
     }
 }

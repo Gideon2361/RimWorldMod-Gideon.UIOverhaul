@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The character editor: everything about one pawn, and a list of the colony to pick from.
+
+    order 43 puts it after the corpses tab (42), which is where it belongs: the editor is what the
+    corpses tab hands a body to when the answer is to bring them back.
+
+    THIS TAB DOES NOT ALWAYS EXIST. A MainButtonDef cannot be conditionally undefined, so the button
+    is hidden by UIButtonBarConfig.Suppressed whenever the character editor setting is off, which is
+    its default. With the setting off there is no button on the bar and no way to open the window.
+
+    No defaultHotKey, deliberately. A key that opens a tool for rewriting pawns is a key somebody
+    presses by accident, and there is no vanilla binding this replaces.
+
+    validWithoutMap is false: the roster is read off a map's pawns, so there is nothing to show from
+    the main menu or the world view.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_CharacterEditor</defName>
+    <label>editor</label>
+    <description>Change anything about one of your pawns: name, age, sex, looks, backstory, traits, skills, genes, health, needs, thoughts, gear and relationships. On a dead pawn it can also bring them back. Characters can be saved to a file and applied to somebody else, or imported into another colony entirely.\n\nThis tab only appears while the character editor is switched on under Additional Features.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Editor.MainTabWindow_CharacterEditor</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <closesWorldView>true</closesWorldView>
+
+    <!--
+      No file extension and no Textures prefix: RimWorld's ContentFinder takes a path relative to
+      Textures and appends the extension itself. A bust with a pencil, drawn for this tab in the same
+      flat grayscale as the rest of the family so it tints with the palette.
+    -->
+    <iconPath>UI/MainButtonIcons/CharacterEditor</iconPath>
+
+    <order>43</order>
+  </MainButtonDef>
+
+</Defs>

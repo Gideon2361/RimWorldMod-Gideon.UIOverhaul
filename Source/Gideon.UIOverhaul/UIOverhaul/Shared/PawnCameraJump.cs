@@ -16,12 +16,24 @@ namespace Gideon.UIOverhaul.Shared
     /// </summary>
     internal static class PawnCameraJump
     {
-        private static Pawn requested;
+        private static Thing requested;
 
         /// <summary>Asks for a jump. Takes effect when the drawing panel calls <see cref="Resolve"/>.</summary>
         public static void Request(Pawn pawn)
         {
             requested = pawn;
+        }
+
+        /// <summary>
+        /// The same, for anything that is not a pawn: a grave, a bench, a body's own container.
+        ///
+        /// <b>A dead pawn is worth passing as the pawn rather than as its corpse.</b> CameraJumper walks up the
+        /// parent holders of anything that is not spawned, so a colonist inside a corpse inside a sarcophagus
+        /// resolves to the sarcophagus without the caller having to know which of the three is on the map.
+        /// </summary>
+        public static void Request(Thing thing)
+        {
+            requested = thing;
         }
 
         /// <summary>
@@ -45,14 +57,14 @@ namespace Gideon.UIOverhaul.Shared
             if (requested == null)
                 return;
 
-            Pawn pawn = requested;
+            Thing target = requested;
             requested = null;
 
             // playSound: false -- CameraJumper plays its own sound on arrival, and vanilla's tab-close click on
             // top of that reads as two clicks for one action.
             Find.MainTabsRoot.EscapeCurrentTab(false);
 
-            CameraJumper.TryJumpAndSelect(pawn);
+            CameraJumper.TryJumpAndSelect(target);
         }
     }
 }

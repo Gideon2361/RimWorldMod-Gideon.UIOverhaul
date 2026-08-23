@@ -99,19 +99,19 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect text = new Rect(rect.x + PortraitSize + 8f, rect.y, rect.width - PortraitSize - 34f, rect.height);
 
-            float y = HospitalParts.Line(text, text.y, pawn.LabelShortCap, palette.TextPrimary);
+            float y = TabParts.Line(text, text.y, pawn.LabelShortCap, palette.TextPrimary);
 
             string badge = patient.Summary.Tag;
             float x = text.x;
 
             if (!badge.NullOrEmpty())
             {
-                Rect pill = HospitalParts.Pill(text, x, y + 1f, badge, patient.Summary.TagColor(palette), palette);
+                Rect pill = TabParts.Pill(text, x, y + 1f, badge, patient.Summary.TagColor(palette), palette);
 
                 x = pill.xMax + 4f;
             }
 
-            HospitalParts.Line(new Rect(x, y, Mathf.Max(20f, text.xMax - x), 0f), y + 1f,
+            TabParts.Line(new Rect(x, y, Mathf.Max(20f, text.xMax - x), 0f), y + 1f,
                 patient.Summary.Label, patient.Summary.Color(palette), GameFont.Tiny);
 
             Rect closeRect = new Rect(rect.xMax - 24f, rect.y, 24f, 24f);
@@ -165,13 +165,13 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 }
             }
 
-            y += HospitalParts.RowGap;
+            y += TabParts.RowGap;
 
-            if (HospitalParts.Button(new Rect(column.x, y, column.width, ButtonHeight), "Add an operation",
+            if (TabParts.Button(new Rect(column.x, y, column.width, ButtonHeight), "Add an operation",
                     palette))
                 Find.WindowStack.Add(new Dialog_AddOperation(pawn));
 
-            return y + ButtonHeight + HospitalParts.BlockGap;
+            return y + ButtonHeight + TabParts.BlockGap;
         }
 
         private static float Bill(Rect column, float y, Bill bill, UIColorPaletteDef palette, Action changed)
@@ -183,7 +183,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             float buttons = 46f;
 
-            HospitalParts.Line(new Rect(row.x, row.y, Mathf.Max(20f, row.width - buttons - 4f), 0f), row.y + 2f,
+            TabParts.Line(new Rect(row.x, row.y, Mathf.Max(20f, row.width - buttons - 4f), 0f), row.y + 2f,
                 bill.LabelCap, bill.suspended ? palette.TextDisabled : palette.TextPrimary, GameFont.Tiny);
 
             if (Widgets.ButtonImage(new Rect(row.xMax - buttons, row.y + 1f, 18f, 18f),
@@ -203,7 +203,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 changed();
             }
 
-            return row.yMax + HospitalParts.RowGap;
+            return row.yMax + TabParts.RowGap;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -237,15 +237,15 @@ namespace Gideon.UIOverhaul.Features.Hospital
                     y = Order(column, y, Orders[i], pawn, palette);
             }
 
-            y += HospitalParts.RowGap;
+            y += TabParts.RowGap;
 
-            if (HospitalParts.Button(new Rect(column.x, y, column.width, ButtonHeight), "Add a standing order",
+            if (TabParts.Button(new Rect(column.x, y, column.width, ButtonHeight), "Add a standing order",
                     palette))
                 New(pawn, changed);
 
             Orders.Clear();
 
-            return y + ButtonHeight + HospitalParts.BlockGap;
+            return y + ButtonHeight + TabParts.BlockGap;
         }
 
         private static float Order(Rect column, float y, StandingDrugOrder order, Pawn pawn,

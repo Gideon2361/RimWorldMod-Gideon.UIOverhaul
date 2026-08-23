@@ -8,21 +8,22 @@ using RimWorld;
 using UnityEngine;
 using Verse;
 
-namespace Gideon.UIOverhaul.Features.Hospital
+namespace Gideon.UIOverhaul.Features.Corpses
 {
     /// <summary>
-    /// Picks one person out of the colony, sorted by how good they are at the thing being asked of them.
+    /// Chooses who a grave is being kept for.
     ///
-    /// <b>A window rather than a float menu, and the same one the animals tab's master picker established.</b>
-    /// Choosing a nurse is a comparison between people, so the list has to say what distinguishes them: their
-    /// Medicine skill, and whether doctoring is switched off. A float menu could show neither, and the answer to
-    /// "who should do this" is not a list of eight names.
+    /// <b>The dead come first and the living after, because those are two different decisions.</b> Reserving a
+    /// grave for a body already on the ground is an instruction to go and bury that one; reserving it for
+    /// somebody still walking about is a plan for later, and the game supports both through the same call. A
+    /// list that mixed them would make the urgent half invisible.
     ///
-    /// <b>Somebody with doctoring switched off is listed and labelled, not hidden.</b> They are still the best
-    /// answer some of the time, and turning the priority back on is one click; leaving them out of a list of
-    /// eight names is how a player concludes the colony has nobody.
+    /// <b>Anyone at all is listed, not only colonists.</b> Vanilla's own assign gizmo offers colonists and dead
+    /// colonists, which is why a guest who died in your hospital cannot be given a grave without opening its
+    /// storage settings and reasoning about special filters. Reserving is per body and overrides the filter, so
+    /// it is the shortest honest route to burying somebody who is not one of yours.
     /// </summary>
-    internal class Dialog_PickColonist : Window
+    internal class Dialog_PickBurial : Window
     {
         private const float HeaderHeight = 28f;
 
@@ -30,39 +31,36 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private const float FooterHeight = 34f;
 
-        private const float SkillWidth = 78f;
+        private const float StateWidth = 110f;
 
         private const float Pad = 8f;
 
         private readonly Map map;
 
-        private readonly string heading;
+        private readonly Pawn current;
 
         private readonly Action<Pawn> chosen;
 
-        private readonly Pawn current;
-
-        /// <summary>Whether "anyone" is an answer. True for a nurse, false for a patient.</summary>
-        private readonly bool optional;
-
         private readonly UITextBoxControl search = new UITextBoxControl
         {
-            Placeholder = "Search colonists",
+            Placeholder = "Search the living and the dead",
             Icon = TexButton.Search,
             MaxLength = 40
         };
 
+        /// <summary>The list as drawn: dead first, then the living, rebuilt whenever the search changes.</summary>
         private readonly List<Pawn> candidates = new List<Pawn>();
+
+        /// <summary>How many of the leading entries are dead, so the divider knows where to go.</summary>
+        private int deadCount;
 
         private Vector2 scroll;
 
-        private Dialog_PickColonist(Map map, string heading, Action<Pawn> chosen, Pawn current, bool optional)
+        private Dialog_PickBurial(Map map, Pawn current, Action<Pawn> chosen)
         {
             this.map = map;
-            this.heading = heading;
-            this.chosen = chosen;
             this.current = current;
-            this.optional = optional;
+            this.chosen = chosen;
 
             doCloseX = false;
             forcePause = false;
@@ -72,26 +70,19 @@ namespace Gideon.UIOverhaul.Features.Hospital
             drawShadow = true;
         }
 
-        internal static void For(Map map, string heading, Action<Pawn> chosen, Pawn current,
-            bool optional = false)
+        internal static void For(Map map, Pawn current, Action<Pawn> chosen)
         {
             if (map == null || chosen == null)
                 return;
 
-            Find.WindowStack.Add(new Dialog_PickColonist(map, heading, chosen, current, optional));
+            Find.WindowStack.Add(new Dialog_PickBurial(map, current, chosen));
         }
 
         public override Vector2 InitialSize
         {
-            get { return new Vector2(320f, 420f); }
+            get { return new Vector2(340f, 440f); }
         }
 
-        /// <summary>
-        /// Opened at the cursor and clamped so it cannot hang off an edge.
-        ///
-        /// The placement rule a float menu follows, for the same reason: this window is the answer to a control
-        /// that was just clicked and has to appear next to it.
-        /// </summary>
         protected override void SetInitialSizeAndPosition()
         {
             Vector2 size = InitialSize;
@@ -105,7 +96,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         public override void DoWindowContents(Rect inRect)
         {
-            UIGuardedPanel.Draw("Hospital.PickColonist", inRect, () => Contents(inRect),
+            UIGuardedPanel.Draw("Corpses.PickBurial", inRect, () => Contents(inRect),
                 "The picker failed to draw. Nothing has been changed.");
         }
 
@@ -122,7 +113,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 Text.Font = GameFont.Small;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, HeaderHeight), heading);
+                Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, HeaderHeight), "Keep this grave for");
 
                 Rect box = new Rect(inRect.x, inRect.y + HeaderHeight, inRect.width, 26f);
 
@@ -141,7 +132,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 for (int i = 0; i < candidates.Count; i++)
                 {
-                    Row(new Rect(0f, y, view.width, RowHeight - 2f), candidates[i], palette);
+                    Row(new Rect(0f, y, view.width, RowHeight - 2f), candidates[i], i < deadCount, palette);
 
                     y += RowHeight;
                 }
@@ -158,50 +149,79 @@ namespace Gideon.UIOverhaul.Features.Hospital
             }
         }
 
-        /// <summary>Everybody the colony could ask, best at medicine first.</summary>
         private void Gather()
         {
             candidates.Clear();
+            deadCount = 0;
 
-            UIGuard.Try("Hospital.PickGather", () =>
+            UIGuard.Try("Corpses.PickGather", () =>
             {
-                List<Pawn> colonists = map.mapPawns.FreeColonistsSpawned;
+                List<Thing> corpses = map.listerThings.ThingsInGroup(ThingRequestGroup.Corpse);
 
-                if (colonists == null)
-                    return;
-
-                for (int i = 0; i < colonists.Count; i++)
+                for (int i = 0; corpses != null && i < corpses.Count; i++)
                 {
-                    Pawn pawn = colonists[i];
+                    Corpse corpse = corpses[i] as Corpse;
 
-                    if (pawn == null || pawn.Dead)
+                    if (corpse == null || corpse.Bugged)
                         continue;
 
-                    if (!search.IsEmpty && !search.Matches(pawn.LabelShortCap))
+                    Pawn pawn = corpse.InnerPawn;
+
+                    if (pawn == null || pawn.RaceProps == null || !pawn.RaceProps.Humanlike)
+                        continue;
+
+                    if (!Matches(pawn))
                         continue;
 
                     candidates.Add(pawn);
                 }
 
-                candidates.SortByDescending(HospitalSurgery.SkillOf);
+                // Longest unburied first, which is the order in which they became a problem.
+                candidates.Sort((a, b) => Age(b).CompareTo(Age(a)));
+
+                deadCount = candidates.Count;
+
+                List<Pawn> living = map.mapPawns.FreeColonistsSpawned;
+
+                int before = candidates.Count;
+
+                for (int i = 0; living != null && i < living.Count; i++)
+                {
+                    Pawn pawn = living[i];
+
+                    if (pawn == null || pawn.Dead || !Matches(pawn))
+                        continue;
+
+                    candidates.Add(pawn);
+                }
+
+                candidates.Sort(before, candidates.Count - before,
+                    Comparer<Pawn>.Create((a, b) =>
+                        string.Compare(a.LabelShortCap, b.LabelShortCap, StringComparison.Ordinal)));
             }, null);
         }
 
-        private void Row(Rect rect, Pawn pawn, UIColorPaletteDef palette)
+        private bool Matches(Pawn pawn)
+        {
+            return search.IsEmpty || search.Matches(pawn.LabelShortCap);
+        }
+
+        private static int Age(Pawn pawn)
+        {
+            return UIGuard.Try("Corpses.PickAge",
+                () => pawn.Corpse != null ? CorpseFacts.AgeOf(pawn.Corpse) : 0, 0, null);
+        }
+
+        private void Row(Rect rect, Pawn pawn, bool dead, UIColorPaletteDef palette)
         {
             bool chosenNow = pawn == current;
 
-            // Composited rather than translucent, for the reason spelled out on UIElementPainter.Composite: an
-            // outline is two fills, and an overlay handed in as the inside lands on the border colour.
             UIElementPainter.OutlineRounded(rect, chosenNow ? palette.Accent : palette.Border,
                 chosenNow
                     ? UIElementPainter.Composite(palette.PanelBackground, palette.SelectionOverlay)
                     : Mouse.IsOver(rect)
                         ? palette.SurfaceRaised
                         : palette.PanelBackground);
-
-            bool disabled = UIGuard.Try("Hospital.PickDisabled",
-                () => pawn.WorkTypeIsDisabled(WorkTypeDefOf.Doctor), false, null);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -213,17 +233,17 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.MiddleLeft;
                 Text.WordWrap = false;
-                GUI.color = disabled ? palette.TextDisabled : palette.TextPrimary;
+                GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(rect.x + 6f, rect.y, rect.width - SkillWidth - 10f, rect.height),
+                Widgets.Label(new Rect(rect.x + 6f, rect.y, rect.width - StateWidth - 10f, rect.height),
                     pawn.LabelShortCap);
 
                 Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleRight;
-                GUI.color = disabled ? palette.Warning : palette.TextSecondary;
+                GUI.color = dead ? palette.Warning : palette.TextSecondary;
 
-                Widgets.Label(new Rect(rect.xMax - SkillWidth, rect.y, SkillWidth - 6f, rect.height),
-                    disabled ? "no doctoring" : "Medicine " + HospitalSurgery.SkillOf(pawn));
+                Widgets.Label(new Rect(rect.xMax - StateWidth, rect.y, StateWidth - 6f, rect.height),
+                    dead ? "dead " + Age(pawn).ToStringTicksToPeriodVague() : "alive");
             }
             finally
             {
@@ -243,18 +263,15 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private void Footer(Rect rect, UIColorPaletteDef palette)
         {
-            if (optional && TabParts.Button(new Rect(rect.x, rect.y, rect.width * 0.5f - 4f, 28f), "Anyone",
-                    palette))
+            if (TabParts.Button(new Rect(rect.x, rect.y, rect.width * 0.5f - 4f, 28f), "Anyone", palette))
             {
                 chosen(null);
 
                 Close();
             }
 
-            float x = optional ? rect.x + rect.width * 0.5f + 4f : rect.x + rect.width * 0.5f;
-            float width = optional ? rect.width * 0.5f - 4f : rect.width * 0.5f;
-
-            if (TabParts.Button(new Rect(x, rect.y, width, 28f), "Cancel", palette))
+            if (TabParts.Button(new Rect(rect.x + rect.width * 0.5f + 4f, rect.y, rect.width * 0.5f - 4f, 28f),
+                    "Cancel", palette))
                 Close();
         }
     }

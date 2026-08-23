@@ -48,6 +48,22 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private const float AreaColumnWidth = 150f;
 
+        /// <summary>A switch and the padding around it, plus room for the heading over it.</summary>
+        private const float SelfTendColumnWidth = 86f;
+
+        /// <summary>
+        /// Three icon segments and the padding either side of them.
+        ///
+        /// Derived from the segment row rather than written down, so the column cannot end up narrower than the
+        /// control in it -- which is the fault that truncated the corpses tab's buttons. The segments are square,
+        /// so their row is as wide as their height makes it.
+        /// </summary>
+        private static float ResponseColumnWidth =>
+            Mathf.Ceil(TabParts.IconSegmentsWidth(PawnCombat.Modes.Length, SegmentHeight) + 16f);
+
+        /// <summary>How tall one attack-mode segment is, and therefore how wide.</summary>
+        private const float SegmentHeight = 24f;
+
         /// <summary>Five tool buttons and the padding either side of them.</summary>
         private const float EditColumnWidth = 5f * PawnTools.ButtonSize + 4f * PawnTools.ButtonGap + 16f;
 
@@ -356,9 +372,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Grid.Scroll = Vector2.zero;
         }
 
+        /// <summary>
+        /// Builds the columns once.
+        ///
+        /// <b>Tested for emptiness rather than for a count.</b> It read <c>Count == 6</c> while eight columns
+        /// were being added, so the test never passed and the columns -- and the eight closures with them --
+        /// were rebuilt on every frame and on every size query. A count written next to a builder that grows is
+        /// a number that has to agree with something it cannot see; nothing else clears this list, so "is it
+        /// built" is the honest question.
+        /// </summary>
         private static void EnsureColumns()
         {
-            if (Grid.Columns.Count == 6)
+            if (Grid.Columns.Count > 0)
                 return;
 
             Grid.Columns.Clear();
@@ -427,7 +452,33 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 Label = "Area",
                 Width = AreaColumnWidth,
                 Tooltip = "Where each pawn is allowed to be. Unrestricted lets them use the whole map.",
+                OwnsClicks = true,
                 DrawCell = DrawAreaCell
+            });
+
+            // The last two settings from vanilla's Assign tab this mod could read but not change, asked for on
+            // 2026-08-23. Both are here beside the area and the schedule rather than inside the expanded row for
+            // the reason the area is: these are the columns you sweep down after a raid, and behind a row
+            // expansion a colony-wide sweep is a dozen expand-and-collapse cycles.
+            //
+            // Vanilla files them two tabs apart -- self-tend at the foot of the Health tab, attack mode as an
+            // icon in the inspect pane's corner -- so putting them side by side is most of the point.
+            Grid.Columns.Add(new UIDesignatorTabColumn
+            {
+                Label = "Attack mode",
+                Width = ResponseColumnWidth,
+                Tooltip = "HostilityReponseTip".Translate().ToString() + "\n\nIgnore, attack, or flee, left to right.",
+                OwnsClicks = true,
+                DrawCell = DrawResponseCell
+            });
+
+            Grid.Columns.Add(new UIDesignatorTabColumn
+            {
+                Label = "Self-tend",
+                Width = SelfTendColumnWidth,
+                Tooltip = "Whether each colonist patches their own wounds up rather than waiting for a doctor.",
+                OwnsClicks = true,
+                DrawCell = DrawSelfTendCell
             });
 
             // The whole pawn in one place, which is what the three bands underneath cannot offer: each of those
@@ -438,6 +489,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             {
                 Label = "Edit",
                 Width = EditColumnWidth,
+                OwnsClicks = true,
                 Tooltip = "Clear, copy, paste and template everything about a pawn at once: their work "
                           + "priorities, their schedule and their policies.\n\nThe bands under an expanded row "
                           + "have the same four tools for each part on its own.",
@@ -723,11 +775,17 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// lays rows out across <c>Mathf.Max(ColumnsWidth, available)</c>, so on a tab dragged wider than its
         /// columns the band has slack on the right and <c>band.xMax - AreaColumnWidth</c> would cut a strip of
         /// empty space while leaving the real column live. The columns' own width is where the column is.
+        ///
+        /// <b>And the columns say which ones to cut, which they did not until 2026-08-23.</b> This subtracted
+        /// <c>AreaColumnWidth</c> by name -- correct while the area was the last column, and wrong from the moment
+        /// the Edit column was added after it, because the subtraction then stopped at Edit's left edge and let
+        /// the row swallow the area dropdown again. Exactly the bug Aaron had already reported once. The columns
+        /// now declare <c>OwnsClicks</c> and the width comes off them, so adding a column cannot bring it back.
         /// </summary>
         private static Rect RowClickZone(Rect band)
         {
             float left = PortraitFrame(band).xMax + PortraitInset;
-            float right = Mathf.Min(band.xMax, band.x + Grid.ColumnsWidth - AreaColumnWidth);
+            float right = Mathf.Min(band.xMax, band.x + Grid.ColumnsWidth - Grid.OwnedTailWidth);
 
             return new Rect(left, band.y, Mathf.Max(0f, right - left), band.height);
         }
@@ -1060,8 +1118,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             if (now == null)
             {
-                GUI.color = palette.TextDisabled;
-                Widgets.Label(band, "--");
+                Blank(band, null, palette);
             }
             else
             {
@@ -1105,15 +1162,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             if (!PawnAreas.Assignable(pawn))
             {
-                string reason = PawnAreas.Reason(pawn);
-
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextDisabled;
-
-                Widgets.Label(band, "--");
-
-                if (!reason.NullOrEmpty())
-                    TooltipHandler.TipRegion(band, (TipSignal) reason);
+                Blank(band, PawnAreas.Reason(pawn), palette);
             }
             else
             {
@@ -1154,6 +1203,120 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
         }
+
+        /// <summary>
+        /// What a cell says when the setting in it does not apply to this pawn, and why on hover.
+        ///
+        /// <b>A dash rather than an empty cell,</b> because a blank reads as a fault while a dash reads as an
+        /// absence -- and the reason is on hover rather than in the cell, since a sentence would need a column
+        /// four times this wide to serve the one row in twenty that needs it.
+        ///
+        /// Shared by the four columns that can be inapplicable: the schedule, the area, the attack mode and
+        /// self-tend. Four copies of six lines is how the dash would end up a different grey in one of them.
+        /// </summary>
+        private static void Blank(Rect band, string reason, UIColorPaletteDef palette)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleCenter;
+            GUI.color = palette.TextDisabled;
+
+            Widgets.Label(band, "--");
+
+            GUI.color = previousColor;
+            Text.Anchor = previousAnchor;
+            Text.Font = previousFont;
+
+            if (!reason.NullOrEmpty() && Mouse.IsOver(band))
+                TooltipHandler.TipRegion(band, (TipSignal) reason);
+        }
+
+        /// <summary>
+        /// Attack mode, as three segments carrying RimWorld's own icons.
+        ///
+        /// <b>Segments rather than the dropdown vanilla uses,</b> which is the standing preference: three modes is
+        /// exactly the case a segmented control is for, every state is reachable in one click instead of one to
+        /// open and one to choose, and the filled segment says which mode is on without being touched. Down a
+        /// list of twenty colonists that last part is the whole reason the column is worth its width.
+        ///
+        /// <b>The icons are RimWorld's,</b> so the picture here and the picture in the inspect pane's corner are
+        /// the same picture. Nothing about which mode means what is decided here.
+        /// </summary>
+        private static void DrawResponseCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = data.Payload as Pawn;
+
+            if (pawn == null)
+                return;
+
+            Rect band = TopBand(cell);
+
+            if (!PawnCombat.Respondable(pawn))
+            {
+                Blank(band, PawnCombat.ResponseReason(pawn), palette);
+
+                return;
+            }
+
+            float width = TabParts.IconSegmentsWidth(PawnCombat.Modes.Length, SegmentHeight);
+            float x = band.center.x - width * 0.5f;
+            float y = band.center.y - SegmentHeight * 0.5f;
+
+            HostilityResponseMode current = PawnCombat.Response(pawn);
+            bool canAttack = PawnCombat.CanAttack(pawn);
+
+            for (int i = 0; i < PawnCombat.Modes.Length; i++)
+            {
+                // Declared inside the loop so each segment's callback closes over its own mode. A variable
+                // hoisted out would leave all three segments setting whichever mode the loop ended on.
+                HostilityResponseMode mode = PawnCombat.Modes[i];
+
+                TabParts.Segment(new Rect(x, y, SegmentHeight, SegmentHeight), PawnCombat.Icon(mode),
+                    mode == current, palette, () => PawnCombat.SetResponse(pawn, mode),
+                    PawnCombat.ResponseTooltip(pawn, mode),
+                    mode == HostilityResponseMode.Attack && !canAttack);
+
+                x += SegmentHeight + TabParts.SegmentGap;
+            }
+        }
+
+        /// <summary>
+        /// Whether this colonist patches themselves up, as a switch.
+        ///
+        /// <b>The switch is not the state.</b> It is drawn from the pawn every frame and the write can be refused
+        /// -- turning it on for somebody incapable of Doctor work is refused by vanilla with a message -- so a
+        /// switch that flicks back is the game saying no rather than the control failing. Holding a local copy of
+        /// the value would be what makes that look like a bug.
+        /// </summary>
+        private static void DrawSelfTendCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
+        {
+            Pawn pawn = data.Payload as Pawn;
+
+            if (pawn == null)
+                return;
+
+            Rect band = TopBand(cell);
+
+            if (!PawnCombat.SelfTendable(pawn))
+            {
+                Blank(band, PawnCombat.SelfTendReason(pawn), palette);
+
+                return;
+            }
+
+            bool on = PawnCombat.SelfTends(pawn);
+
+            // The switch alone, centred: a label here would repeat the heading in every row.
+            if (UICheckboxControl.Draw(new Rect(band.x, band.center.y - SwitchRowHeight * 0.5f, band.width,
+                    SwitchRowHeight), ref on, palette, null, PawnCombat.SelfTendTooltip(pawn)))
+                PawnCombat.SetSelfTend(pawn, on);
+        }
+
+        /// <summary>The hit target around a bare switch: tall enough to be easy, short of the row's own height.</summary>
+        private const float SwitchRowHeight = 26f;
 
         /// <summary>
         /// The top slice of a cell, which is where a cell's content goes.

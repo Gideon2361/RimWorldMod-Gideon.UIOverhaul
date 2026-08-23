@@ -258,7 +258,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
             if (shown.Count != 0)
                 return;
 
-            HospitalParts.Note(new Rect(list.x + 4f, list.y, list.width - 8f, 0f), list.y + 8f,
+            TabParts.Note(new Rect(list.x + 4f, list.y, list.width - 8f, 0f), list.y + 8f,
                 options.Count == 0
                     ? "There is nothing that can be done to " + patient.LabelShortCap + " surgically."
                     : "Nothing matches. Clear the search, or turn off \"possible now\".", palette);
@@ -301,7 +301,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private void Chip(Rect rect, string label, bool on, UIColorPaletteDef palette, Action chosen)
         {
-            HospitalParts.Segment(rect, label, on, palette, chosen);
+            TabParts.Segment(rect, label, on, palette, chosen);
         }
 
         private void Filter()
@@ -356,15 +356,15 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             // Laid out right to left, and capped at two fifths of the row: the pill is sized from its own text,
             // and an uncapped one saying "no analgesic regeneration injector" was wider than the card it sat in.
-            float pillWidth = HospitalParts.PillWidth(state, inner.width * 0.4f);
+            float pillWidth = TabParts.PillWidth(state, inner.width * 0.4f);
             float pillX = inner.xMax - pillWidth;
 
-            HospitalParts.Pill(inner, pillX, inner.y, state, stateColor, palette, pillWidth, surface);
+            TabParts.Pill(inner, pillX, inner.y, state, stateColor, palette, pillWidth, surface);
 
-            HospitalParts.Line(new Rect(inner.x, inner.y, Mathf.Max(20f, pillX - inner.x - 6f), 0f), inner.y,
+            TabParts.Line(new Rect(inner.x, inner.y, Mathf.Max(20f, pillX - inner.x - 6f), 0f), inner.y,
                 option.Label, palette.TextPrimary);
 
-            HospitalParts.Line(inner, inner.y + UIFonts.LineHeightOf(GameFont.Small), Subline(option),
+            TabParts.Line(inner, inner.y + UIFonts.LineHeightOf(GameFont.Small), Subline(option),
                 palette.TextDisabled, GameFont.Tiny);
 
             if (!Widgets.ButtonInvisible(rect) || chosen)
@@ -440,14 +440,14 @@ namespace Gideon.UIOverhaul.Features.Hospital
             Rect column = new Rect(0f, 0f, view.width, view.height);
             float y = 0f;
 
-            y = HospitalParts.Line(column, y, selected.Label, palette.TextPrimary, GameFont.Medium);
+            y = TabParts.Line(column, y, selected.Label, palette.TextPrimary, GameFont.Medium);
 
             RecipeDef recipe = selected.Recipe;
 
             if (recipe != null && !recipe.description.NullOrEmpty())
-                y = HospitalParts.Note(column, y + 2f, recipe.description, palette) + HospitalParts.BlockGap;
+                y = TabParts.Note(column, y + 2f, recipe.description, palette) + TabParts.BlockGap;
             else
-                y += HospitalParts.BlockGap;
+                y += TabParts.BlockGap;
 
             y = Where(column, y, palette);
             y = Needs(column, y, palette);
@@ -465,7 +465,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
             if (selected.Parts.Count == 0)
                 return y;
 
-            y = HospitalParts.Heading(column, y, "WHERE", palette);
+            y = TabParts.Heading(column, y, "WHERE", palette);
 
             float width = Mathf.Min(160f, column.width);
             float x = column.x;
@@ -483,7 +483,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 BodyPartRecord captured = candidate;
 
-                HospitalParts.Segment(new Rect(x, rowTop, width - 4f, 24f), candidate.LabelCap,
+                TabParts.Segment(new Rect(x, rowTop, width - 4f, 24f), candidate.LabelCap,
                     candidate == part, palette, () => part = captured);
 
                 x += width;
@@ -492,9 +492,9 @@ namespace Gideon.UIOverhaul.Features.Hospital
             y = rowTop + 26f;
 
             if (part != null)
-                y = HospitalParts.Note(column, y + 2f, PartNote(part), palette);
+                y = TabParts.Note(column, y + 2f, PartNote(part), palette);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         /// <summary>What is already wrong with the part being operated on, since that is why you picked it.</summary>
@@ -521,7 +521,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
             if (recipe == null || recipe.ingredients == null || recipe.ingredients.Count == 0)
                 return y;
 
-            y = HospitalParts.Heading(column, y,
+            y = TabParts.Heading(column, y,
                 selected.Missing.Count == 0 ? "NEEDS: ALL IN STOCK" : "NEEDS", palette);
 
             Map map = patient.MapHeld;
@@ -545,7 +545,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 // right-aligned lets a long ingredient name run underneath its own figure.
                 string count = have + " of " + want;
 
-                HospitalParts.Line(
+                TabParts.Line(
                     new Rect(column.x, y, Mathf.Max(30f, column.width - UIRichText.WidthOf(count) - 6f), 0f), y,
                     def.LabelCap, palette.TextSecondary, GameFont.Tiny);
 
@@ -569,10 +569,10 @@ namespace Gideon.UIOverhaul.Features.Hospital
                     Text.Font = previousFont;
                 }
 
-                y += UIFonts.LineHeightOf(GameFont.Tiny) + HospitalParts.RowGap;
+                y += UIFonts.LineHeightOf(GameFont.Tiny) + TabParts.RowGap;
             }
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         /// <summary>
@@ -614,16 +614,16 @@ namespace Gideon.UIOverhaul.Features.Hospital
         {
             int required = HospitalSurgery.RequiredSkill(selected.Recipe);
 
-            y = HospitalParts.Heading(column, y,
+            y = TabParts.Heading(column, y,
                 required > 0 ? "SURGEON: MEDICINE " + required + " REQUIRED" : "SURGEON", palette);
 
             if (surgeons.Count == 0)
-                return HospitalParts.Note(column, y,
+                return TabParts.Note(column, y,
                            required > 0
                                ? "Nobody here has Medicine " + required + ". The bill can still be queued and will "
                                  + "wait."
                                : "Nobody here can operate.", palette, GameFont.Tiny, palette.Danger)
-                       + HospitalParts.BlockGap;
+                       + TabParts.BlockGap;
 
             int shownCount = Mathf.Min(surgeons.Count, 4);
 
@@ -637,7 +637,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 // The name lane stops where the reading starts, so a long name cannot run underneath its own
                 // number.
-                HospitalParts.Line(
+                TabParts.Line(
                     new Rect(column.x, y, Mathf.Max(30f, column.width - UIRichText.WidthOf(reading) - 6f), 0f), y,
                     surgeon.LabelShortCap, palette.TextSecondary, GameFont.Tiny);
 
@@ -662,19 +662,19 @@ namespace Gideon.UIOverhaul.Features.Hospital
                     Text.Font = previousFont;
                 }
 
-                y += UIFonts.LineHeightOf(GameFont.Tiny) + HospitalParts.RowGap;
+                y += UIFonts.LineHeightOf(GameFont.Tiny) + TabParts.RowGap;
             }
 
             if (surgeons.Count > shownCount)
-                y = HospitalParts.Note(column, y, (surgeons.Count - shownCount) + " others could also do it.",
+                y = TabParts.Note(column, y, (surgeons.Count - shownCount) + " others could also do it.",
                     palette);
 
-            y = HospitalParts.Note(column, y + 2f,
+            y = TabParts.Note(column, y + 2f,
                 "The chance is the surgeon's own stat against this operation, with the bed they are lying in "
                 + "counted. The medicine is not: it is chosen when the doctor arrives, and glitterworld will beat "
                 + "this number while herbal will fall short of it.", palette);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         /// <summary>The things worth saying out loud before somebody commits.</summary>
@@ -711,13 +711,13 @@ namespace Gideon.UIOverhaul.Features.Hospital
             if (notes.Count == 0)
                 return y;
 
-            y = HospitalParts.Heading(column, y, "WATCH OUT", palette);
+            y = TabParts.Heading(column, y, "WATCH OUT", palette);
 
             for (int i = 0; i < notes.Count; i++)
-                y = HospitalParts.Note(column, y, notes[i], palette, GameFont.Tiny, palette.Warning)
-                    + HospitalParts.RowGap;
+                y = TabParts.Note(column, y, notes[i], palette, GameFont.Tiny, palette.Warning)
+                    + TabParts.RowGap;
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -758,11 +758,11 @@ namespace Gideon.UIOverhaul.Features.Hospital
                         ? "Something this operation needs is not on the map."
                         : selected.Reason;
 
-            if (HospitalParts.Button(new Rect(rect.xMax - 300f, rect.y, 145f, 30f), "Add and pick another",
+            if (TabParts.Button(new Rect(rect.xMax - 300f, rect.y, 145f, 30f), "Add and pick another",
                     palette, can, false, refusal))
                 Commit(false);
 
-            if (HospitalParts.Button(new Rect(rect.xMax - 150f, rect.y, 150f, 30f), "Add operation", palette, can,
+            if (TabParts.Button(new Rect(rect.xMax - 150f, rect.y, 150f, 30f), "Add operation", palette, can,
                     true, refusal))
                 Commit(true);
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -170,23 +171,23 @@ namespace Gideon.UIOverhaul.Features.Hospital
         /// </summary>
         private float Give(Rect column, float y, UIColorPaletteDef palette)
         {
-            y = HospitalParts.Heading(column, y, "GIVE", palette);
+            y = TabParts.Heading(column, y, "GIVE", palette);
 
             Rect button = new Rect(column.x, y, column.width, 28f);
 
-            if (HospitalParts.Button(button, order.drug != null ? order.drug.LabelCap.ToString() : "Choose a drug",
+            if (TabParts.Button(button, order.drug != null ? order.drug.LabelCap.ToString() : "Choose a drug",
                     palette))
                 Find.WindowStack.Add(new FloatMenu(DrugOptions()));
 
-            y = button.yMax + HospitalParts.RowGap;
+            y = button.yMax + TabParts.RowGap;
 
             if (order.drug != null && order.Recipe == null)
-                y = HospitalParts.Note(column, y,
+                y = TabParts.Note(column, y,
                     "The game has no administer recipe for " + order.drug.label
                     + ", so this order cannot fire. Choose another drug.", palette, GameFont.Tiny,
                     palette.Danger);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         /// <summary>
@@ -244,30 +245,30 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private float To(Rect column, float y, UIColorPaletteDef palette)
         {
-            y = HospitalParts.Heading(column, y, "TO", palette);
+            y = TabParts.Heading(column, y, "TO", palette);
 
             float width = Mathf.Floor((column.width - 8f) / 3f);
 
-            HospitalParts.Segment(new Rect(column.x, y, width, 24f), "One patient",
+            TabParts.Segment(new Rect(column.x, y, width, 24f), "One patient",
                 order.target == StandingOrderTarget.OnePatient, palette,
                 () => order.target = StandingOrderTarget.OnePatient);
 
-            HospitalParts.Segment(new Rect(column.x + width + 4f, y, width, 24f), "In a medical bed",
+            TabParts.Segment(new Rect(column.x + width + 4f, y, width, 24f), "In a medical bed",
                 order.target == StandingOrderTarget.MedicalBed, palette,
                 () => order.target = StandingOrderTarget.MedicalBed);
 
-            HospitalParts.Segment(new Rect(column.x + width * 2f + 8f, y, column.xMax - column.x - width * 2f - 8f,
+            TabParts.Segment(new Rect(column.x + width * 2f + 8f, y, column.xMax - column.x - width * 2f - 8f,
                     24f), "Everyone",
                 order.target == StandingOrderTarget.Everyone, palette,
                 () => order.target = StandingOrderTarget.Everyone);
 
-            y += 26f + HospitalParts.RowGap;
+            y += 26f + TabParts.RowGap;
 
             if (order.target == StandingOrderTarget.OnePatient)
             {
                 Rect button = new Rect(column.x, y, column.width, 26f);
 
-                if (HospitalParts.Button(button,
+                if (TabParts.Button(button,
                         order.patient != null ? order.patient.LabelShortCap.ToString() : "Choose a patient",
                         palette))
                     Dialog_PickColonist.For(map, "Who is this order for?", chosen =>
@@ -277,65 +278,65 @@ namespace Gideon.UIOverhaul.Features.Hospital
                         HospitalRoster.Invalidate();
                     }, order.patient);
 
-                y = button.yMax + HospitalParts.RowGap;
+                y = button.yMax + TabParts.RowGap;
             }
             else
             {
-                y = HospitalParts.Note(column, y,
+                y = TabParts.Note(column, y,
                     order.target == StandingOrderTarget.MedicalBed
                         ? "Anybody in the colony lying in a bed marked medical, as they come and go."
                         : "Every colonist, prisoner and slave on this map. Penoxycyline before a toxic fallout, "
                           + "and very little else.", palette);
             }
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         private float HowOften(Rect column, float y, UIColorPaletteDef palette)
         {
-            y = HospitalParts.Heading(column, y, "HOW OFTEN", palette);
+            y = TabParts.Heading(column, y, "HOW OFTEN", palette);
 
             Rect box = new Rect(column.x, y, 72f, 26f);
 
             if (Every.Draw(box, palette))
-                order.every = HospitalParts.ParseCount(Every.Text, order.every, 1, 999);
+                order.every = TabParts.ParseCount(Every.Text, order.every, 1, 999);
 
-            HospitalParts.Segment(new Rect(box.xMax + 6f, y, 72f, 26f), "hours",
+            TabParts.Segment(new Rect(box.xMax + 6f, y, 72f, 26f), "hours",
                 order.period == StandingOrderPeriod.Hours, palette,
                 () => order.period = StandingOrderPeriod.Hours);
 
-            HospitalParts.Segment(new Rect(box.xMax + 84f, y, 72f, 26f), "days",
+            TabParts.Segment(new Rect(box.xMax + 84f, y, 72f, 26f), "days",
                 order.period == StandingOrderPeriod.Days, palette,
                 () => order.period = StandingOrderPeriod.Days);
 
-            y = box.yMax + HospitalParts.RowGap;
+            y = box.yMax + TabParts.RowGap;
 
-            y = HospitalParts.Note(column, y,
+            y = TabParts.Note(column, y,
                 "Each patient has their own clock, started when they were last dosed by this order. A dose that "
                 + "is skipped because the condition is not met does not bank: the clock keeps running.", palette);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         private float Nurse(Rect column, float y, UIColorPaletteDef palette)
         {
-            y = HospitalParts.Heading(column, y, order.nurse != null ? "NURSE: ASSIGNED" : "NURSE", palette);
+            y = TabParts.Heading(column, y, order.nurse != null ? "NURSE: ASSIGNED" : "NURSE", palette);
 
             Rect button = new Rect(column.x, y, column.width, 26f);
 
-            if (HospitalParts.Button(button, order.NurseLabel, palette))
+            if (TabParts.Button(button, order.NurseLabel, palette))
                 Dialog_PickColonist.For(map, "Who delivers this?", chosen => order.nurse = chosen, order.nurse,
                     true);
 
-            y = button.yMax + HospitalParts.RowGap;
+            y = button.yMax + TabParts.RowGap;
 
-            y = HospitalParts.Note(column, y,
+            y = TabParts.Note(column, y,
                 order.nurse != null
                     ? "Nobody else will pick it up. " + order.nurse.LabelShortCap
                       + " is not made to drop what they are doing; the dose waits for them."
                     : "Whoever is free and on doctoring takes it.", palette);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         /// <summary>
@@ -348,7 +349,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
         /// </summary>
         private float Safeguards(Rect column, float y, UIColorPaletteDef palette)
         {
-            y = HospitalParts.Heading(column, y, "SAFEGUARDS", palette);
+            y = TabParts.Heading(column, y, "SAFEGUARDS", palette);
 
             bool overdose = order.skipOnOverdose;
 
@@ -366,9 +367,9 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             y += 28f;
 
-            y = HospitalParts.Note(column, y, SafeguardNote(), palette);
+            y = TabParts.Note(column, y, SafeguardNote(), palette);
 
-            return y + HospitalParts.BlockGap;
+            return y + TabParts.BlockGap;
         }
 
         private string SafeguardNote()
@@ -420,22 +421,22 @@ namespace Gideon.UIOverhaul.Features.Hospital
         {
             HospitalConditionGate gate = order.gate;
 
-            float y = HospitalParts.Heading(rect, rect.y, "ONLY WHILE: " + gate.Summary.ToUpperInvariant(),
+            float y = TabParts.Heading(rect, rect.y, "ONLY WHILE: " + gate.Summary.ToUpperInvariant(),
                 palette);
 
             float half = Mathf.Floor((rect.width - 4f) / 2f);
 
-            HospitalParts.Segment(new Rect(rect.x, y, half, 24f), "Always", gate.always, palette,
+            TabParts.Segment(new Rect(rect.x, y, half, 24f), "Always", gate.always, palette,
                 () => gate.always = true);
 
-            HospitalParts.Segment(new Rect(rect.x + half + 4f, y, rect.xMax - rect.x - half - 4f, 24f),
+            TabParts.Segment(new Rect(rect.x + half + 4f, y, rect.xMax - rect.x - half - 4f, 24f),
                 "Any of these", !gate.always, palette, () => gate.always = false);
 
             y += 28f;
 
             if (gate.always)
             {
-                HospitalParts.Note(rect, y,
+                TabParts.Note(rect, y,
                     "The clock alone decides. This is what penoxycyline and luciferium want: a dose on a "
                     + "schedule regardless of how the patient looks today.", palette);
 
@@ -450,7 +451,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Conditions(list, gate, palette);
 
-            HospitalParts.Note(rect, list.yMax + 4f,
+            TabParts.Note(rect, list.yMax + 4f,
                 gate.Count == 0
                     ? "Nothing is ticked, so this order will never fire. Tick a condition, or set it to always."
                     : "While none of them is true the dose is skipped and the clock keeps running.", palette,
@@ -702,7 +703,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
             if (UICheckboxControl.Draw(new Rect(rect.x, rect.y, 160f, 30f), ref paused, palette, "Paused"))
                 order.suspended = paused;
 
-            if (HospitalParts.Button(new Rect(rect.xMax - 260f, rect.y, 120f, 30f), "Delete", palette))
+            if (TabParts.Button(new Rect(rect.xMax - 260f, rect.y, 120f, 30f), "Delete", palette))
             {
                 MapComponent_StandingOrders component = MapComponent_StandingOrders.For(map);
 
@@ -712,7 +713,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 Close();
             }
 
-            if (HospitalParts.Button(new Rect(rect.xMax - 130f, rect.y, 130f, 30f), "Done", palette, true, true))
+            if (TabParts.Button(new Rect(rect.xMax - 130f, rect.y, 130f, 30f), "Done", palette, true, true))
                 Close();
         }
     }

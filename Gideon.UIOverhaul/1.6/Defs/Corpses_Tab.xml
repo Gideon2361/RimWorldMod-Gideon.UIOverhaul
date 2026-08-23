@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The corpses tab: every body on every loaded map, and every grave the colony owns.
+
+    order 42 puts it immediately after our hospital tab (41), which is where it belongs: the two
+    screens either side of the line between somebody the colony can still do something about and
+    somebody it cannot.
+
+    No defaultHotKey. Vanilla has no screen for the dead and therefore no key a player already
+    presses for one, and inventing a binding is a conflict somebody else has to resolve for no gain.
+
+    Nothing is suppressed or redirected for this one. There is no vanilla tab it replaces, so unlike
+    the animals and hospital tabs it has no counterpart to take off the button bar.
+
+    validWithoutMap is false: every row is read off a map's things, so there is nothing to show from
+    the world view.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Corpses</defName>
+    <label>the dead</label>
+    <description>Every body on every map, sorted into what you may do with it, with the two clocks nothing else in the game shows: how long until a corpse rots past use, and how long until one of your own lying in the open costs the whole colony its mood. Skills, traits and the silver still on the body are listed beside each one, and the second half of the tab is every grave you own, what it holds, and which kinds of body it will actually accept.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Corpses.MainTabWindow_Corpses</tabWindowClass>
+    <validWithoutMap>false</validWithoutMap>
+    <closesWorldView>true</closesWorldView>
+
+    <!--
+      No file extension and no Textures prefix: RimWorld's ContentFinder takes a path relative to
+      Textures and appends the extension itself.
+
+      Two stones rather than the single slab of the older Corpse icon, which is still in the folder
+      and still offered by the button bar's picker. This tab is every body on the map and every grave
+      the colony owns, so a yard says more about it than one burial does. Drawn in the same flat
+      grayscale as the rest of the family, so it tints with the palette like every other main button.
+    -->
+    <iconPath>UI/MainButtonIcons/Graveyard</iconPath>
+
+    <order>42</order>
+  </MainButtonDef>
+
+</Defs>

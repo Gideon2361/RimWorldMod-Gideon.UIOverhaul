@@ -256,56 +256,14 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             float x = bar.xMax;
 
-            x = Readout(bar, x, "medicine", Medicine(map), palette,
+            x = TabParts.Readout(bar, x, "medicine", Medicine(map), palette,
                 "How much medicine and how much herbal is on this map, unforbidden.");
 
-            x = Readout(bar, x, "doctors", Doctors(map).ToString(), palette,
+            x = TabParts.Readout(bar, x, "doctors", Doctors(map).ToString(), palette,
                 "Colonists who can do doctoring and are not down themselves.");
 
-            Readout(bar, x, "medical beds", occupied + " / " + total, palette,
+            TabParts.Readout(bar, x, "medical beds", occupied + " / " + total, palette,
                 "Beds marked medical, and how many have somebody in them.");
-        }
-
-        /// <summary>A right-aligned caption over a value. Returns the x the next one should end at.</summary>
-        private static float Readout(Rect bar, float right, string caption, string value,
-            UIColorPaletteDef palette, string tip)
-        {
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.WordWrap = false;
-                Text.Font = GameFont.Tiny;
-
-                float width = Mathf.Max(Text.CalcSize(caption).x, Text.CalcSize(value).x) + 18f;
-
-                Rect cell = new Rect(right - width, bar.y, width, bar.height);
-
-                Text.Anchor = TextAnchor.UpperRight;
-                GUI.color = palette.TextDisabled;
-
-                Widgets.Label(new Rect(cell.x, cell.y, cell.width - 4f, CaptionHeight), caption);
-
-                Text.Font = GameFont.Small;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(new Rect(cell.x, cell.y + CaptionHeight, cell.width - 4f, ValueHeight), value);
-
-                if (!tip.NullOrEmpty())
-                    TooltipHandler.TipRegion(cell, (TipSignal) tip);
-
-                return cell.x;
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
         }
 
         private static int Doctors(Map map)
@@ -397,13 +355,13 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             float x = inner.xMax;
 
-            x = Readout(inner, x, "owed", HospitalVisitors.Owed(map).ToString(), palette,
+            x = TabParts.Readout(inner, x, "owed", HospitalVisitors.Owed(map).ToString(), palette,
                 "What the current visitors owe between them.");
 
-            x = Readout(inner, x, "hospital beds", occupied + " / " + total, palette,
+            x = TabParts.Readout(inner, x, "hospital beds", occupied + " / " + total, palette,
                 "Beds designated as hospital beds by Colony Hospital.");
 
-            x = Readout(inner, x, "reputation", HospitalVisitors.Reputation(map).ToString(), palette,
+            x = TabParts.Readout(inner, x, "reputation", HospitalVisitors.Reputation(map).ToString(), palette,
                 "Colony Hospital's reputation for this colony.");
 
             // Sized from what the readouts actually left rather than from a literal 220. The chips carry policy
@@ -495,7 +453,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 Text.Font = previousFont;
             }
 
-            if (HospitalParts.Button(new Rect(rect.x, rect.y + CaptionHeight + 1f, rect.width, 24f), value,
+            if (TabParts.Button(new Rect(rect.x, rect.y + CaptionHeight + 1f, rect.width, 24f), value,
                     palette, true, false, tip))
                 clicked();
         }
@@ -716,9 +674,9 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect text = new Rect(portrait.xMax + 6f, cell.y + 3f, cell.xMax - portrait.xMax - 10f, RowHeight);
 
-            float y = HospitalParts.Line(text, text.y, patient.Pawn.LabelShortCap, palette.TextPrimary);
+            float y = TabParts.Line(text, text.y, patient.Pawn.LabelShortCap, palette.TextPrimary);
 
-            HospitalParts.Line(text, y, Subline(patient), palette.TextDisabled, GameFont.Tiny);
+            TabParts.Line(text, y, Subline(patient), palette.TextDisabled, GameFont.Tiny);
         }
 
         private static string Subline(HospitalPatient patient)
@@ -759,12 +717,12 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             if (!badge.NullOrEmpty())
             {
-                Rect pill = HospitalParts.Pill(band, x, y + 1f, badge, patient.Summary.TagColor(palette), palette);
+                Rect pill = TabParts.Pill(band, x, y + 1f, badge, patient.Summary.TagColor(palette), palette);
 
                 x = pill.xMax + 4f;
             }
 
-            HospitalParts.Line(new Rect(x, y, Mathf.Max(20f, band.xMax - x), 0f), y, patient.Summary.Label,
+            TabParts.Line(new Rect(x, y, Mathf.Max(20f, band.xMax - x), 0f), y, patient.Summary.Label,
                 patient.Summary.Color(palette));
 
             if (!patient.Summary.Detail.NullOrEmpty())
@@ -836,7 +794,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect band = new Rect(cell.x + 4f, cell.y, cell.width - 8f, RowHeight);
 
-            HospitalParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f, text, color);
+            TabParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f, text, color);
         }
 
         private static void TreatmentCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
@@ -848,10 +806,10 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect band = new Rect(cell.x + 4f, cell.y + 3f, cell.width - 8f, RowHeight);
 
-            float y = HospitalParts.Line(band, band.y, patient.Treatment.Label,
+            float y = TabParts.Line(band, band.y, patient.Treatment.Label,
                 patient.Treatment.Color(palette));
 
-            HospitalParts.Line(band, y, patient.Treatment.Note, palette.TextDisabled, GameFont.Tiny);
+            TabParts.Line(band, y, patient.Treatment.Note, palette.TextDisabled, GameFont.Tiny);
         }
 
         private static void StatusCell(Rect cell, UIDesignatorTabRow data, UIColorPaletteDef palette)
@@ -863,7 +821,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect band = new Rect(cell.x + 4f, cell.y, cell.width - 8f, RowHeight);
 
-            HospitalParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f,
+            TabParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f,
                 patient.VisitStatus ?? "-",
                 patient.VisitStatus == null ? palette.TextDisabled : palette.TextSecondary);
         }
@@ -877,7 +835,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             Rect band = new Rect(cell.x + 4f, cell.y, cell.width - 8f, RowHeight);
 
-            HospitalParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f,
+            TabParts.Line(band, band.y + (RowHeight - ValueHeight) * 0.5f,
                 patient.VisitBill < 0 ? "-" : patient.VisitBill.ToString(),
                 patient.VisitBill < 0 ? palette.TextDisabled : palette.TextPrimary);
         }
