@@ -996,7 +996,7 @@ namespace Gideon.UIOverhaul.Features.Editor
 
         private static void OfferGene(EditorContext context, Pawn_GeneTracker genes)
         {
-            List<EditorOption> options = new List<EditorOption>();
+            List<GeneChoice> options = new List<GeneChoice>();
 
             UIGuard.Try("Editor.GeneOptions", () =>
             {
@@ -1011,11 +1011,11 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                     GeneDef captured = def;
 
-                    options.Add(new EditorOption
+                    // No note about metabolism or complexity: the tile draws both along its bottom edge, which
+                    // is where a player already reads them in the gene assembler.
+                    options.Add(new GeneChoice
                     {
-                        Label = EditorParts.LabelOf(def),
-                        Note = "met " + def.biostatMet.ToStringWithSign() + ", cpx " + def.biostatCpx,
-                        Tooltip = EditorParts.DescriptionOf(def),
+                        Def = def,
                         Chosen = () => UIGuard.Try("Editor.AddGene", () =>
                         {
                             Gene added = genes.AddGene(captured, true);
@@ -1033,10 +1033,11 @@ namespace Gideon.UIOverhaul.Features.Editor
                     });
                 }
 
-                options.Sort((a, b) => string.Compare(a.Label, b.Label, System.StringComparison.Ordinal));
+                options.Sort((a, b) => string.Compare(a.Def.LabelCap, b.Def.LabelCap,
+                    System.StringComparison.Ordinal));
             }, null);
 
-            Dialog_PickFrom.Open("Add a gene", options, "Search genes");
+            Dialog_PickGene.Open("Add a gene", options, "Search genes");
         }
     }
 }

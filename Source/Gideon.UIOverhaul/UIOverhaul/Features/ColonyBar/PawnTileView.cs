@@ -388,6 +388,8 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
             Scheduled.Clear();
 
+            bool revealed = false;
+
             for (int i = 0; i < Wanted.Count && Scheduled.Count < budget; i++)
             {
                 Pawn pawn = Wanted[(cursor + i) % Wanted.Count];
@@ -400,8 +402,27 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                 // its first picture matters more than keeping another one current.
                 bool blank = tile.RenderedAt <= 0f;
 
+                // <b>One first render per frame, and this is a compatibility rule rather than a performance
+                // one.</b> A pawn that has never been drawn is new to every per-pawn cache in the game, and the
+                // widened cull rect hands it to RimWorld's <i>parallel</i> pre-draw. Two such pawns in one frame
+                // means two worker threads inserting into those caches at the same moment, and a mod that keeps
+                // its cache in a plain Dictionary -- which is the common case -- has its state corrupted for the
+                // rest of the session. Aaron hit exactly that on 2026-08-23: a reload revealed every blank tile
+                // at once and the log filled with fifteen thousand collection-corruption exceptions from another
+                // mod's physique cache, thrown for every pawn drawn from then on.
+                //
+                // A refresh is not capped, because a pawn already rendered is already in those caches and the
+                // parallel pass only reads. The cost is that tiles fill in over a few frames when the bar first
+                // appears, which at a fifty millisecond refresh nobody can see.
+                if (blank && revealed)
+                    continue;
+
                 if (blank || interval <= 0f || now - tile.RenderedAt >= interval)
+                {
                     Scheduled.Add(pawn);
+
+                    revealed |= blank;
+                }
             }
 
             cursor = Wanted.Count == 0 ? 0 : (cursor + Mathf.Max(1, budget)) % Wanted.Count;
@@ -411,7 +432,32 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             // Position rather than DrawPos, because a CellRect is centred on a cell. The camera uses DrawPos, and
             // Radius carries the margin between the two.
             foreach (Pawn pawn in Scheduled)
+            {
+                Warm(pawn);
+
                 Pending.Add(CellRect.CenteredOn(pawn.Position, Radius));
+            }
+        }
+
+        /// <summary>
+        /// Builds a pawn's render tree here, on the main thread, before the widened cull rect hands it to
+        /// RimWorld's parallel pre-draw.
+        ///
+        /// <b>The game asks for this by name and we were not doing it.</b> <c>PawnRenderTree.ParallelPreDraw</c>
+        /// logs "you must called EnsureGraphicsInitialized() on the drawn dynamic thing X before drawing it" and
+        /// then walks a null node, which is a null reference per pawn on a worker thread. It appeared twice in
+        /// Aaron's log on 2026-08-23 -- twice rather than constantly only because that report is an
+        /// <c>ErrorOnce</c> keyed per pawn.
+        ///
+        /// <b>Vanilla never hits it because vanilla never draws a pawn that was culled.</b> A pawn coming into
+        /// view normally is initialised on the way in; ours are pulled into the draw list from outside the camera,
+        /// which is the one case that skips that. Doing it a frame ahead -- this runs at the end of the frame
+        /// before the one that draws them -- also means the tree is ready rather than being built inside the pass.
+        /// </summary>
+        private static void Warm(Pawn pawn)
+        {
+            if (pawn != null && pawn.Spawned)
+                Shared.PawnGraphics.Ensure(pawn);
         }
 
         /// <summary>

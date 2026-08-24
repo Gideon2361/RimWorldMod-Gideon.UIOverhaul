@@ -131,7 +131,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             bool clicked = UIButtonBarRenderer.Draw(slot,
                 UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                 Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
-                worker?.ButtonBarPercent ?? 0f, palette, UIBarBadges.For(def));
+                Research.ResearchTabButton.Percent(def, worker?.ButtonBarPercent ?? 0f), palette,
+                UIBarBadges.For(def), Research.ResearchTabButton.BarColor(def, palette),
+                UIBarBadges.ColorFor(def, palette));
 
             if (clicked)
                 worker?.InterfaceTryActivate();

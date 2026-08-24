@@ -57,6 +57,28 @@ namespace Gideon.UIOverhaul.Features.Bills
     internal static class BillCatalog
     {
         /// <summary>
+        /// Bumped whenever a bill is added to or removed from any stack in the game.
+        ///
+        /// <b>Because "collect again after anything that could change the list" is a promise made at call
+        /// sites,</b> and Aaron found the one that had not been made: importing a bench template into a bench
+        /// left the colony window showing the bills it had before. Suspending, deleting and reordering each
+        /// remembered to re-read; adding did not, and every future way of adding one would have had to remember
+        /// too.
+        ///
+        /// A counter the window compares against is the version that cannot be forgotten, because what bumps it
+        /// is <c>BillStack</c> itself -- so our importer, our wizard, vanilla's own float menu and any other
+        /// mod's route all mark the list stale by doing the thing rather than by announcing it. See
+        /// <c>Patch_BillStackChanged</c>.
+        /// </summary>
+        internal static int Stamp { get; private set; }
+
+        /// <summary>Called from the patch below. Wrapping is not worth a method, but the setter being private is.</summary>
+        internal static void Notify_BillsChanged()
+        {
+            Stamp++;
+        }
+
+        /// <summary>
         /// Every bench with at least one bill, across every map.
         ///
         /// <b>No per bench mode.</b> There used to be one, because clicking Bills on a workbench opened this

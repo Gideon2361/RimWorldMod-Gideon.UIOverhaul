@@ -40,6 +40,17 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
         private static bool available;
 
+        /// <summary>
+        /// The size a foreign tab is being drawn at, while one is being drawn. Zero the rest of the time.
+        ///
+        /// <b>Published for the tabs that cannot be told any other way.</b> Stretching <c>size</c> reaches every
+        /// tab that lays out from it, which is most of them -- but several of vanilla's, <c>ITab_Storage</c>
+        /// among them, keep a private <c>WinSize</c> constant and lay out from that instead, so the field they
+        /// were handed is never read. Those need a patch of their own, and this is how such a patch learns how
+        /// much room there is. See <c>Patch_StorageTabSize</c>.
+        /// </summary>
+        internal static Vector2 Hosting { get; private set; }
+
         /// <summary>The tab's own idea of how big it wants to be, or zero when it cannot be read.</summary>
         internal static Vector2 SizeOf(InspectTabBase tab)
         {
@@ -57,12 +68,21 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
-        /// Draws the tab into <paramref name="rect"/>, scrolling if the pane could not grow far enough.
+        /// Draws the tab into <paramref name="rect"/>, stretching it to fill and scrolling if it will not fit.
         ///
-        /// <b>A group at the tab's own size, not at the rect's.</b> Every tab lays out from zero to its declared
-        /// size and clips nothing itself, so handing it a smaller space would overlap its rows rather than
-        /// shorten its list. The scroll view is the honest way to show a tab too big for the screen, and on any
-        /// normal screen it never appears because the pane has already grown.
+        /// <b>Never smaller than the tab asked for.</b> Every tab lays out from zero to its declared size and
+        /// clips nothing itself, so handing it a smaller space would overlap its rows rather than shorten its
+        /// list. The scroll view is the honest way to show a tab too big for the screen, and on any normal screen
+        /// it never appears because the pane has already grown.
+        ///
+        /// <b>And never smaller than the pane either, which needed the tab's own field to be written.</b> Asked
+        /// for on 2026-08-23, against a stockpile whose filter sat in a 300 pixel column inside a much wider pane
+        /// and a growing zone whose two bill rows floated above four hundred pixels of nothing. <c>FillTab</c>
+        /// takes no rect -- a tab reads its own <c>size</c> field and lays out to that -- so the only way to
+        /// offer a tab more room is to tell it it is bigger. Written just before the call and put back
+        /// immediately after, because that field is also what <c>InspectPaneMetrics</c> measures the pane from:
+        /// left stretched, a tab that had been shown in a tall pane would go on claiming that height forever and
+        /// the pane could never be dragged smaller again.
         /// </summary>
         internal static void Draw(Rect rect, InspectTabBase tab)
         {
@@ -80,7 +100,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float width = size.x > 1f ? size.x : rect.width;
             float height = size.y > 1f ? size.y : rect.height;
 
-            Rect view = new Rect(0f, 0f, Mathf.Max(width, rect.width - 18f), height);
+            // Height first, because whether the tab overflows vertically is what decides if a scrollbar takes
+            // eighteen pixels off the width it is then stretched to.
+            height = Mathf.Max(height, rect.height);
+
+            width = Mathf.Max(width, height > rect.height ? rect.width - 18f : rect.width);
+
+            Rect view = new Rect(0f, 0f, width, height);
 
             bool scrolling = view.height > rect.height || view.width > rect.width;
 
@@ -99,8 +125,24 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 {
                     // Arbitrary code from whichever mod owns the tab, so a throw costs the tab's contents and
                     // nothing else. The chip stays lit and the pane keeps its header and its inspect string.
-                    UIGuard.Try("Inspector.ForeignTab", () => fillTab.Invoke(tab, null), null,
-                        "That tab could not be drawn inside the inspect pane.");
+                    // Stretched for the length of the call only; the restore is in the finally for the same
+                    // reason the group's is, since this one throws through arbitrary code.
+                    UIGuard.Try("Inspector.ForeignTab", () =>
+                    {
+                        Stretch(tab, view.size);
+                        Hosting = view.size;
+
+                        try
+                        {
+                            fillTab.Invoke(tab, null);
+                        }
+                        finally
+                        {
+                            Hosting = Vector2.zero;
+
+                            Restore(tab, view.size, size);
+                        }
+                    }, "That tab could not be drawn inside the inspect pane.");
                 }
                 finally
                 {
@@ -114,6 +156,31 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 else
                     Widgets.EndGroup();
             }
+        }
+
+        /// <summary>Tells the tab it is as big as the space it has been given, for the length of one draw.</summary>
+        private static void Stretch(InspectTabBase tab, Vector2 size)
+        {
+            if (size.x > 1f && size.y > 1f)
+                sizeField.SetValue(tab, size);
+        }
+
+        /// <summary>
+        /// Puts the tab's own size back, unless the tab set one itself while it was drawing.
+        ///
+        /// <b>That exception is <c>ITab_Pawn_Visitor</c> and everything shaped like it.</b> Those measure
+        /// themselves at the <i>end</i> of <c>FillTab</c>, from the listing they have just drawn, rather than in
+        /// <c>UpdateSize</c> -- so a blind restore would overwrite this frame's measurement with last frame's and
+        /// leave the tab permanently one frame behind its own contents. Comparing against what was written is
+        /// the exact test for "did it answer": unchanged means the tab never looked, and anything else is its
+        /// own answer and is left alone.
+        /// </summary>
+        private static void Restore(InspectTabBase tab, Vector2 written, Vector2 original)
+        {
+            Vector2 now = (Vector2) sizeField.GetValue(tab);
+
+            if (now == written)
+                sizeField.SetValue(tab, original);
         }
 
         /// <summary>

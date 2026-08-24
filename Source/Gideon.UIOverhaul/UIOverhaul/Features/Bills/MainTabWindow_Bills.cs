@@ -39,6 +39,9 @@ namespace Gideon.UIOverhaul.Features.Bills
         private const float ToolbarHeight = 34f;
         private const float FooterHeight = 44f;
         private const float BenchHeight = 30f;
+
+        /// <summary>The word on the save-as-template button, kept beside the code that measures it.</summary>
+        private const string SaveLabel = "Save";
         private const float RowHeight = 50f;
         private const float Pad = 12f;
         private const float EditorWidth = 330f;
@@ -72,6 +75,14 @@ namespace Gideon.UIOverhaul.Features.Bills
         };
 
         private List<BillGroup> groups = new List<BillGroup>();
+
+        /// <summary>
+        /// The value of <see cref="BillCatalog.Stamp"/> the groups above were gathered at.
+        ///
+        /// Starts at zero, which is also where the stamp starts, so a window opened before anything has happened
+        /// does not gather twice on its first frame -- <c>PostOpen</c> has already read the colony by then.
+        /// </summary>
+        private int stamp;
         private Bill_Production selected;
         private Vector2 scroll = Vector2.zero;
         private bool suspendedOnly;
@@ -154,6 +165,7 @@ namespace Gideon.UIOverhaul.Features.Bills
         internal void Reread()
         {
             groups = BillCatalog.Collect();
+            stamp = BillCatalog.Stamp;
 
             if (selected == null)
                 return;
@@ -173,6 +185,13 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         public override void DoWindowContents(Rect inRect)
         {
+            // A comparison rather than a gather: the stamp moves only when a bill is added, deleted or cleared
+            // anywhere in the game, so the expensive walk happens on the frame after a real change and on no
+            // other. This is what makes importing a bench template show up without the importer knowing that
+            // this window exists.
+            if (stamp != BillCatalog.Stamp)
+                Reread();
+
             UIWindowDrag.TitleBarOnly(this, inRect.y + TitleHeight);
 
             UIGuardedPanel.Draw("Bills.Window", inRect, () => Contents(inRect),
@@ -300,6 +319,34 @@ namespace Gideon.UIOverhaul.Features.Bills
         private static bool Button(Rect rect, string label, UIColorPaletteDef palette, bool primary = false)
         {
             return BillButtons.Button(rect, label, palette, primary);
+        }
+
+        /// <summary>
+        /// How wide the save button has to be for the word on it.
+        ///
+        /// <b>Measured at the font it is drawn in, which is Small rather than the Tiny the heading uses.</b>
+        /// <c>BillButtons.Button</c> draws with a centred <c>Widgets.Label</c>, and a centred IMGUI label clips
+        /// at <i>both</i> ends rather than ellipsing -- so a rect a few pixels short would silently show "av"
+        /// with no sign that anything was wrong. <c>Text.CalcSize</c> is the right measurer here precisely
+        /// because that label is a plain one and reserves nothing.
+        ///
+        /// Measured every frame rather than cached: it depends on the UI scale and the language, and this is one
+        /// call per visible bench heading.
+        /// </summary>
+        private static float SaveWidth()
+        {
+            GameFont font = Text.Font;
+
+            try
+            {
+                Text.Font = GameFont.Small;
+
+                return Mathf.Round(Text.CalcSize(SaveLabel).x) + 16f;
+            }
+            finally
+            {
+                Text.Font = font;
+            }
         }
 
         // ------------------------------------------------------------------ list
@@ -450,16 +497,31 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Rect add = new Rect(rect.xMax - 26f, rect.y + 4f, 22f, rect.height - 8f);
 
+            // <b>The whole bench, from the row that names it.</b> Asked for on 2026-08-23. The bench's own tab
+            // has had a Save bench button since 14123, but reaching it means leaving this window and clicking the
+            // bench on the map -- and this window exists precisely so a colony's benches can be worked on without
+            // going to find each one.
+            float saveWidth = SaveWidth();
+
+            Rect save = new Rect(add.x - 4f - saveWidth, rect.y + 4f, saveWidth, rect.height - 8f);
+
             GUI.color = palette.TextDisabled;
             Text.Anchor = TextAnchor.MiddleRight;
 
-            Widgets.Label(new Rect(rect.x, rect.y, add.x - rect.x - 10f, rect.height),
+            Widgets.Label(new Rect(rect.x, rect.y, save.x - rect.x - 10f, rect.height),
                 group.Where.NullOrEmpty() ? Shown(group) + " shown" : group.Where);
 
             Text.Anchor = TextAnchor.UpperLeft;
 
-            // Drawn after the label so the button is above it, and hit tested before the heading so a click on
-            // the plus adds a bill rather than folding the bench under the cursor.
+            // Drawn after the label so the buttons are above it, and hit tested before the heading so a click on
+            // either adds or saves rather than folding the bench under the cursor.
+            bool saving = Button(save, "Save", palette);
+
+            // The scope is worth saying because the list above it may be filtered: a search showing one bill of
+            // six does not mean five are about to be left out.
+            TooltipHandler.TipRegion(save,
+                (TipSignal)("Saves every bill on this bench as a template, including any the search is hiding."));
+
             bool adding = Button(add, "+", palette);
 
             if (adding)
@@ -467,6 +529,13 @@ namespace Gideon.UIOverhaul.Features.Bills
                 // Straight to the recipe step: this heading already names the bench, so the wizard's first
                 // question would have one answer.
                 Find.WindowStack.Add(new Dialog_AddWorkBill(group.Bench, Reread));
+            }
+            else if (saving)
+            {
+                // Guarded on the map for the same reason the bench tab's button is: the dialog writes a file
+                // named after where the bench is, and a bench in a caravan or mid-teleport has no map to name.
+                if (group.Bench != null && group.Bench.Map != null)
+                    Find.WindowStack.Add(new Dialog_SaveBenchTemplate(group.Bench));
             }
             else if (group.Bench != null && Widgets.ButtonInvisible(rect))
             {

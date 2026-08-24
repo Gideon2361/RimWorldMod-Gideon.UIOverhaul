@@ -66,6 +66,8 @@ namespace Gideon.UIOverhaul.Shared
 
             // Framed on the face: the camera is lifted to head height and zoomed in, which is what the
             // cameraOffset and cameraZoom parameters exist for. A full-body render at 46px is a silhouette.
+            PawnGraphics.Ensure(pawn);
+
             RenderTexture face = PortraitsCache.Get(pawn, new Vector2(Size, Size), Rot4.South, FaceOffset,
                 FaceZoom);
 

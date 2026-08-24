@@ -550,7 +550,7 @@ namespace Gideon.UIOverhaul.Features.Editor
         {
             Pawn pawn = context.Pawn;
 
-            List<EditorOption> options = new List<EditorOption>();
+            List<GeneChoice> options = new List<GeneChoice>();
 
             UIGuard.Try("Editor.LookGeneOptions", () =>
             {
@@ -565,10 +565,9 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                     GeneDef captured = def;
 
-                    options.Add(new EditorOption
+                    options.Add(new GeneChoice
                     {
-                        Label = EditorParts.LabelOf(def),
-                        Tooltip = EditorParts.DescriptionOf(def),
+                        Def = def,
                         Chosen = () => UIGuard.Try("Editor.AddLookGene", () =>
                         {
                             Gene added = pawn.genes.AddGene(captured, true);
@@ -586,10 +585,11 @@ namespace Gideon.UIOverhaul.Features.Editor
                     });
                 }
 
-                options.Sort((a, b) => string.Compare(a.Label, b.Label, System.StringComparison.Ordinal));
+                options.Sort((a, b) => string.Compare(a.Def.LabelCap, b.Def.LabelCap,
+                    System.StringComparison.Ordinal));
             }, null);
 
-            Dialog_PickFrom.Open("Add an appearance gene", options, "Search appearance genes");
+            Dialog_PickGene.Open("Add an appearance gene", options, "Search appearance genes");
         }
 
         // ---------------------------------------------------------------------------------------
@@ -626,7 +626,8 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Rect row;
 
                 if (EditorParts.Row(view, y, Slot(ap) + "  " + ap.LabelCapNoCount, Made(ap),
-                        palette.TextSecondary, palette, out row, EditorParts.DescriptionOf(ap.def)))
+                        palette.TextSecondary, palette, out row, EditorParts.DescriptionOf(ap.def), true,
+                        ap.def, ap.DrawColor))
                     Strip(context, ap);
 
                 y = row.yMax + 4f;
@@ -638,7 +639,7 @@ namespace Gideon.UIOverhaul.Features.Editor
             y += EditorParts.RowGap;
 
             if (EditorParts.Add(view, y, "Put something on", palette))
-                OfferApparel(context);
+                Dialog_AddApparel.Open(context);
 
             return y + EditorParts.ControlHeight + EditorParts.BlockGap;
         }
@@ -711,100 +712,6 @@ namespace Gideon.UIOverhaul.Features.Editor
                     EditorParts.Redraw(pawn);
                 });
             }, "That could not be taken off.");
-        }
-
-        /// <summary>
-        /// Makes a piece of apparel onto the pawn.
-        ///
-        /// <b>Default stuff and normal quality,</b> which is a departure: the proposal listed quality and material
-        /// as editable and they are read-only here. Both are one call away and both need their own picker, and a
-        /// wrong guess at either produces an item whose market value is wrong rather than one that looks wrong --
-        /// so the honest first version shows them and does not set them.
-        /// </summary>
-        private static void OfferApparel(EditorContext context)
-        {
-            Pawn pawn = context.Pawn;
-
-            List<EditorOption> options = new List<EditorOption>();
-
-            UIGuard.Try("Editor.ApparelOptions", () =>
-            {
-                List<ThingDef> all = DefDatabase<ThingDef>.AllDefsListForReading;
-
-                for (int i = 0; i < all.Count; i++)
-                {
-                    ThingDef def = all[i];
-
-                    if (def.apparel == null || def.IsCorpse)
-                        continue;
-
-                    if (!ApparelUtility.HasPartsToWear(pawn, def))
-                        continue;
-
-                    ThingDef captured = def;
-
-                    options.Add(new EditorOption
-                    {
-                        Label = EditorParts.LabelOf(def),
-                        Note = def.apparel.layers != null && def.apparel.layers.Count > 0
-                            ? def.apparel.layers[0].label
-                            : null,
-                        Tooltip = EditorParts.DescriptionOf(def),
-                        Chosen = () => Put(context, captured)
-                    });
-                }
-
-                options.Sort((a, b) => string.Compare(a.Label, b.Label, System.StringComparison.Ordinal));
-            }, null);
-
-            Dialog_PickFrom.Open("Put something on", options, "Search apparel");
-        }
-
-        private static void Put(EditorContext context, ThingDef def)
-        {
-            Pawn pawn = context.Pawn;
-
-            UIGuard.Try("Editor.Wear", () =>
-            {
-                ThingDef stuff = def.MadeFromStuff ? GenStuff.DefaultStuffFor(def) : null;
-
-                Apparel made = ThingMaker.MakeThing(def, stuff) as Apparel;
-
-                if (made == null)
-                    return;
-
-                // Anything it cannot be worn with comes off first and is held in this entry, so Revert puts the
-                // displaced item back rather than leaving the pawn in whichever of the two was newer. Wear's own
-                // dropReplacedApparel: false would call Remove and forget the reference.
-                List<Apparel> displaced = new List<Apparel>();
-
-                List<Apparel> worn = pawn.apparel.WornApparel;
-
-                for (int i = worn.Count - 1; i >= 0; i--)
-                {
-                    if (!ApparelUtility.CanWearTogether(def, worn[i].def, pawn.RaceProps.body))
-                        displaced.Add(worn[i]);
-                }
-
-                for (int i = 0; i < displaced.Count; i++)
-                    pawn.apparel.Remove(displaced[i]);
-
-                pawn.apparel.Wear(made, false);
-
-                EditorParts.Redraw(pawn);
-
-                context.Changes.Record("apparel", () =>
-                {
-                    pawn.apparel.Remove(made);
-
-                    made.Destroy();
-
-                    for (int i = 0; i < displaced.Count; i++)
-                        pawn.apparel.Wear(displaced[i], false);
-
-                    EditorParts.Redraw(pawn);
-                });
-            }, "That could not be put on.");
         }
     }
 }

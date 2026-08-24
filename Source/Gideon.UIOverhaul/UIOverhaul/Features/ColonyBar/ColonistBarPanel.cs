@@ -746,6 +746,8 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         {
             bool hats = !(UIOverhaulSettingsFile.Current?.barHideHeadgear ?? false);
 
+            Shared.PawnGraphics.Ensure(pawn);
+
             return UIGuard.Try("Bar.Portrait",
                 () => PortraitsCache.Get(pawn, new Vector2(ViewSize, ViewHeight), Rot4.South,
                     cameraOffset: new Vector3(0f, 0f, 0.3f), cameraZoom: 1.5f, renderHeadgear: hats),

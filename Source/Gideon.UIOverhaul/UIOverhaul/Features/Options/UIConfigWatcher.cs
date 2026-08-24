@@ -77,6 +77,10 @@ namespace Gideon.UIOverhaul.Features.Options
             UIPaletteHotReload.ReapplyAll();
 
             settings.ApplyTheme();
+
+            // Written onto defs rather than read where they are used, so a file edited on disk changes nothing
+            // until they are written again. The other features here reload data; this one has to push it.
+            Features.Gravships.GravshipTuning.Apply();
         }
 
         /// <summary>

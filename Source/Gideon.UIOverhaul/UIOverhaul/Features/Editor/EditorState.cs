@@ -643,7 +643,8 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Rect row;
 
                 if (EditorParts.Row(view, y, primary.LabelCapNoCount, Made(primary), palette.TextSecondary,
-                        palette, out row, EditorParts.DescriptionOf(primary.def)))
+                        palette, out row, EditorParts.DescriptionOf(primary.def), true, primary.def,
+                        primary.DrawColor))
                     Disarm(context, primary);
 
                 y = row.yMax + 4f;
@@ -659,6 +660,8 @@ namespace Gideon.UIOverhaul.Features.Editor
                 OfferWeapon(context);
 
             y += EditorParts.ControlHeight + EditorParts.BlockGap;
+
+            y = Apparel(view, y, context, palette);
 
             y = EditorParts.Heading(view, y, "Carrying", palette);
 
@@ -680,13 +683,69 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Rect row;
 
                 if (EditorParts.Row(view, y, thing.LabelCap, Made(thing), palette.TextSecondary, palette,
-                        out row, EditorParts.DescriptionOf(thing.def)))
+                        out row, EditorParts.DescriptionOf(thing.def), true, thing.def, thing.DrawColor))
                     Drop(context, thing);
 
                 y = row.yMax + 4f;
             }
 
             return y + EditorParts.BlockGap - view.y;
+        }
+
+        /// <summary>
+        /// What they are wearing, and the way to add to it.
+        ///
+        /// <b>This block was missing entirely until 2026-08-23.</b> The panel had a weapon and an inventory, so
+        /// the one thing about a pawn's kit that is visible on the map from across the room was the one thing the
+        /// editor could not touch.
+        ///
+        /// Rows are the same shape as the weapon and the carried items above -- name, how it was made, a remove
+        /// button -- because they are the same question about a different container.
+        /// </summary>
+        private static float Apparel(Rect view, float y, EditorContext context, UIColorPaletteDef palette)
+        {
+            Pawn pawn = context.Pawn;
+
+            y = EditorParts.Heading(view, y, "Apparel", palette);
+
+            List<RimWorld.Apparel> worn = UIGuard.Try("Editor.WornApparel",
+                () => pawn.apparel != null ? pawn.apparel.WornApparel : null, null, null);
+
+            if (worn == null)
+                return EditorParts.Note(view, y, "This one cannot wear anything.", palette)
+                       + EditorParts.BlockGap;
+
+            if (worn.Count == 0)
+            {
+                y = EditorParts.Note(view, y, "Naked.", palette);
+            }
+            else
+            {
+                // Copied before the loop, because removing a piece writes to the list being walked and the
+                // remove button fires mid-draw.
+                List<RimWorld.Apparel> listed = new List<RimWorld.Apparel>(worn);
+
+                for (int i = 0; i < listed.Count; i++)
+                {
+                    RimWorld.Apparel apparel = listed[i];
+
+                    Rect row;
+
+                    if (EditorParts.Row(view, y, apparel.LabelCapNoCount, Made(apparel), palette.TextSecondary,
+                            palette, out row, EditorParts.DescriptionOf(apparel.def), true, apparel.def,
+                            apparel.DrawColor))
+                        EditorApparel.Strip(context, apparel);
+
+                    y = row.yMax + 4f;
+                }
+            }
+
+            y += EditorParts.RowGap;
+
+            if (pawn.apparel != null && EditorParts.Add(view, y, "Add apparel", palette))
+                Dialog_AddApparel.Open(context);
+
+            return y + EditorParts.ControlHeight + EditorParts.BlockGap;
         }
 
         private static string Made(Thing thing)

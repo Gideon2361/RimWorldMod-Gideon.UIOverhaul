@@ -781,10 +781,16 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Display", "Fullscreen and resolution", DrawDisplaySection),
                 MakeCategory("Additional Features", "Extras beyond the restyling",
                     DrawAdditionalFeaturesSection),
+                MakeCategory("Raids and Incidents", "Turn off the ones you dislike", DrawThreatsSection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
                 MakeCategory("Developer Tools", "For working on mods", DrawDeveloperToolsSection),
                 MakeModSettingsCategory()
             };
+
+            // Absent without Odyssey rather than present and empty. There is no grav engine to configure, and a
+            // category that can only say "you do not have this expansion" is a page advertising a purchase.
+            if (Gravships.GravshipTuning.Available)
+                categories.Add(MakeCategory("Gravships", "How big a ship may be", DrawGravshipSection));
 
             Order(categories);
         }
@@ -1160,21 +1166,6 @@ namespace Gideon.UIOverhaul.Features.Options
         private void DrawColonistBarOptions(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings, float indent)
         {
-            WidgetToggle(view, ref y, palette, settings, indent, "Hide headgear on portraits",
-                settings.barHideHeadgear, value =>
-                {
-                    settings.barHideHeadgear = value;
-
-                    // Portraits are cached per pawn and per render setting, so the ones already built were made
-                    // with the old answer. Cleared here rather than waited out, or the bar would keep showing
-                    // helmets until each pawn changed for some unrelated reason.
-                    UIGuard.Try("Options.ClearPortraits", PortraitsCache.Clear, null);
-                },
-                "Draws the bar's portraits bare-headed, for a colony where every face is behind a helmet and the "
-                + "bar has stopped telling you who is who.\n\nPortraits only. A live tile shows the pawn exactly "
-                + "as the map drew them, and the map draws each pawn once for every camera at once, so a hat "
-                + "cannot be hidden in the tile without hiding it on the map as well.");
-
             WidgetToggle(view, ref y, palette, settings, indent, "Live pawn view",
                 settings.livePawnView, value => settings.livePawnView = value,
                 "Draws each tile as a live camera view of the pawn and the ground around them, instead of their "
@@ -1717,7 +1708,7 @@ namespace Gideon.UIOverhaul.Features.Options
             DrawQuitGroup(view, ref y, palette, playing);
             DrawSavingGroup(view, ref y, palette, settings);
             DrawGeneralGroup(view, ref y, palette, playing);
-            DrawGraphicsGroup(view, ref y, palette);
+            DrawGraphicsGroup(view, ref y, palette, settings);
             DrawAudioGroup(view, ref y, palette);
 
             y += 12f;
@@ -1886,7 +1877,8 @@ namespace Gideon.UIOverhaul.Features.Options
             return Mathf.RoundToInt(days * 24f * 60f) + " minutes";
         }
 
-        private void DrawGraphicsGroup(Rect view, ref float y, UIColorPaletteDef palette)
+        private void DrawGraphicsGroup(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
         {
             GroupLabel(view, ref y, palette, "Graphics");
 
@@ -1959,6 +1951,32 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 y += RowHeight + 2f;
             }
+
+            // Here rather than with the colonist bar's options, where it started and where it no longer belongs.
+            // It began as a portrait setting for the bar; it now takes hats off the map, the portraits and the
+            // bar's live tiles alike, and a world-rendering switch filed under one widget's settings is a switch
+            // nobody will find. Moved on Aaron's suggestion, 2026-08-23.
+            WidgetToggle(view, ref y, palette, settings, Indent, "Hide headgear",
+                settings.barHideHeadgear, value =>
+                {
+                    settings.barHideHeadgear = value;
+
+                    // Portraits are cached per pawn and per render setting, so the ones already built were made
+                    // with the old answer. The map needs no equivalent: its skip flags are worked out on every
+                    // draw, so it changes on the next frame.
+                    UIGuard.Try("Options.ClearPortraits", PortraitsCache.Clear, null);
+                },
+                "Takes your colonists' hats and helmets off, for a colony where every face is behind a visor and "
+                + "you have stopped being able to tell who is who.\n\nEverywhere they are drawn: on the map, in "
+                + "portraits, and in the colonist bar's live tiles, which are a camera pointed at the map and so "
+                + "could not have been done any other way. Hair, beards and eyes come back with the hat "
+                + "off.\n\nThe apparel is still worn and still working. This changes the picture and nothing "
+                + "else.\n\nYour colonists only. Mechanoids, shamblers, ghouls and anybody else's pawns keep "
+                + "what they are wearing -- a raider in a helmet is a raider in a helmet, and a mechanoid's head "
+                + "is not a hat.\n\nTwo further exceptions: a colonist in orbit keeps their helmet, because up "
+                + "there it is the difference between somebody who can go outside and somebody who cannot, and "
+                + "the character editor's own preview obeys its own switch, since looking under the hat is what "
+                + "that window is for.");
 
             // Keybindings and the developer options are not reimplemented here, so the window that has them
             // stays one click away. Opened through the bypass, since this mod otherwise replaces it.
@@ -2500,6 +2518,194 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 y += RowHeight + 6f;
             }
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Research");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Rebuild the research tab",
+                settings.researchTab, value => settings.researchTab = value,
+                "One flow chart in place of the category tabs, laid out from the prerequisites themselves, with "
+                + "every DLC and every mod on the same canvas. Projects say which of the eight things they are "
+                + "waiting on rather than all going grey together, and there is a queue: set four and the colony "
+                + "works through them.\n\nThe arrangement is computed, so it will not be the one you have "
+                + "learned. RimWorld's own coordinates are authored per tab and cannot be merged -- Main and "
+                + "Anomaly are placed in the same space as each other -- so there is no version of one chart "
+                + "that keeps them.\n\nWith this off the vanilla screen is untouched. A queue you have already "
+                + "set is kept in the save and starts working again if you switch it back on.");
+
+            if (settings.researchTab && ModsConfig.AnomalyActive)
+                DrawAnomalyScript(view, ref y, palette, settings);
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "World map");
+
+            DrawSiteFade(view, ref y, palette);
+        }
+
+        /// <summary>
+        /// How long the markers a colony leaves behind stay on the planet.
+        ///
+        /// <b>Segments rather than a slider or a menu,</b> because the question is which of five answers rather
+        /// than a number: a slider would offer 37 days, which is not a thing anybody means, and a menu would hide
+        /// the current answer until it was opened. Four rows read as a table of what happens to what.
+        ///
+        /// <b>The count underneath is not decoration.</b> A lifespan is measured from the day a marker appeared,
+        /// so choosing one shorter than what is already out there removes those markers within the hour. Saying
+        /// how many, before the window is closed, is the difference between a setting and a surprise.
+        ///
+        /// <b>A kind whose def is not in this install is not drawn.</b> Camps at landmarks are Odyssey's, and a
+        /// row that cannot ever apply is worse than an absent one.
+        /// </summary>
+        private void DrawSiteFade(Rect view, ref float y, UIColorPaletteDef palette)
+        {
+            y = Shared.TabParts.Note(new Rect(0f, y, view.width, 0f), y,
+                "Abandoning a colony, launching a gravship and packing up a camp each leave a marker on the "
+                + "planet. RimWorld clears up the plain camp after thirty days and keeps the rest for the whole "
+                + "game, so all four are set to thirty days here. A marker is removed that long after it "
+                + "appeared, however long ago that was. Keep means keep it.", palette,
+                GameFont.Small, palette.TextSecondary) + 6f;
+
+            foreach (WorldSites.SiteFadeKind kind in WorldSites.SiteFadeKinds.All)
+            {
+                if (!WorldSites.SiteFadeKinds.Available(kind))
+                    continue;
+
+                DrawSiteFadeRow(view, ref y, palette, kind);
+            }
+
+            int immediate;
+            int counted = WorldSites.SiteFade.Counting(out immediate);
+
+            if (!InGame)
+            {
+                y = Shared.TabParts.Note(new Rect(Indent, y, view.width - Indent, 0f), y,
+                    "With no colony loaded there is nothing to count. These apply to the save you open next as "
+                    + "well as to this one.", palette, GameFont.Tiny, palette.TextDisabled) + 4f;
+
+                return;
+            }
+
+            string readout = counted == 0
+                ? "No markers are on a clock."
+                : counted + (counted == 1 ? " marker is" : " markers are") + " on a clock.";
+
+            if (immediate > 0)
+                readout += " " + immediate + " of them " + (immediate == 1 ? "has" : "have")
+                    + " already outlived the lifespan set here and will be gone within the hour.";
+
+            y = Shared.TabParts.Note(new Rect(Indent, y, view.width - Indent, 0f), y, readout, palette,
+                GameFont.Tiny, immediate > 0 ? palette.Warning : palette.TextDisabled) + 4f;
+        }
+
+        /// <summary>One kind's row: its name, then the five lifespans with the current one filled.</summary>
+        private void DrawSiteFadeRow(Rect view, ref float y, UIColorPaletteDef palette,
+            WorldSites.SiteFadeKind kind)
+        {
+            int[] choices = WorldSites.SiteFadeKinds.Choices;
+            int current = WorldSites.SiteFadeKinds.Days(kind);
+
+            const float height = 26f;
+
+            float available = view.width - Indent - 10f;
+            float width = Mathf.Floor((available - (choices.Length - 1) * Shared.TabParts.SegmentGap)
+                                      / choices.Length);
+
+            Rect label = new Rect(Indent, y, available, RowHeight - 6f);
+
+            Widgets.Label(label, kind.Label);
+
+            // The whole row, label and segments together, so the explanation is reachable from wherever the
+            // pointer happens to be rather than from the four words on the left only.
+            Rect row = new Rect(Indent, y, available, RowHeight - 6f + height);
+
+            if (!kind.Tooltip.NullOrEmpty())
+                TooltipHandler.TipRegion(row, kind.Tooltip);
+
+            y += RowHeight - 6f;
+
+            float x = Indent;
+
+            for (int i = 0; i < choices.Length; i++)
+            {
+                int days = choices[i];
+
+                Shared.TabParts.Segment(new Rect(x, y, width, height),
+                    WorldSites.SiteFadeKinds.LabelOf(days), days == current, palette,
+                    () => WorldSites.SiteFadeKinds.Set(kind, days));
+
+                x += width + Shared.TabParts.SegmentGap;
+            }
+
+            y += height + 8f;
+        }
+
+        /// <summary>
+        /// Which characters an undiscovered Anomaly project is written in.
+        ///
+        /// <b>Every option is labelled in its own characters,</b> asked for on 2026-08-23: an option you cannot
+        /// preview is one you have to pick twice. The readable name is in the tooltip, which is where this mod
+        /// puts that sort of thing anyway, and Off is the one option that stays in words because there is nothing
+        /// to preview.
+        ///
+        /// <b>A script whose atlas did not load is not offered.</b> Three of the five are baked sheets under the
+        /// mod's Fonts folder; a missing one is a broken install rather than a choice, and it is already reported
+        /// in the log. Offering a swatch that would draw the generated marks instead would be a picker that lies.
+        /// </summary>
+        private void DrawAnomalyScript(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight), "Unknown anomaly script");
+
+            y += RowHeight;
+
+            float x = Indent;
+            const float height = 30f;
+            const float width = 92f;
+
+            foreach (Research.ResearchScript script in Research.ResearchScripts.All)
+            {
+                if (!Research.ResearchMask.Usable(script))
+                    continue;
+
+                Rect cell = new Rect(x, y, width, height);
+                bool chosen = settings.anomalyScript == script;
+                Research.ResearchScript captured = script;
+
+                Shared.TabParts.IconToggle(cell, null, chosen, palette, () =>
+                {
+                    settings.anomalyScript = captured;
+                    settings.Save();
+                }, Research.ResearchScripts.Named(script));
+
+                if (script == Research.ResearchScript.Off)
+                {
+                    TextAnchor anchor = Text.Anchor;
+                    GameFont font = Text.Font;
+
+                    Text.Anchor = TextAnchor.MiddleCenter;
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = chosen ? palette.WindowBackground : palette.TextSecondary;
+
+                    Widgets.Label(cell, "Off");
+
+                    GUI.color = palette.TextPrimary;
+                    Text.Font = font;
+                    Text.Anchor = anchor;
+                }
+                else
+                {
+                    // A sample rather than a fixed string: the same run-fitting the nodes use, so what is
+                    // previewed is drawn the way the real thing will be.
+                    Research.ResearchMask.Sample(cell.ContractedBy(8f), script,
+                        chosen ? palette.WindowBackground : palette.Mood);
+                }
+
+                x += width + Shared.TabParts.SegmentGap;
+            }
+
+            y += height + 8f;
         }
 
         /// <summary>
@@ -2830,6 +3036,224 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += RowHeight + 2f;
         }
+
+        /// <summary>
+        /// Raids and incidents the player would rather the game did not send.
+        ///
+        /// <b>This is Raid and Event Manager, brought in with No Way Jose's permission and reimplemented.</b>
+        /// That mod was twenty XML patch operations that zeroed a def's selection weight at load time, which is
+        /// why it needed XML Extensions and why it asked for a restart after every change. Ours are Harmony
+        /// filters over the same twenty things, so there is no dependency and a switch takes effect on the next
+        /// raid the storyteller rolls.
+        ///
+        /// <b>Every switch starts off, and off means nothing is patched.</b> A player who never opens this
+        /// section is running the game exactly as Ludeon shipped it.
+        ///
+        /// <b>A switch with nothing to act on is not drawn.</b> Without Anomaly there is no shambler assault def,
+        /// so that row is absent rather than present and inert -- the same rule the rest of this window follows
+        /// for expansion content.
+        /// </summary>
+        private void DrawThreatsSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Raids and Incidents", palette);
+
+            // Measured rather than allowed two rows. At the widths this column takes on a narrow window it is
+            // three lines, and a two-row allowance loses the last one -- which is the fault that had the saved
+            // characters window reading "and the durable half of" and stopping.
+            y = Shared.TabParts.Note(new Rect(0f, y, view.width, 0f), y,
+                "Anything ticked here is never chosen again. The raid still happens -- it arrives some other "
+                + "way, or the storyteller sends something else.", palette, GameFont.Small,
+                palette.TextSecondary) + 6f;
+
+            string group = null;
+
+            foreach (Threats.ThreatToggle toggle in Threats.ThreatToggles.All)
+            {
+                if (!Threats.ThreatToggles.Available(toggle))
+                    continue;
+
+                if (toggle.Group != group)
+                {
+                    group = toggle.Group;
+
+                    y += 6f;
+
+                    GroupLabel(view, ref y, palette, group);
+                }
+
+                Threats.ThreatToggle captured = toggle;
+
+                WidgetToggle(view, ref y, palette, settings, Indent, toggle.Label,
+                    Threats.ThreatToggles.IsOff(toggle),
+                    value => Threats.ThreatToggles.Set(captured, value), toggle.Tooltip);
+            }
+
+            y += 10f;
+
+            y = Shared.TabParts.Note(new Rect(0f, y, view.width, 0f), y,
+                "Raid and Event Manager by No Way Jose, rebuilt here with his permission.", palette,
+                GameFont.Small, palette.TextDisabled) + 4f;
+        }
+
+        /// <summary>
+        /// How large a gravship the game will allow.
+        ///
+        /// <b>One switch in front of three settings, and off means the game's own numbers.</b> Asked for in those
+        /// terms on 2026-08-23. These are the only settings in this window that change what can be built rather
+        /// than how something is drawn, so the three below are drawn greyed and inert until the switch is on --
+        /// visible, because they are what the switch is for, and unreachable, because they do nothing until it
+        /// moves.
+        ///
+        /// <b>Both sliders read out in the game's own units and name vanilla's value.</b> A radius means nothing
+        /// as a bare number; it means something next to "the game's own is 18.9".
+        /// </summary>
+        private void DrawGravshipSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Gravships", palette);
+
+            y = Shared.TabParts.Note(new Rect(0f, y, view.width, 0f), y,
+                "How far substructure may be built from the grav engine, how many tiles a ship may cover, and "
+                + "how many field extenders it may have. With the switch off, every one of these is the number "
+                + "Odyssey ships with.", palette, GameFont.Small, palette.TextSecondary) + 6f;
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Enable gravship overrides",
+                settings.gravshipOverrides, value =>
+                {
+                    settings.gravshipOverrides = value;
+                    Gravships.GravshipTuning.Apply();
+                },
+                "Hands the three settings below to the game.\n\nWith this off they are ignored and the engine, "
+                + "the tile limit and the extender limit are written back to the values Odyssey shipped -- so "
+                + "turning it off is a return to vanilla rather than a promise to stop interfering. Nothing here "
+                + "is stored in your save: a colony built with a larger ship keeps whatever it has already built "
+                + "if you switch it off, and cannot extend it further.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Size");
+
+            DrawGravRadius(view, ref y, palette, settings);
+
+            WidgetToggle(view, ref y, palette, settings, Indent,
+                "Remove maximum tiles and govern ship size by grav engine and extender radius only",
+                settings.gravshipUnlimitedTiles, value =>
+                {
+                    settings.gravshipUnlimitedTiles = value;
+                    Gravships.GravshipTuning.Apply();
+                },
+                "A gravship is normally limited twice: by where substructure may be built, and by a count of how "
+                + "many tiles the engine can support. This lifts the count, so only the radii decide.\n\nThe "
+                + "engine's support becomes 99999 and extenders stop adding any of their own, which is what makes "
+                + "the extender limit below a question about reach rather than about tiles.",
+                !settings.gravshipOverrides);
+
+            DrawGravExtenders(view, ref y, palette, settings);
+        }
+
+        /// <summary>The engine's footprint radius, from one cell up to four times whatever this install's is.</summary>
+        private void DrawGravRadius(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            bool on = settings.gravshipOverrides;
+
+            float vanilla = Gravships.GravshipTuning.VanillaRadius;
+            float current = Gravships.GravshipTuning.Radius(settings);
+
+            Color previous = GUI.color;
+
+            if (!on)
+                GUI.color = palette.TextDisabled;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Grav engine radius: " + current.ToString("0.0") + " tiles"
+                + (Mathf.Abs(current - vanilla) < 0.05f ? "   (the game's own)" : "   (the game's own is "
+                    + vanilla.ToString("0.0") + ")"));
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f),
+                current, Gravships.GravshipTuning.RadiusFloor, Gravships.GravshipTuning.RadiusCeiling,
+                false, null, null, null, 0.1f);
+
+            GUI.color = previous;
+
+            y += 28f;
+
+            if (on && Mathf.Abs(chosen - current) >= 0.001f)
+            {
+                settings.gravEngineRadius = chosen;
+                gravSliderUnsaved = true;
+            }
+
+            // Tested outside the change above, and that is the whole trick: the frame the mouse is released on
+            // is a frame where the value did not change, so a commit inside the branch would never run.
+            if (!gravSliderUnsaved || Input.GetMouseButton(0))
+                return;
+
+            Commit(settings);
+        }
+
+        /// <summary>How many extenders may link to one engine, from none to twenty.</summary>
+        private void DrawGravExtenders(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            bool on = settings.gravshipOverrides;
+
+            int vanilla = Gravships.GravshipTuning.VanillaExtenders;
+            int current = Gravships.GravshipTuning.ExtenderLimit(settings, vanilla);
+
+            Color previous = GUI.color;
+
+            if (!on)
+                GUI.color = palette.TextDisabled;
+
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
+                "Maximum grav extenders: " + current
+                + (current == vanilla ? "   (the game's own)" : "   (the game's own is " + vanilla + ")"));
+
+            y += RowHeight;
+
+            float chosen = Widgets.HorizontalSlider(new Rect(Indent, y, view.width - Indent - 10f, 22f),
+                current, 0f, Gravships.GravshipTuning.ExtenderCeiling, false, null, null, null, 1f);
+
+            GUI.color = previous;
+
+            y += 28f;
+
+            int rounded = Mathf.RoundToInt(chosen);
+
+            if (on && rounded != current)
+            {
+                settings.gravExtenderMax = rounded;
+                gravSliderUnsaved = true;
+            }
+
+            if (!gravSliderUnsaved || Input.GetMouseButton(0))
+                return;
+
+            Commit(settings);
+        }
+
+        /// <summary>
+        /// Saves and applies once the slider has been let go.
+        ///
+        /// Shared by both gravship sliders. Writing on every dragged pixel would rewrite the defs and relink
+        /// every extender on every map sixty times a second, which is a settings file written sixty times a
+        /// second as well.
+        /// </summary>
+        private void Commit(UIOverhaulSettingsFile settings)
+        {
+            gravSliderUnsaved = false;
+
+            settings.Save();
+
+            Gravships.GravshipTuning.Apply();
+        }
+
+        /// <summary>Whether a gravship slider has been dragged somewhere that is not on disk yet.</summary>
+        private bool gravSliderUnsaved;
 
         /// <summary>
         /// The diagnostics section.

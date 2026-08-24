@@ -348,10 +348,10 @@ namespace Gideon.UIOverhaul.Features.Music
                 {
                     MusicFolder folder = watched[i];
 
-                    if (folder.Path.NullOrEmpty() || !Directory.Exists(folder.Path))
+                    if (folder.Path.NullOrEmpty() || !MusicFolders.Exists(folder.Path))
                         continue;
 
-                    string[] files = Directory.GetFiles(folder.Path);
+                    string[] files = MusicFolders.Files(folder.Path);
 
                     for (int f = 0; f < files.Length; f++)
                     {

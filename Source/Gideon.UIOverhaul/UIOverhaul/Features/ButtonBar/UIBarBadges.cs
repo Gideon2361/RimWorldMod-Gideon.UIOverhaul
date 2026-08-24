@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Integrations;
 using RimWorld;
@@ -39,7 +40,14 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 return 0;
 
             return UIGuard.Try("ButtonBar.BadgeCount", () =>
-                def.defName == PhinixIntegration.ChatTabDefName ? PhinixIntegration.Unread : 0, 0, null);
+            {
+                if (def.defName == PhinixIntegration.ChatTabDefName)
+                    return PhinixIntegration.Unread;
+
+                // The research queue's length. A count of things waiting is exactly what this badge already
+                // means everywhere else on the bar, so it needed no new device -- only a second source.
+                return Research.ResearchTabButton.Is(def) ? Research.ResearchTabButton.Queued : 0;
+            }, 0, null);
         }
 
         /// <summary>
@@ -79,6 +87,21 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
         internal static string For(MainButtonDef def)
         {
             return Format(CountFor(def));
+        }
+
+        /// <summary>
+        /// What colour one tab's badge is, or null for the renderer's own alarm colour.
+        ///
+        /// <b>Two meanings share the device and only one of them is bad news.</b> Unread chat is something the
+        /// player has not seen; a research queue length is something they set up on purpose. The accent says
+        /// "here is a number" without saying "go and look at it right now".
+        /// </summary>
+        internal static UnityEngine.Color? ColorFor(MainButtonDef def, UIColorPaletteDef palette)
+        {
+            if (def == null || palette == null)
+                return null;
+
+            return Research.ResearchTabButton.Is(def) ? palette.Accent : (UnityEngine.Color?) null;
         }
     }
 }

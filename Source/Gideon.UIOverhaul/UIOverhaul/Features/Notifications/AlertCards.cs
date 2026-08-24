@@ -296,20 +296,61 @@ namespace Gideon.UIOverhaul.Features.Notifications
             Handle(card, alert);
         }
 
+        /// <summary>
+        /// The hover text: the alert's label, its own explanation, and what the two clicks do.
+        ///
+        /// <b>Built lazily, through the tip signal that takes a function.</b> A card sees several events a frame
+        /// and the explanation is the expensive half -- <see cref="Explanation"/> recalculates the alert, which
+        /// for some of them walks every colonist. This way it is built when the tooltip is actually drawn and not
+        /// otherwise, which is also what vanilla does by only filling its info pane on a repaint.
+        ///
+        /// The alert's own hash is the tip's id, so two cards never share a cached tooltip. Alerts are one
+        /// instance per type for the life of the game, which is what makes that stable.
+        /// </summary>
         private static void Tooltip(Rect card, Alert alert)
         {
-            string explanation = UIGuard.Try("Notifications.AlertExplanation",
-                () => alert.GetExplanation().Resolve(), string.Empty,
-                "One alert's tooltip shows its label only.");
+            TooltipHandler.TipRegion(card, new TipSignal(() => TooltipText(alert), alert.GetHashCode()));
+        }
+
+        private static string TooltipText(Alert alert)
+        {
+            // Named by alert type, so the next one of these says which alert rather than only that an alert did
+            // it. Sites are deduplicated by name, and there are as many names as there are alert types.
+            string explanation = UIGuard.Try("Notifications.AlertExplanation." + alert.GetType().Name,
+                () => Explanation(alert), string.Empty, "One alert's tooltip shows its label only.");
 
             string tip = LabelOf(alert);
 
             if (!explanation.NullOrEmpty())
                 tip += "\n\n" + explanation;
 
-            tip += "\n\nRight click to snooze. Shift click to hide it for good.";
+            return tip + "\n\nRight click to snooze. Shift click to hide it for good.";
+        }
 
-            TooltipHandler.TipRegion(card, (TipSignal) tip);
+        /// <summary>
+        /// One alert's explanation, asked for the way the game asks for it.
+        ///
+        /// <b>Recalculate first, then refuse if the alert is no longer active.</b> That order is copied from
+        /// <c>Alert.DrawInfoPane</c> and it is not ceremony: an alert's explanation is often built from culprits
+        /// that <c>GetReport</c> gathers into a field, and <c>AlertsReadout</c> recalculates only a slice of its
+        /// alerts each frame. So the alert under the pointer can easily be one whose subject died two frames ago,
+        /// and asking that one for an explanation is a null reference inside somebody else's code. Reported by
+        /// Aaron on 2026-08-23, caught by the guard, and the tooltip had been showing the label alone.
+        ///
+        /// <b>The empty check is on the tagged string, not the resolved one.</b> An alert that never set a
+        /// default explanation and does not override this hands back a tagged string wrapping null; resolving it
+        /// is harmless but pointless, and the caller wants to know there is nothing to append.
+        /// </summary>
+        private static string Explanation(Alert alert)
+        {
+            alert.Recalculate();
+
+            if (!alert.Active)
+                return string.Empty;
+
+            TaggedString explanation = alert.GetExplanation();
+
+            return explanation.NullOrEmpty() ? string.Empty : explanation.Resolve();
         }
 
         private static void Handle(Rect card, Alert alert)

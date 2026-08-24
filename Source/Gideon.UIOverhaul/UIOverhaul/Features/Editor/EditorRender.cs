@@ -39,6 +39,14 @@ namespace Gideon.UIOverhaul.Features.Editor
 
         private static bool showHeadgear = true;
 
+        /// <summary>
+        /// Set while this window is rendering its preview, so the global hide-headgear rule stands aside.
+        ///
+        /// Read by <c>Patch_HeadgearVisible</c>. A field rather than a parameter because the thing that needs to
+        /// know sits three layers down inside RimWorld's render tree, with no route for an argument.
+        /// </summary>
+        internal static bool ShowingUnderHat { get; private set; }
+
         private static readonly string[] Facings = { "S", "E", "N", "W" };
 
         /// <summary>Reset when the window opens, so a fresh pawn is not inspected from behind and undressed.</summary>
@@ -129,8 +137,27 @@ namespace Gideon.UIOverhaul.Features.Editor
                 if (side < 32f)
                     return;
 
-                RenderTexture render = PortraitsCache.Get(pawn, new Vector2(side, side), facing,
-                    default(Vector3), 1f, true, true, showHeadgear, showApparel);
+                // Held for the length of the render, so the global hide-headgear setting does not override this
+                // window's own switch. That switch exists to look at the pawn under what they are wearing, and a
+                // rule elsewhere silently winning would be exactly the fault the setting was reported as.
+                //
+                // Scoped rather than set once: PortraitsCache renders on a miss, inside this call, and the cache
+                // key already includes renderHeadgear -- so a hit needs no exemption and a miss gets one.
+                RenderTexture render;
+
+                Shared.PawnGraphics.Ensure(pawn);
+
+                ShowingUnderHat = true;
+
+                try
+                {
+                    render = PortraitsCache.Get(pawn, new Vector2(side, side), facing,
+                        default(Vector3), 1f, true, true, showHeadgear, showApparel);
+                }
+                finally
+                {
+                    ShowingUnderHat = false;
+                }
 
                 if (render == null)
                     return;

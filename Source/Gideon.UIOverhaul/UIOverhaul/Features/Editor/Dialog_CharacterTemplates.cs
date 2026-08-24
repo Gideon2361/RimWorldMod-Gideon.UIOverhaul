@@ -186,26 +186,17 @@ namespace Gideon.UIOverhaul.Features.Editor
                         : "Give it a name first."))
                 Store();
 
-            GameFont previousFont = Text.Font;
-            Color previousColor = GUI.color;
+            // Measured rather than given a height, and the measurement is what the caller gets back. This was a
+            // three line paragraph drawn into a twenty-two pixel rect, so two thirds of it simply was not there:
+            // it read "...and the durable half of" and stopped mid-sentence. Returning rect.yMax on top of that
+            // meant the list below started at a fixed place regardless, so even a taller rect would have been
+            // drawn over.
+            float bottom = TabParts.Note(rect, box.yMax + 2f,
+                "Saves looks, name, age, backstory, traits, skills, genes, gear, and the durable half of their "
+                + "health: implants, missing parts, scars and chronic conditions. Not fresh wounds, needs, "
+                + "thoughts or relationships.", palette);
 
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                GUI.color = palette.TextDisabled;
-
-                Widgets.Label(new Rect(rect.x, box.yMax + 2f, rect.width, 22f),
-                    "Saves looks, name, age, backstory, traits, skills, genes, gear, and the durable half of their "
-                    + "health: implants, missing parts, scars and chronic conditions. Not fresh wounds, needs, "
-                    + "thoughts or relationships.");
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Font = previousFont;
-            }
-
-            return rect.yMax;
+            return bottom + 4f;
         }
 
         private void Store()

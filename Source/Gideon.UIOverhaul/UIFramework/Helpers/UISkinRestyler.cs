@@ -25,6 +25,14 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>Slim scrollbars, matching the flat bar the growing-zone windows draw.</summary>
         private const float ScrollBarWidth = 8f;
 
+        /// <summary>
+        /// How strong the text selection highlight is.
+        ///
+        /// Enough to see which words are selected, faint enough to read them through. The palette's own selection
+        /// wash is far fainter than this because it covers whole rows rather than sitting behind letters.
+        /// </summary>
+        private const float SelectionStrength = 0.45f;
+
         private static UIColorPaletteDef appliedFor;
         private static readonly List<Texture2D> Owned = new List<Texture2D>();
 
@@ -121,11 +129,62 @@ namespace Gideon.UIFramework.Helpers
                     // texture is scaled and the border thickens with the field.
                     style.border = new RectOffset(1, 1, 1, 1);
 
+                    Level(style);
+
                     FieldStyles.Add(style);
                 }
             }
 
+            Selection(palette);
+
             SetFieldChrome(true);
+        }
+
+        /// <summary>
+        /// Gives every state of a field style the text colour its normal state has.
+        ///
+        /// <b>This is a fault of ours, and the cause is one line up.</b> Unity only uses a style state when that
+        /// state has a background: with no hover background a hovered field is drawn in the normal state, which
+        /// is why vanilla never showed this. <see cref="SetFieldChrome"/> gives every state a background so the
+        /// field keeps its border in all of them -- and that switched on a hover state whose <c>textColor</c> came
+        /// from Unity's own skin and is near black. Reported 2026-08-23: the colony name field went unreadable
+        /// under the pointer.
+        ///
+        /// <b>Copied from normal rather than set to the palette's text colour.</b> This mod's own text box draws
+        /// its field with <c>GUI.color</c> already set to <c>TextPrimary</c>, and Unity multiplies the two, so
+        /// naming a colour here would square it and give that box darker text than the rest of the game. Whatever
+        /// normal is, every other state should match it.
+        /// </summary>
+        private static void Level(GUIStyle style)
+        {
+            Color color = style.normal.textColor;
+
+            style.hover.textColor = color;
+            style.active.textColor = color;
+            style.focused.textColor = color;
+            style.onNormal.textColor = color;
+            style.onHover.textColor = color;
+            style.onActive.textColor = color;
+            style.onFocused.textColor = color;
+        }
+
+        /// <summary>
+        /// The highlight behind selected text, in the palette's own selection blue.
+        ///
+        /// <b>Unity's default is an orange that belongs to no theme in this mod.</b> It is a skin setting rather
+        /// than a style, so it cannot be reached by restyling the field: <c>GUI.skin.settings</c> is where the
+        /// selection colour, the caret and double-click behaviour live, and RimWorld writes to that same object in
+        /// <c>Verse.Text</c>'s static constructor. Safe to touch from here because this whole class runs inside
+        /// OnGUI, which is the only place <c>GUI.skin</c> means anything.
+        ///
+        /// <b>The role's hue, at an alpha of this method's choosing.</b> <c>SelectionOverlay</c> is authored to
+        /// wash over a whole row at fourteen per cent and is invisible behind three words of text, so what is
+        /// borrowed is the colour and not the strength. Faded rather than solid, asked for on 2026-08-23, so the
+        /// letters stay the thing being read.
+        /// </summary>
+        private static void Selection(UIColorPaletteDef palette)
+        {
+            GUI.skin.settings.selectionColor = Fade(palette.SelectionOverlay, SelectionStrength);
         }
 
         /// <summary>

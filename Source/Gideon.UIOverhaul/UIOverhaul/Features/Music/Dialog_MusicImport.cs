@@ -108,7 +108,7 @@ namespace Gideon.UIOverhaul.Features.Music
                 {
                     // Ready only: an empty optical drive or a disconnected network letter throws on the first
                     // listing, and a segment that cannot be opened is worse than one that is not offered.
-                    if (UIGuard.Try("Music.DriveReady", () => Directory.Exists(logical[i]), false, null))
+                    if (MusicFolders.Exists(logical[i]))
                         drives.Add(logical[i]);
                 }
             }, "The drive list could not be read.");
@@ -136,7 +136,7 @@ namespace Gideon.UIOverhaul.Features.Music
 
                 for (int i = watched.Count - 1; i >= 0; i--)
                 {
-                    if (!watched[i].Path.NullOrEmpty() && Directory.Exists(watched[i].Path))
+                    if (!watched[i].Path.NullOrEmpty() && MusicFolders.Exists(watched[i].Path))
                     {
                         Reveal(watched[i].Path);
 
@@ -322,28 +322,24 @@ namespace Gideon.UIOverhaul.Features.Music
 
         private List<string> Children(string path)
         {
-            return UIGuard.Try("Music.ImportChildren", () =>
+            List<string> result = new List<string>();
+            string[] found = MusicFolders.Directories(path);
+
+            for (int i = 0; i < found.Length; i++)
             {
-                List<string> result = new List<string>();
-                string[] found = Directory.GetDirectories(path);
+                // Hidden and system folders are skipped: nobody keeps their music in one, and Windows puts
+                // several at the root of every drive that cannot be opened at all.
+                FileAttributes attributes = MusicFolders.Attributes(found[i]);
 
-                for (int i = 0; i < found.Length; i++)
-                {
-                    // Hidden and system folders are skipped: nobody keeps their music in one, and Windows puts
-                    // several at the root of every drive that throw on the first listing.
-                    FileAttributes attributes = UIGuard.Try("Music.ImportAttributes",
-                        () => File.GetAttributes(found[i]), FileAttributes.Normal, null);
+                if ((attributes & FileAttributes.Hidden) != 0 || (attributes & FileAttributes.System) != 0)
+                    continue;
 
-                    if ((attributes & FileAttributes.Hidden) != 0 || (attributes & FileAttributes.System) != 0)
-                        continue;
+                result.Add(found[i]);
+            }
 
-                    result.Add(found[i]);
-                }
+            result.Sort(StringComparer.OrdinalIgnoreCase);
 
-                result.Sort(StringComparer.OrdinalIgnoreCase);
-
-                return result;
-            }, new List<string>(), null);
+            return result;
         }
 
         private void TreeRow(Rect row, string path, int depth, UIColorPaletteDef palette)
@@ -434,19 +430,14 @@ namespace Gideon.UIOverhaul.Features.Music
             if (counts.TryGetValue(path, out cached))
                 return cached;
 
-            int found = UIGuard.Try("Music.ImportCount", () =>
+            string[] files = MusicFolders.Files(path);
+            int found = 0;
+
+            for (int i = 0; i < files.Length; i++)
             {
-                string[] files = Directory.GetFiles(path);
-                int total = 0;
-
-                for (int i = 0; i < files.Length; i++)
-                {
-                    if (MusicTrack.Supported(files[i]))
-                        total++;
-                }
-
-                return total;
-            }, 0, null);
+                if (MusicTrack.Supported(files[i]))
+                    found++;
+            }
 
             counts[path] = found;
 
@@ -510,10 +501,10 @@ namespace Gideon.UIOverhaul.Features.Music
                 List<string> supported = new List<string>();
                 List<string> rejected = new List<string>();
 
-                if (folder.NullOrEmpty() || !Directory.Exists(folder))
+                if (folder.NullOrEmpty())
                     return supported;
 
-                string[] files = Directory.GetFiles(folder);
+                string[] files = MusicFolders.Files(folder);
                 string query = search.Text;
 
                 for (int i = 0; i < files.Length; i++)
@@ -640,7 +631,10 @@ namespace Gideon.UIOverhaul.Features.Music
         {
             return UIGuard.Try("Music.ImportSize", () =>
             {
-                long bytes = new FileInfo(path).Length;
+                long bytes = MusicFolders.Length(path);
+
+                if (bytes < 0L)
+                    return "-";
 
                 if (bytes < 1024L)
                     return bytes + " B";

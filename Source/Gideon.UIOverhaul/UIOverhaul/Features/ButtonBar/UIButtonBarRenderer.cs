@@ -100,8 +100,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, rect.width, AccentRuleHeight), color);
         }
 
+        /// <param name="barColor">
+        /// What the progress fill is painted in, or null for the muted accent this bar has always used.
+        ///
+        /// A parameter rather than something worked out here, because the renderer knows what a slot is and
+        /// deliberately does not know what a research project is -- the same boundary the badge is on the other
+        /// side of. The research tab uses it to say "stalled" and "this is Anomaly's progress, not the bench's".
+        /// </param>
         public static bool Draw(Rect rect, string label, Texture2D icon, bool selected, bool disabled,
-            float barPercent, UIColorPaletteDef palette, string badge = null)
+            float barPercent, UIColorPaletteDef palette, string badge = null, Color? barColor = null,
+            Color? badgeColor = null)
         {
             bool over = !disabled && Mouse.IsOver(rect);
             bool held = over && Input.GetMouseButton(0);
@@ -129,7 +137,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             {
                 Rect progress = new Rect(rect.x, rect.yMax - ProgressHeight,
                     rect.width * Mathf.Clamp01(barPercent), ProgressHeight);
-                Widgets.DrawBoxSolid(progress, palette.AccentMuted);
+                Widgets.DrawBoxSolid(progress, barColor ?? palette.AccentMuted);
             }
 
             bool hasLabel = !label.NullOrEmpty();
@@ -197,7 +205,11 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 // Danger from the palette rather than a literal red, so a theme restating what danger looks
                 // like carries here. Purely decorative: the whole slot stays one click target below, so the
                 // badge cannot swallow the press that opens the tab.
-                UITagControl.Draw(badgeRect, badge, palette.Danger, palette);
+                //
+                // <b>Danger is the default rather than the only answer.</b> An unread message is something
+                // wrong; four projects queued is a plan working. Painting both red would spend the bar's one
+                // alarm colour on a number nobody needs to act on.
+                UITagControl.Draw(badgeRect, badge, badgeColor ?? palette.Danger, palette);
             }
 
             GUI.color = previousColor;
@@ -379,7 +391,9 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 bool clicked = UIButtonBarRenderer.Draw(row,
                     UIButtonBarRenderer.LabelFor(entry, def), UIButtonBarRenderer.IconFor(entry, def),
                     Find.MainTabsRoot?.OpenTab == def, worker != null && worker.Disabled,
-                    worker?.ButtonBarPercent ?? 0f, palette, UIBarBadges.For(def));
+                    Research.ResearchTabButton.Percent(def, worker?.ButtonBarPercent ?? 0f), palette,
+                    UIBarBadges.For(def), Research.ResearchTabButton.BarColor(def, palette),
+                    UIBarBadges.ColorFor(def, palette));
 
                 if (clicked)
                 {

@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Inspector;
@@ -52,8 +54,17 @@ namespace Gideon.UIOverhaul.Features.Editor
 
         private readonly EditorContext context = new EditorContext();
 
-        /// <summary>Whether this host lists the colony down the left. Only the tab does.</summary>
+        /// <summary>Whether this host lists the colony down the left. The tab, and the starting characters page.</summary>
         private readonly bool roster;
+
+        /// <summary>
+        /// Where the roster column gets its people, when it is not the loaded maps.
+        ///
+        /// Null for the tab, which asks the colony. Supplied by the starting characters page, whose pawns are on
+        /// no map yet. Asked every frame rather than snapshotted, because Randomize on that page swaps a pawn for
+        /// a new object.
+        /// </summary>
+        private readonly Func<List<Pawn>> source;
 
         private EditorPanel panel;
 
@@ -68,9 +79,10 @@ namespace Gideon.UIOverhaul.Features.Editor
 
         private Pawn measuredPawn;
 
-        internal CharacterEditorPanel(Pawn pawn, bool roster)
+        internal CharacterEditorPanel(Pawn pawn, bool roster, Func<List<Pawn>> source = null)
         {
             this.roster = roster;
+            this.source = source;
 
             context.Changes = new EditorChanges();
             context.Palette = UIColorPaletteDef.Active;
@@ -117,6 +129,42 @@ namespace Gideon.UIOverhaul.Features.Editor
             surfaceScroll = Vector2.zero;
         }
 
+        /// <summary>
+        /// Moves off a pawn the supplied roster no longer holds, onto whoever is first.
+        ///
+        /// <b>For the starting characters page and its Randomize button.</b> That button does not edit a pawn, it
+        /// generates a replacement and drops the old object, so an editor left pointing at the old one would go on
+        /// showing and writing to somebody who is no longer in the game -- silently, since the discarded pawn is a
+        /// perfectly valid object that simply nothing reads any more.
+        ///
+        /// Only for hosts that supply a source. A colony roster can legitimately lose its subject too -- somebody
+        /// dies while the tab is open -- and that case is already answered by the empty state, which says who is
+        /// gone instead of quietly moving on to a different person.
+        /// </summary>
+        private void Rejoin()
+        {
+            if (source == null)
+                return;
+
+            UIGuard.Try("Editor.Rejoin", () =>
+            {
+                List<Pawn> supplied = source();
+
+                if (supplied == null || supplied.Count == 0)
+                {
+                    if (context.Pawn != null)
+                        Switch(null);
+
+                    return;
+                }
+
+                if (context.Pawn != null && supplied.Contains(context.Pawn))
+                    return;
+
+                Switch(supplied[0]);
+            }, null);
+        }
+
         // ---------------------------------------------------------------------------------------
         // Drawing
         // ---------------------------------------------------------------------------------------
@@ -128,7 +176,12 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             context.Palette = palette;
 
-            if (context.Pawn != null && context.Pawn.Destroyed)
+            // Destroyed, and not held by a corpse. The second half is the whole test: a dead pawn lives inside
+            // its Corpse's container, and dropping one for reporting itself destroyed empties the window at the
+            // exact moment it is most wanted -- Bring somebody back opened an editor saying there was nobody to
+            // edit. Whatever the flag says, a pawn something is still holding is a pawn we can work on, and
+            // resurrection is the one thing only this window can do.
+            if (context.Pawn != null && context.Pawn.Destroyed && context.Pawn.Corpse == null)
                 context.Pawn = null;
 
             // The pawn can stop being the thing this window opened on: resurrected, or a corpse cremated while it
@@ -148,8 +201,12 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             if (roster)
             {
+                // Checked before the column is drawn rather than after, so a pawn replaced out from under the
+                // editor is never the one the panels spend this frame reading.
+                Rejoin();
+
                 EditorRoster.Draw(new Rect(body.x, body.y, EditorRoster.ColumnWidth, body.height),
-                    context.Pawn, palette, Switch, Templates);
+                    context.Pawn, palette, Switch, Templates, source);
 
                 body = new Rect(body.x + EditorRoster.ColumnWidth + Gap, body.y,
                     Mathf.Max(0f, body.width - EditorRoster.ColumnWidth - Gap), body.height);
@@ -233,7 +290,10 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Text.Font = GameFont.Medium;
                 GUI.color = palette.TextPrimary;
 
-                float used = Text.CalcSize("Character editor").x + 10f;
+                // Through WidthOf rather than CalcSize, because that is the figure the drawing side judges it
+                // against: UIRichText holds thirteen pixels back for an ellipsis, so a rect sized to the bare
+                // text ellipses however much room the window has. This came out as "Character edi...".
+                float used = UIRichText.WidthOf("Character editor") + 10f;
 
                 UIRichText.Label(new Rect(rect.x, rect.y, Mathf.Max(20f, used), rect.height),
                     "Character editor");

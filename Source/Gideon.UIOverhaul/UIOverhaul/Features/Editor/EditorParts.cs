@@ -374,10 +374,26 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// The shape every list in this window uses -- traits, hediffs, memories, apparel, relations -- so a
         /// player learns one row and reads five panels. Returns true when the remove button was pressed.
         /// </summary>
+        /// <summary>
+        /// One row of a list: a name, an optional note on the right, and an optional remove cross.
+        ///
+        /// <b><paramref name="icon"/> turns the row into a card,</b> asked for on 2026-08-23 against the
+        /// equipment panel: a weapon, a coat and a stack of wood are things with pictures, and three lines of
+        /// grey text is the same complaint the gene list drew. Rows that name something without a picture --
+        /// a hediff, a memory, a relation -- pass nothing and are drawn exactly as before, because there is no
+        /// icon for "ate without a table" and a blank square would be worse than none.
+        ///
+        /// <paramref name="tint"/> is the colour to draw the icon in, which for apparel is its dye or its
+        /// material. Null leaves the icon its own colour.
+        /// </summary>
         internal static bool Row(Rect view, float y, string left, string right, Color rightColor,
-            UIColorPaletteDef palette, out Rect row, string tooltip = null, bool removable = true)
+            UIColorPaletteDef palette, out Rect row, string tooltip = null, bool removable = true,
+            ThingDef icon = null, Color? tint = null)
         {
             float height = Mathf.Max(24f, UIFonts.LineHeightOf(GameFont.Small) + 4f);
+
+            if (icon != null)
+                height = Mathf.Max(height, IconSize + 8f);
 
             row = new Rect(view.x, y, view.width, height);
 
@@ -385,6 +401,16 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             UIElementPainter.OutlineRounded(row, palette.Border,
                 over ? palette.SurfaceRaised : palette.PanelBackground);
+
+            float indent = 0f;
+
+            if (icon != null)
+            {
+                Icon(new Rect(row.x + 4f, row.y + (row.height - IconSize) * 0.5f, IconSize, IconSize), icon,
+                    tint);
+
+                indent = IconSize + 6f;
+            }
 
             float cross = removable ? 22f : 4f;
 
@@ -416,8 +442,9 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextPrimary;
 
-                UIRichText.Label(new Rect(row.x + 6f, row.y,
-                    Mathf.Max(10f, row.width - cross - rightWidth - 10f), row.height), left ?? string.Empty);
+                UIRichText.Label(new Rect(row.x + 6f + indent, row.y,
+                    Mathf.Max(10f, row.width - cross - rightWidth - 10f - indent), row.height),
+                    left ?? string.Empty);
             }
             finally
             {
@@ -435,6 +462,40 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             return Widgets.ButtonImage(new Rect(row.xMax - 20f, row.y + (row.height - 14f) * 0.5f, 14f, 14f),
                 TexButton.Delete);
+        }
+
+        /// <summary>The side of an item icon on a row or a card.</summary>
+        internal const float IconSize = 28f;
+
+        /// <summary>
+        /// A thing's own icon, in the colour it should be.
+        ///
+        /// <b>Guarded, because a def's icon is resolved lazily and can be missing.</b> A mod that ships a def
+        /// without its texture produces a null here rather than an exception, but the resolve itself can throw
+        /// on a broken graphic, and a list of forty items must not lose the other thirty-nine to one of them.
+        ///
+        /// Drawn with <c>ScaleToFit</c> so a non-square icon keeps its shape, which most weapons are.
+        /// </summary>
+        internal static void Icon(Rect rect, ThingDef def, Color? tint = null)
+        {
+            if (def == null)
+                return;
+
+            UIGuard.Try("Editor.ItemIcon", () =>
+            {
+                Texture texture = def.uiIcon;
+
+                if (texture == null)
+                    return;
+
+                Color previous = GUI.color;
+
+                GUI.color = tint ?? def.uiIconColor;
+
+                GUI.DrawTexture(rect, texture, ScaleMode.ScaleToFit);
+
+                GUI.color = previous;
+            }, null);
         }
 
         /// <summary>An add button sized to its own label, for the end of a list.</summary>
@@ -457,6 +518,13 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// </summary>
         internal static void Redraw(Pawn pawn)
         {
+            // Null is a normal answer here, not a fault. This is called on close, and the window can legitimately
+            // have nobody in it by then -- the pawn was resurrected out from under it, or the corpse was cremated
+            // while it sat open. Guarding it as an exception filled the log with a stack trace for closing a
+            // window.
+            if (pawn == null)
+                return;
+
             UIGuard.Try("Editor.Redraw", () =>
             {
                 if (pawn.Drawer != null && pawn.Drawer.renderer != null)

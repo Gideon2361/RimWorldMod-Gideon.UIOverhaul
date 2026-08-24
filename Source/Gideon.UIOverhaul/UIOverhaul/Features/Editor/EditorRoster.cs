@@ -60,7 +60,7 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// this column's.
         /// </summary>
         internal static void Draw(Rect column, Pawn current, UIColorPaletteDef palette, Action<Pawn> chosen,
-            Action templates)
+            Action templates, Func<List<Pawn>> source = null)
         {
             Widgets.DrawBoxSolid(column, palette.PanelBackground);
 
@@ -90,7 +90,7 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             y = buttons.yMax + 6f;
 
-            Gather();
+            Gather(source);
 
             Rect list = new Rect(inner.x, y, inner.width, Mathf.Max(0f, inner.yMax - y));
 
@@ -135,17 +135,31 @@ namespace Gideon.UIOverhaul.Features.Editor
         }
 
         /// <summary>
-        /// Colonists, then prisoners, then slaves, across every loaded map.
+        /// Colonists, then prisoners, then slaves, across every loaded map -- unless the host names its own list.
         ///
         /// Every map rather than the current one, since the pawns and animals tabs already work that way and a
         /// colonist on a gravship is still somebody you might be editing.
+        ///
+        /// <b>A host that supplies a source replaces the search entirely rather than adding to it.</b> The one
+        /// that does is the starting characters page, where the people being edited are on no map at all -- they
+        /// are held in <c>GameInitData</c> until the game begins -- so a map walk finds nothing and adding to it
+        /// would find nothing either. Asking the host each frame rather than taking a snapshot is deliberate:
+        /// that page's Randomize button replaces a pawn with a different object, and a snapshot would leave the
+        /// column listing somebody who no longer exists.
         /// </summary>
-        private static void Gather()
+        private static void Gather(Func<List<Pawn>> source)
         {
             Listed.Clear();
 
             UIGuard.Try("Editor.Roster", () =>
             {
+                if (source != null)
+                {
+                    Take(source());
+
+                    return;
+                }
+
                 List<Map> maps = Find.Maps;
 
                 Take(maps, map => map.mapPawns.FreeColonistsSpawned);
@@ -163,20 +177,29 @@ namespace Gideon.UIOverhaul.Features.Editor
                 if (map == null || map.mapPawns == null)
                     continue;
 
-                List<Pawn> found = from(map);
+                Take(from(map));
+            }
+        }
 
-                for (int i = 0; found != null && i < found.Count; i++)
-                {
-                    Pawn pawn = found[i];
+        /// <summary>
+        /// Adds one list, skipping the dead, the duplicated and whatever the search box rules out.
+        ///
+        /// Shared by both sources so the supplied list is filtered exactly as a map walk would be. A separate copy
+        /// of these three tests is how the search box ends up working on one host and not the other.
+        /// </summary>
+        private static void Take(List<Pawn> found)
+        {
+            for (int i = 0; found != null && i < found.Count; i++)
+            {
+                Pawn pawn = found[i];
 
-                    if (pawn == null || pawn.Dead || Listed.Contains(pawn))
-                        continue;
+                if (pawn == null || pawn.Dead || Listed.Contains(pawn))
+                    continue;
 
-                    if (!Search.IsEmpty && !Search.Matches(pawn.LabelShortCap))
-                        continue;
+                if (!Search.IsEmpty && !Search.Matches(pawn.LabelShortCap))
+                    continue;
 
-                    Listed.Add(pawn);
-                }
+                Listed.Add(pawn);
             }
         }
 

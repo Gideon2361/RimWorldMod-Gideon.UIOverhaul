@@ -15,6 +15,12 @@
 //
 // The metrics convention is pixels with y up from the baseline, which is what the mesh builder wants. GDI+ works
 // in y-down from the em box top, so every vertical is converted once, here, rather than at draw time.
+//
+// CODE POINTS, NOT CHARACTERS. This walked a List<char> until 2026-08-23, which was fine for the two Latin faces
+// the floor labels use and impossible for the three scripts the research tab masks with: Imperial Aramaic,
+// Mende Kikakui and Siddham all live above U+FFFF, where a char cannot reach at all. Everything below is keyed
+// by int and rendered through char.ConvertFromUtf32, so a surrogate pair is one glyph rather than two halves of
+// nothing.
 
 using System;
 using System.Collections.Generic;
@@ -37,26 +43,54 @@ internal static class BakeAtlas
     private const int Columns = 16;
 
     /// <summary>
-    /// Glyphs baked: printable ASCII plus the Latin-1 letters.
+    /// Glyphs baked when no ranges are given: printable ASCII plus the Latin-1 letters.
     ///
     /// Labels are drawn upper cased, so the lowercase range is strictly speaking unused -- it is included anyway
     /// because it costs a few hundred kilobytes of atlas and stops the whole thing being wasted if that decision
     /// ever changes. Anything outside this set makes a label fall back to the game's own font at runtime.
     /// </summary>
-    private static IEnumerable<char> Glyphs()
+    private static IEnumerable<int> DefaultGlyphs()
     {
-        for (char c = ' '; c <= '~'; c++)
+        for (int c = ' '; c <= '~'; c++)
             yield return c;
 
-        for (char c = 'À'; c <= 'ÿ'; c++)
+        for (int c = 0xC0; c <= 0xFF; c++)
             yield return c;
+    }
+
+    /// <summary>
+    /// Code points from a comma separated list of hex ranges, such as <c>10840-10855,1E800-1E8C4</c>.
+    ///
+    /// Ranges rather than a list of code points, because a script block is contiguous and typing out two hundred
+    /// numbers is two hundred chances to mistype one. What is actually in the font is checked below: a code point
+    /// the face does not cover has no ink and is dropped.
+    /// </summary>
+    private static IEnumerable<int> Ranges(string text)
+    {
+        foreach (string part in text.Split(','))
+        {
+            string piece = part.Trim();
+
+            if (piece.Length == 0)
+                continue;
+
+            string[] ends = piece.Split('-');
+            int first = int.Parse(ends[0], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            int last = ends.Length > 1
+                ? int.Parse(ends[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture)
+                : first;
+
+            for (int code = first; code <= last; code++)
+                yield return code;
+        }
     }
 
     private static int Main(string[] args)
     {
         if (args.Length < 3)
         {
-            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name>");
+            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name> [hexRanges]");
+            Console.WriteLine("  hexRanges: 10840-10855,1E800-1E8C4   (default: ASCII plus Latin-1)");
 
             return 2;
         }
@@ -81,9 +115,11 @@ internal static class BakeAtlas
             float descent = family.GetCellDescent(style) / emHeight * EmSize;
             float lineSpacing = family.GetLineSpacing(style) / emHeight * EmSize;
 
-            List<char> chars = new List<char>(Glyphs());
+            List<int> wanted = new List<int>(args.Length > 3 ? Ranges(args[3]) : DefaultGlyphs());
 
-            // Measured first so the atlas is sized to what is actually there rather than to a guess.
+            // Measured first so the atlas is sized to what is actually there rather than to a guess, and so a
+            // code point the face does not cover can be dropped before it takes up a cell.
+            List<int> chars = new List<int>();
             List<RectangleF> ink = new List<RectangleF>();
             List<float> advances = new List<float>();
 
@@ -91,31 +127,46 @@ internal static class BakeAtlas
             using (Graphics g = Graphics.FromImage(probe))
             using (Font font = new Font(family, EmSize, style, GraphicsUnit.Pixel))
             {
-                foreach (char c in chars)
+                foreach (int code in wanted)
                 {
+                    string text = char.ConvertFromUtf32(code);
+                    bool blank = code <= 0xFFFF && char.IsWhiteSpace((char) code);
+
                     RectangleF bounds = RectangleF.Empty;
 
-                    if (!char.IsWhiteSpace(c))
+                    if (!blank)
                     {
                         using (GraphicsPath path = new GraphicsPath())
                         {
-                            path.AddString(c.ToString(), family, (int) style, EmSize, new PointF(0f, 0f),
+                            path.AddString(text, family, (int) style, EmSize, new PointF(0f, 0f),
                                 StringFormat.GenericTypographic);
 
                             if (path.PointCount > 0)
                                 bounds = path.GetBounds();
                         }
-                    }
 
-                    ink.Add(bounds);
+                        // No ink and not a space: either the face does not cover this code point, or it covers
+                        // it with an empty glyph. Either way there is nothing to mask with, and baking it would
+                        // put a blank in the middle of every run.
+                        if (bounds.Width <= 0f || bounds.Height <= 0f)
+                            continue;
+                    }
 
                     // GenericTypographic, or MeasureString pads every glyph with invisible side bearings and
                     // every label comes out spaced like a ransom note.
-                    SizeF measured = g.MeasureString(c.ToString(), font, PointF.Empty,
-                        StringFormat.GenericTypographic);
+                    SizeF measured = g.MeasureString(text, font, PointF.Empty, StringFormat.GenericTypographic);
 
-                    advances.Add(c == ' ' && measured.Width <= 0.01f ? EmSize * 0.28f : measured.Width);
+                    chars.Add(code);
+                    ink.Add(bounds);
+                    advances.Add(blank && measured.Width <= 0.01f ? EmSize * 0.28f : measured.Width);
                 }
+            }
+
+            if (chars.Count == 0)
+            {
+                Console.WriteLine("{0}: no glyphs in range. Nothing written.", name);
+
+                return 1;
             }
 
             int cellWidth = 0;
@@ -147,7 +198,7 @@ internal static class BakeAtlas
 
                 for (int i = 0; i < chars.Count; i++)
                 {
-                    char c = chars[i];
+                    int code = chars[i];
                     RectangleF bounds = ink[i];
 
                     int cellX = i % Columns * cellWidth;
@@ -160,8 +211,8 @@ internal static class BakeAtlas
                     {
                         using (GraphicsPath path = new GraphicsPath())
                         {
-                            path.AddString(c.ToString(), family, (int) style, EmSize, new PointF(0f, 0f),
-                                StringFormat.GenericTypographic);
+                            path.AddString(char.ConvertFromUtf32(code), family, (int) style, EmSize,
+                                new PointF(0f, 0f), StringFormat.GenericTypographic);
 
                             // Shifted so the glyph's ink lands at the cell's padded corner, which is what makes
                             // the recorded rectangle exact rather than approximately right.
@@ -180,7 +231,7 @@ internal static class BakeAtlas
                     float maxY = ascent - bounds.Y;
                     float minY = maxY - bounds.Height;
 
-                    metrics.Append("g\t").Append((int) c).Append('\t')
+                    metrics.Append("g\t").Append(code).Append('\t')
                         .Append(cellX + Padding).Append('\t').Append(cellY + Padding).Append('\t')
                         .Append(w).Append('\t').Append(h).Append('\t')
                         .Append(F(bounds.X)).Append('\t').Append(F(minY)).Append('\t').Append(F(maxY))
@@ -192,7 +243,7 @@ internal static class BakeAtlas
 
             File.WriteAllText(Path.Combine(outDir, name + ".txt"), metrics.ToString(), new UTF8Encoding(false));
 
-            Console.WriteLine("{0,-16} {1} glyphs  atlas {2}x{3}  cell {4}x{5}  ascent {6:F1}  line {7:F1}",
+            Console.WriteLine("{0,-28} {1} glyphs  atlas {2}x{3}  cell {4}x{5}  ascent {6:F1}  line {7:F1}",
                 name, chars.Count, width, height, cellWidth, cellHeight, ascent, lineSpacing);
         }
 

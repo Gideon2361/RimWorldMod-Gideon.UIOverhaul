@@ -15,6 +15,14 @@ namespace Gideon.UIOverhaul.Features.GrowZones
     /// </summary>
     public class ITab_GrowthZoneBills : ITab
     {
+        /// <summary>
+        /// The size this tab asks for. What it is <i>given</i> is <c>size</c>, which is not the same thing.
+        ///
+        /// The inspect pane hands a tab more room than it asked for when the pane is bigger, by writing that
+        /// field for the length of one draw -- so laying out from this constant instead, as this tab did until
+        /// 2026-08-23, pinned two bill rows to the top left of a pane four hundred pixels taller. Copied from
+        /// vanilla's own tabs, several of which have the same habit.
+        /// </summary>
         private static readonly Vector2 WinSize = new Vector2(420f, 480f);
         private const float RowGap = 6f;
 
@@ -40,7 +48,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
         /// </summary>
         protected override void FillTab()
         {
-            Rect tab = new Rect(0f, 0f, WinSize.x, WinSize.y);
+            Rect tab = new Rect(0f, 0f, size.x, size.y);
 
             UIGuardedPanel.Draw("GrowZones.BillsTab", tab, () => DrawContents(),
                 "The bills tab for growing zones shows a failure notice. Existing bills keep running -- this is "
@@ -53,7 +61,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
             if (zone == null)
                 return;
 
-            Rect inner = new Rect(0f, 0f, WinSize.x, WinSize.y).ContractedBy(10f);
+            Rect inner = new Rect(0f, 0f, size.x, size.y).ContractedBy(10f);
 
             Rect addRect = new Rect(inner.x, inner.y, 110f, 30f);
             bool full = zone.BillStack.Count >= BillStack.MaxCount;

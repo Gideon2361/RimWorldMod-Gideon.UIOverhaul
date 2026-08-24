@@ -34,6 +34,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <summary>The slot each chip is laid into. Vanilla's tab width, so the pane's own width math still holds.</summary>
         internal const float SlotWidth = InspectPaneMetrics.VanillaTabWidth;
 
+        /// <summary>
+        /// How solid the strip's backdrop is: thirty per cent transparent, so seventy per cent opaque.
+        ///
+        /// Asked for in those words on 2026-08-23. If it wants to be fainter, this is the only number to move.
+        /// </summary>
+        private const float Opacity = 0.7f;
+
         /// <summary>Room left around a chip inside its slot.</summary>
         private const float SlotPadX = 2f;
 
@@ -193,6 +200,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             Collect(pane, Tabs);
 
             float top = pane.PaneTopY - InspectPaneMetrics.TabStripHeight;
+
+            Backdrop(pane, paneWidth, top, palette);
+
             float x = paneWidth - SlotWidth;
             float leftEdge = paneWidth;
             // Kept only so the overview chip knows where the row ended.
@@ -264,6 +274,43 @@ namespace Gideon.UIOverhaul.Features.Inspector
             Tabs.Clear();
 
             return true;
+        }
+
+        /// <summary>
+        /// A surface behind the chip row, so the labels sit on something rather than on the map.
+        ///
+        /// <b>Thirty per cent transparent</b>, asked for on 2026-08-23. The row is the one part of the pane that
+        /// stands clear of it, and over a bright biome or a burning building the outlined chips were reading
+        /// against whatever happened to be behind them. Seventy per cent of the pane's own colour keeps the strip
+        /// legible while still admitting that the map is under it -- an opaque bar would read as the pane having
+        /// grown a lid.
+        ///
+        /// <b>One fill, and not <c>OutlineRounded</c>.</b> That helper paints the border colour across the whole
+        /// rect and the inside colour one pixel in, so a translucent inside composites over the border rather than
+        /// over the map, and the strip would come out near solid. <see cref="Chip"/> above is unaffected because
+        /// the colours it hands over are opaque.
+        ///
+        /// <b>The width comes from <see cref="WidthNeeded"/> rather than from the loop below,</b> which has not
+        /// run yet -- the chips are laid out right to left, so the row's left edge is only known once they are all
+        /// placed, and a backdrop cannot be drawn after the thing it is behind. That method is already the
+        /// authority the pane's width patch sizes itself from, so using it here means the backdrop and the pane
+        /// agree by construction rather than by two counts that have to be kept in step.
+        /// </summary>
+        private static void Backdrop(IInspectPane pane, float paneWidth, float top, UIColorPaletteDef palette)
+        {
+            UIGuard.Try("Inspector.TabBackdrop", () =>
+            {
+                float width = Mathf.Min(WidthNeeded(pane), paneWidth);
+
+                if (width <= 0f)
+                    return;
+
+                Rect strip = new Rect(paneWidth - width, top, width, InspectPaneMetrics.TabStripHeight);
+
+                Color surface = palette.WindowBackground;
+
+                Widgets.DrawBoxSolid(strip, new Color(surface.r, surface.g, surface.b, surface.a * Opacity));
+            }, null);
         }
 
         /// <summary>Switches the pane to one of our bodies, closing whatever window was over it.</summary>

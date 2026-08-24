@@ -116,6 +116,16 @@ namespace Gideon.UIFramework.Patches.UIElements
                 Directions = new[] { CheckboxGrowth.Right }
             },
 
+            // Starting characters page. "Show headgear" and "Show apparel", stacked at the top right corner of
+            // the page, in a rect sized as Max(CalcSize of the two) + 4 + 24 -- the tightest fit in the game, and
+            // measured against vanilla's 24 pixel box rather than our 40 pixel switch. Both hang off rect.xMax
+            // with the whole page title row empty to their left, so both grow left.
+            new Site
+            {
+                Type = typeof(Page_ConfigureStartingPawns), Method = "DrawApparelOptions",
+                Directions = new[] { CheckboxGrowth.Left, CheckboxGrowth.Left }
+            },
+
             // Log tab, three across one 630 wide row, in call order:
             //   "Show all"    at x 60,  100 wide -> next neighbour starts at 330, so 170 spare on the right
             //   "Show combat" at x 445, 115 wide -> ends at 560 with the tab edge at 630, so 70 spare right
