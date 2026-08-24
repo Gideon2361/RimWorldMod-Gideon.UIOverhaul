@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Inspect tabs that must not be hosted inside the rebuilt inspect pane.
+
+  This mod normally draws every tab in the pane rather than as a floating window, so that clicking
+  along the chip row does not make the panel jump between two shapes. A few tabs cannot survive
+  that, and this is the list of them. An excluded tab keeps its chip; clicking it opens the tab's
+  own window exactly as it does without this mod.
+
+  Other mods may ship their own copy of this file at
+      <YourMod>/Mods/gideon.uioverhaul/InspectTabExclusions.xml
+  to exclude their own tabs. Every loaded mod's file is read; ours is read first.
+
+  Set exactly one match key per entry. They are tried most specific first:
+      tab        the tab's full type name, namespace included
+      namespace  a namespace prefix, for a mod with several tabs that all need excluding
+      mod        a packageId, excluding every tab that mod's assemblies define
+
+  When to add an entry. A tab belongs here when it is not really a panel:
+
+    - it sizes itself from the screen rather than from its contents, so hosting it grows the pane
+      to fill the screen
+    - it draws its own window chrome, background or close button
+    - it positions anything in screen coordinates rather than from its own origin
+
+  A tab that is merely large does not belong here. The pane grows to fit and scrolls past that,
+  which is the intended behavior.
+-->
+<Gideon_InspectTabExclusions>
+
+  <entry>
+    <tab>Core40k.ITab_RankSystem</tab>
+    <reason>Declares its size as the full screen width by the full height above the pane, so hosting it grows the pane to cover the map. It is a full-screen rank tree drawn through the tab system rather than a panel.</reason>
+  </entry>
+
+</Gideon_InspectTabExclusions>

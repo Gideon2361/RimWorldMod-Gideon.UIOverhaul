@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Inspector;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -297,92 +298,65 @@ namespace Gideon.UIOverhaul.Features.Editor
         }
 
         /// <summary>
-        /// Adds a condition, asking for the def and then the part.
+        /// Opens the add-a-condition wizard.
         ///
-        /// <b>Only the parts it can actually go on are offered,</b> which is <c>HediffDef.CompProps</c>'s job in
-        /// vanilla and is done here by asking the def what it applies to. A def with no part restriction offers
-        /// the whole body, which is what a whole-body condition wants.
+        /// <b>One window with steps, not a chain of pick lists, from 2026-08-23.</b> This used to open a list of
+        /// conditions, close it, open a list of body parts, close it, and add the hediff at whatever severity the
+        /// def happened to start at. There was no point in that sequence where a third question could be asked,
+        /// which is why One with Death's control expansion could only ever be added at level one. See
+        /// <see cref="Dialog_AddCondition"/>.
         /// </summary>
         private static void Offer(EditorContext context)
         {
-            Pawn pawn = context.Pawn;
-
-            List<EditorOption> options = new List<EditorOption>();
-
-            UIGuard.Try("Editor.HediffOptions", () =>
-            {
-                List<HediffDef> all = DefDatabase<HediffDef>.AllDefsListForReading;
-
-                for (int i = 0; i < all.Count; i++)
-                {
-                    HediffDef def = all[i];
-                    HediffDef captured = def;
-
-                    options.Add(new EditorOption
-                    {
-                        Label = EditorParts.LabelOf(def),
-                        Note = def.isBad ? null : "not harmful",
-                        Tooltip = EditorParts.DescriptionOf(def),
-                        Chosen = () => Parts(context, captured)
-                    });
-                }
-
-                options.Sort((a, b) => string.Compare(a.Label, b.Label, System.StringComparison.Ordinal));
-            }, null);
-
-            Dialog_PickFrom.Open("Add a condition", options, "Search conditions");
+            Dialog_AddCondition.Open(context);
         }
 
-        private static void Parts(EditorContext context, HediffDef def)
-        {
-            Pawn pawn = context.Pawn;
-
-            List<EditorOption> options = new List<EditorOption>();
-
-            UIGuard.Try("Editor.PartOptions", () =>
-            {
-                options.Add(new EditorOption
-                {
-                    Label = "Whole body",
-                    Note = "no particular part",
-                    Chosen = () => Give(context, def, null)
-                });
-
-                List<BodyPartRecord> parts = pawn.health.hediffSet.GetNotMissingParts() as List<BodyPartRecord>
-                                             ?? new List<BodyPartRecord>(
-                                                 pawn.health.hediffSet.GetNotMissingParts());
-
-                for (int i = 0; i < parts.Count; i++)
-                {
-                    BodyPartRecord part = parts[i];
-                    BodyPartRecord captured = part;
-
-                    options.Add(new EditorOption
-                    {
-                        Label = part.LabelCap,
-                        Note = part.def != null ? part.def.hitPoints + " hp" : null,
-                        Chosen = () => Give(context, def, captured)
-                    });
-                }
-            }, null);
-
-            Dialog_PickFrom.Open("Where does " + EditorParts.LabelOf(def) + " go", options, "Search body parts");
-        }
-
-        private static void Give(EditorContext context, HediffDef def, BodyPartRecord part)
+        /// <summary>
+        /// Adds one condition to the pawn, at a level or a severity, and records the undo.
+        ///
+        /// <b>The one place a condition is added,</b> which is what makes the part guard reliable: whatever route
+        /// asked for it, a hediff that needs a body part gets one here. See <see cref="HediffPlacement"/>.
+        ///
+        /// <paramref name="level"/> is zero for anything that is not a <c>Hediff_Level</c>, and
+        /// <paramref name="severity"/> is null when the def has nothing worth choosing -- in which case the hediff
+        /// is added exactly as the game would add it.
+        /// </summary>
+        internal static void AddCondition(EditorContext context, HediffDef def, BodyPartRecord part, int level,
+            float? severity)
         {
             Pawn pawn = context.Pawn;
 
             UIGuard.Try("Editor.AddHediff", () =>
             {
-                Hediff made = HediffMaker.MakeHediff(def, pawn, part);
+                if (pawn == null || def == null)
+                    return;
+
+                BodyPartRecord on = HediffPlacement.Resolve(pawn, def, part);
+
+                if (on == null && HediffPlacement.NeedsPart(def))
+                {
+                    EditorParts.Warn(EditorParts.LabelOf(def) + " needs a body part and "
+                                     + pawn.LabelShortCap + " has none it can go on.");
+
+                    return;
+                }
+
+                Hediff made = HediffMaker.MakeHediff(def, pawn, on);
 
                 if (made == null)
                     return;
 
+                if (severity.HasValue)
+                    made.Severity = severity.Value;
+
                 bool fatal = pawn.health.WouldDieAfterAddingHediff(made);
 
-                pawn.health.AddHediff(made, part);
+                pawn.health.AddHediff(made, on);
+
+                // After AddHediff: SetLevelTo goes through ChangeLevel, which clamps against the def, and a level
+                // set before the hediff is on the pawn is one PostAdd may overwrite.
+                if (level > 0 && made is Hediff_Level levelled)
+                    levelled.SetLevelTo(level);
 
                 EditorParts.Redraw(pawn);
 
@@ -435,6 +409,34 @@ namespace Gideon.UIOverhaul.Features.Editor
             return y + EditorParts.BlockGap - view.y;
         }
 
+        /// <summary>Which need is being dragged, by def name, or null. One at a time by definition.</summary>
+        private static string draggingNeed;
+
+        /// <summary>
+        /// How far above and below the track a click still counts.
+        ///
+        /// The track is six pixels tall, which is the right height to look at and the wrong height to hit. The
+        /// band is invisible and the bar keeps its own size.
+        /// </summary>
+        private const float NeedGrab = 7f;
+
+        /// <summary>
+        /// One need, drawn the way the inspect pane draws it and dragged the way a slider is.
+        ///
+        /// <b>The same call the inspector makes, not a copy of it.</b> <c>InspectPaneParts.Need</c> lays out the
+        /// caption, the value, the track and the break-point ticks; this passes the same arguments and gets the
+        /// track's rectangle back to hang the drag on. Two panels showing a colonist's needs that do not look
+        /// alike is the thing worth avoiding here, and the only way to keep them alike is for one of them to draw
+        /// the other's row.
+        ///
+        /// <b>Mood brings its ticks with it.</b> Those marks are this pawn's own three break points, and they are
+        /// the difference between a mood bar you can read and a percentage you cannot -- which matters more here
+        /// than in the inspect pane, since here you are about to drag it somewhere.
+        ///
+        /// <b>The handle appears on hover and not before.</b> At rest the page reads as the inspect pane; the
+        /// moment the pointer is near a bar, the knob says the bar is grabbable. A knob drawn permanently would
+        /// undo the match this was asked for, and no knob at all would leave the panel looking like a readout.
+        /// </summary>
         private static float Slider(Rect view, float y, Need need, EditorContext context,
             UIColorPaletteDef palette)
         {
@@ -442,15 +444,93 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             float current = UIGuard.Try("Editor.NeedNow", () => need.CurLevel, 0f, null);
 
-            Rect cell = new Rect(view.x, y, view.width, EditorParts.CaptionHeight + 20f);
+            float fraction = Mathf.Clamp01(current / Mathf.Max(0.0001f, max));
 
-            float value = EditorParts.Slider(cell, need.LabelCap, current, 0f, max, palette,
-                (current / Mathf.Max(0.0001f, max)).ToStringPercent());
+            bool isMood = need is Need_Mood;
 
-            if (Mathf.Abs(value - current) > 0.001f)
-                context.Changes.Set(need.def.label, () => need.CurLevel, v => need.CurLevel = v, value);
+            Color fill = isMood ? palette.Mood : InspectPaneParts.Level(fraction, palette);
 
-            return cell.yMax + 4f;
+            Color readout = isMood
+                ? InspectOverview.MoodColor(context.Pawn, fraction, palette)
+                : InspectPaneParts.Level(fraction, palette);
+
+            float[] ticks = isMood ? InspectOverview.MoodTicks(context.Pawn) : null;
+
+            Rect track;
+
+            float next = InspectPaneParts.Need(view, y, need.LabelCap, fraction.ToStringPercent(), readout,
+                fraction, fill, ticks, null, palette, out track);
+
+            Drag(track, need, max, context);
+
+            return next;
+        }
+
+        /// <summary>
+        /// Turns the drawn track into something you can set by pointing at it.
+        ///
+        /// <b>Hand-rolled rather than an invisible slider laid over the top.</b> RimWorld's slider draws its own
+        /// art unconditionally, so borrowing it means covering the row we just drew; and its return value is the
+        /// answer for this frame only, which is the wrong shape for a change that has to be recorded once with an
+        /// undo entry rather than every pass of the mouse.
+        ///
+        /// The key is the need's def name, so the drag survives the row being re-laid out under it and cannot be
+        /// confused with the bar above or below.
+        /// </summary>
+        private static void Drag(Rect track, Need need, float max, EditorContext context)
+        {
+            UIGuard.Try("Editor.NeedDrag", () =>
+            {
+                string key = need.def != null ? need.def.defName : null;
+
+                if (key == null)
+                    return;
+
+                Rect grab = new Rect(track.x, track.y - NeedGrab, track.width, track.height + NeedGrab * 2f);
+
+                Event input = Event.current;
+                bool over = Mouse.IsOver(grab);
+
+                if (input.type == EventType.MouseDown && input.button == 0 && over)
+                {
+                    draggingNeed = key;
+                    input.Use();
+                }
+                else if (input.type == EventType.MouseUp && input.button == 0 && draggingNeed == key)
+                {
+                    draggingNeed = null;
+                    input.Use();
+                }
+
+                if (draggingNeed != key)
+                {
+                    if (over && draggingNeed == null)
+                        Knob(track, need.CurLevel / Mathf.Max(0.0001f, max), context.Palette);
+
+                    return;
+                }
+
+                float wanted = Mathf.Clamp01((input.mousePosition.x - track.x)
+                                             / Mathf.Max(1f, track.width)) * max;
+
+                Knob(track, wanted / Mathf.Max(0.0001f, max), context.Palette);
+
+                // Recorded rather than assigned, so Revert all puts the need back and the footer counts it.
+                // Idempotent on a repeat: the change tracker keeps one entry per need whatever the mouse does.
+                if (Mathf.Abs(wanted - need.CurLevel) > 0.001f)
+                    context.Changes.Set(need.def.label, () => need.CurLevel, v => need.CurLevel = v, wanted);
+            }, null);
+        }
+
+        /// <summary>The grab handle: a square on the track at the value, in the palette's accent.</summary>
+        private static void Knob(Rect track, float fraction, UIColorPaletteDef palette)
+        {
+            const float size = 9f;
+
+            float x = track.x + Mathf.Round(track.width * Mathf.Clamp01(fraction));
+
+            Widgets.DrawBoxSolid(
+                new Rect(x - size * 0.5f, track.center.y - size * 0.5f, size, size), palette.Accent);
         }
 
         // ---------------------------------------------------------------------------------------
@@ -501,8 +581,8 @@ namespace Gideon.UIOverhaul.Features.Editor
                         ? palette.Warning
                         : palette.TextDisabled;
 
-                if (EditorParts.Row(view, y, Name(memory), Offset(memory, offset), colour, palette, out row,
-                        EditorParts.DescriptionOf(memory.def)))
+                if (EditorParts.Row(view, y, Name(memory, palette), Offset(memory, offset), colour, palette,
+                        out row, EditorParts.DescriptionOf(memory.def)))
                     Forget(context, memories, memory);
 
                 y = row.yMax + 4f;
@@ -519,9 +599,40 @@ namespace Gideon.UIOverhaul.Features.Editor
             return y + EditorParts.ControlHeight + EditorParts.BlockGap - view.y;
         }
 
-        private static string Name(Thought_Memory memory)
+        /// <summary>
+        /// The memory's label, and who it is about when it is about somebody.
+        ///
+        /// <b>The label alone is not enough for a social memory.</b> Three rows reading Chitchat and two reading
+        /// Slighted say nothing about which relationship is in trouble, and the whole reason to open this panel
+        /// on a miserable colonist is to find out. RimWorld's own needs tab has the same gap; it groups
+        /// identical thoughts into one line and counts them instead, which loses the same information.
+        ///
+        /// <b>Read off <c>otherPawn</c>, which lives on <c>Thought_Memory</c> rather than on the social
+        /// subclass.</b> So a memory of somebody that is not a social thought -- a colonist killed, a prisoner
+        /// sold -- names them too, which is the same question asked about a different row.
+        ///
+        /// Dimmed rather than separated by a glyph. The row already tells the eye where a field ends by changing
+        /// color, on its right-hand side, and doing it the same way twice is one rule instead of two.
+        /// </summary>
+        private static string Name(Thought_Memory memory, UIColorPaletteDef palette)
         {
-            return UIGuard.Try<string>("Editor.MemoryLabel", () => memory.LabelCap, "?", null);
+            return UIGuard.Try<string>("Editor.MemoryLabel", () =>
+            {
+                string label = memory.LabelCap;
+
+                Pawn other = memory.otherPawn;
+
+                if (other == null)
+                    return label;
+
+                string who = other.LabelShort.NullOrEmpty() ? other.LabelCap : other.LabelShort;
+
+                if (who.NullOrEmpty())
+                    return label;
+
+                return label + "  <color=#" + ColorUtility.ToHtmlStringRGB(palette.TextSecondary) + ">" + who
+                       + "</color>";
+            }, "?", null);
         }
 
         /// <summary>The mood offset and how long is left, which is the pair that says whether to bother.</summary>

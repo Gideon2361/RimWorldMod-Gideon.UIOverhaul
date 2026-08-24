@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Shared;
@@ -48,6 +49,12 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private const float ProgressHeight = 3f;
 
+        /// <summary>How strong the green wash on a finished card is. Matches the work panel's own marking.</summary>
+        private const float DoneWashAlpha = 0.14f;
+
+        /// <summary>How strong the fill across the card of the project being worked on is.</summary>
+        private const float ProgressFillAlpha = 0.16f;
+
         /// <summary>The round affordance in the top right: the queue number, or the button that puts one there.</summary>
         private const float BadgeSize = 15f;
 
@@ -62,9 +69,16 @@ namespace Gideon.UIOverhaul.Features.Research
         {
             get
             {
-                float line = UIFonts.LineHeightOf(GameFont.Tiny);
+                // The name is Small and the state row is Tiny, from 2026-08-23: Aaron asked for the name not to
+                // be Tiny, and it is the one string on the card somebody actually reads rather than scans.
+                float line = UIFonts.LineHeightOf(GameFont.Small) + UIFonts.LineHeightOf(GameFont.Tiny);
 
-                return Mathf.Ceil(PadTop + line * 3f + 1f + ProgressHeight + PadTop);
+                // Two rows, not three, from 2026-08-23: the name on one line and the state beside the cost on
+                // the next. It was three because the name wrapped, and a name allowed two lines takes two
+                // whether it needs them or not -- so every node in the game was as tall as the longest name in
+                // it. Ellipsing the name instead makes the card a fixed two rows and the whole canvas a third
+                // shorter. The width went up to pay for it; see ResearchGraph.NodeWidth.
+                return Mathf.Ceil(PadTop + line + 1f + ProgressHeight + PadTop);
             }
         }
 
@@ -83,11 +97,23 @@ namespace Gideon.UIOverhaul.Features.Research
             bool actionable = ResearchActions.Actionable(node);
             Color accent = ResearchFacts.ColorFor(state, palette, project.knowledgeCategory);
 
-            Body(rect, palette, state, selected, over, dimmed);
-            Stripe(rect, accent, state, dimmed);
+            Body(rect, project, palette, state, selected, over, dimmed);
+
+            // The left edge carries the theme, not the state, from 2026-08-23 on Aaron's instruction. It was the
+            // state, and the argument for that was that the stripe and the border were two channels -- but the
+            // state is now spelled out in words on the second row of every node, which is a better channel than
+            // a colour nobody has a key for. The theme has no other home on the node at all.
+            //
+            // Read from the taxonomy rather than from the group, so the colour means the same thing under all
+            // three groupings instead of vanishing whenever the blocks are cut some other way.
+            Stripe(rect, ResearchBands.ColorFor(ResearchTaxonomy.BandOf(project), palette), state, dimmed);
 
             float x = rect.x + PadLeft;
             float width = rect.width - PadLeft - PadRight;
+
+            // Two fonts, two line heights. The name reads at Small and the state row scans at Tiny, so a single
+            // "line" local would have put one of them in the other's space.
+            float nameLine = UIFonts.LineHeightOf(GameFont.Small);
             float line = UIFonts.LineHeightOf(GameFont.Tiny);
 
             Color ink = Ink(palette, state, dimmed);
@@ -95,16 +121,14 @@ namespace Gideon.UIOverhaul.Features.Research
             // The name gives up its top right corner whenever the badge is there, so a queue number never lands
             // on top of a letter.
             float reserved = queuePlace > 0 || (over && actionable) ? BadgeSize - 4f : 0f;
-            Rect nameBand = new Rect(x, rect.y + PadTop, width - reserved, line * 2f);
+            Rect nameBand = new Rect(x, rect.y + PadTop, width - reserved, nameLine);
 
             if (state == ResearchState.Unknown)
-                ResearchMask.Draw(new Rect(nameBand.x, nameBand.y, nameBand.width, line),
-                    ResearchMask.Key(project, "name"), palette.Mood);
+                ResearchMask.Draw(nameBand, ResearchMask.Key(project, "name"), palette.Mood, GameFont.Small);
             else
                 Name(nameBand, project.LabelCap.ToString(), ink);
 
-            Figures(new Rect(x, rect.y + PadTop + line * 2f, width, line), node, project, state, palette,
-                dimmed);
+            Figures(new Rect(x, rect.y + PadTop + nameLine, width, line), node, project, state, palette, dimmed);
 
             Progress(new Rect(x, rect.yMax - PadTop - ProgressHeight, width, ProgressHeight), project, palette,
                 accent, state);
@@ -125,61 +149,98 @@ namespace Gideon.UIOverhaul.Features.Research
         /// and a bare point total answers nothing. Days at the colony's own rate answers the question somebody
         /// actually has.
         /// </summary>
+        /// <summary>
+        /// The node's second row: what to do about it on the left, what it costs on the right.
+        ///
+        /// <b>Rebuilt on 2026-08-23 to the mockup's shape.</b> It used to be the cost on the left with an icon, a
+        /// short mark and a tick collected on the right, and three of those four said the same thing in different
+        /// alphabets: a green tick, a success-coloured icon and a mark all meaning finished. Worse, the states a
+        /// player can act on -- ready, researching, finished -- printed nothing at all, on the reasoning that a
+        /// node you can start needs no caption. Aaron asked for the words back and he was right. A caption slot
+        /// that is blank on some nodes and full on others reads as missing information, and a column of nodes
+        /// cannot be scanned for Available if Available is blank.
+        ///
+        /// So: the state in words, in the state's colour, on the left. The cost, muted, on the right. Nothing
+        /// else. The icon and the tick are gone -- the word does their job and does it in one alphabet.
+        ///
+        /// <b>The state gets the room and the cost gets what is left.</b> The cost is four digits and a day count
+        /// at its longest and never needs ellipsing; the state is anything from "Done" to "Needs microelectronics"
+        /// and always does. Measuring the cost and giving the state the remainder is the only division of a
+        /// hundred and ninety pixels that cannot clip the number.
+        /// </summary>
         private static void Figures(Rect band, ResearchNode node, ResearchProjectDef project,
             ResearchState state, UIColorPaletteDef palette, bool dimmed)
         {
-            Texture2D icon = state == ResearchState.Unknown ? null : ResearchFacts.IconFor(state);
-            string mark = state == ResearchState.Unknown ? null : ResearchFacts.MarkFor(state, project);
-            Color flag = ResearchFacts.ColorFor(state, palette, project.knowledgeCategory);
+            Color flag = dimmed
+                ? palette.TextDisabled
+                : ResearchFacts.ColorFor(state, palette, project.knowledgeCategory);
 
-            float right = band.xMax;
-
-            if (icon != null)
-            {
-                Color previous = GUI.color;
-                Rect at = new Rect(right - IconSide(band), band.y + (band.height - IconSide(band)) * 0.5f, IconSide(band),
-                    IconSide(band));
-
-                GUI.color = dimmed ? palette.TextDisabled : flag;
-                GUI.DrawTexture(at, icon);
-                GUI.color = previous;
-
-                right = at.x - 2f;
-            }
-
-            if (mark != null)
-            {
-                float markWidth = TabParts.PillWidth(mark);
-
-                TabParts.RowLabel(new Rect(right - markWidth, band.y, markWidth, band.height), mark,
-                    dimmed ? palette.TextDisabled : flag, GameFont.Tiny);
-
-                right = right - markWidth - 2f;
-            }
-
-            if (state == ResearchState.Finished && ResearchGlyphs.Tick != null)
-            {
-                Color previous = GUI.color;
-
-                GUI.color = palette.Success;
-                GUI.DrawTexture(new Rect(right - 10f, band.center.y - 5f, 10f, 10f), ResearchGlyphs.Tick);
-                GUI.color = previous;
-
-                right -= 12f;
-            }
-
-            Rect figures = new Rect(band.x, band.y, Mathf.Max(0f, right - band.x), band.height);
-
+            // The cost is masked on an undiscovered node for the same reason its name is: knowing a project is
+            // eight thousand points is knowing something about it.
             if (state == ResearchState.Unknown)
-                ResearchMask.Draw(figures, ResearchMask.Key(project, "cost"), palette.TextDisabled);
-            else
-                TabParts.RowLabel(figures, Cost(project), palette.TextDisabled, GameFont.Tiny);
-        }
+            {
+                // A third, not a half. The masked cost is a run of glyphs that means nothing, and "Not yet
+                // understood" is the one readable thing on the card -- so the readable half gets the room.
+                float half = band.width * 0.32f;
 
-        /// <summary>A square the height of the line, for an icon sitting in it.</summary>
-        private static float IconSide(Rect band)
-        {
-            return Mathf.Min(band.height, 11f);
+                ResearchMask.Draw(new Rect(band.xMax - half, band.y, half, band.height),
+                    ResearchMask.Key(project, "cost"), palette.TextDisabled);
+
+                TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - half - 4f), band.height),
+                    ResearchFacts.ChipFor(node, state), flag, GameFont.Tiny);
+
+                return;
+            }
+
+            string cost = Cost(project);
+
+            // Measured with CalcSize and not UIRichText.WidthOf, which adds the thirteen pixel ellipsis reserve.
+            // The cost is right-aligned, four digits at its longest and never ellipsed, so that reserve was
+            // thirteen pixels taken from the state caption beside it -- and the caption is the half that gets cut
+            // off. "Needs Study of necromancy" came out as "Needs Study o..." for exactly this.
+            float costWidth = cost.NullOrEmpty() ? 0f : Measure(cost);
+
+            if (costWidth > 0f)
+            {
+                GameFont font = Text.Font;
+                TextAnchor anchor = Text.Anchor;
+                Color previous = GUI.color;
+
+                try
+                {
+                    Text.Font = GameFont.Tiny;
+                    Text.Anchor = TextAnchor.MiddleRight;
+                    GUI.color = palette.TextDisabled;
+
+                    Widgets.Label(new Rect(band.xMax - costWidth, band.y, costWidth, band.height), cost);
+                }
+                finally
+                {
+                    GUI.color = previous;
+                    Text.Anchor = anchor;
+                    Text.Font = font;
+                }
+            }
+
+            string chip = ResearchFacts.ChipFor(node, state);
+
+            if (chip.NullOrEmpty())
+                return;
+
+            // Bold for the three states that are about what you can do, plain for the ones explaining why you
+            // cannot. Available and Done are the words somebody scans a column for, and they are short enough
+            // that bold costs them nothing; "Needs intermediate necromancy" is a sentence to read once and it
+            // needs the room more than it needs the weight.
+            // Bold for the three states that are about what you can do, plain for the ones explaining why you
+            // cannot. Available and Done are the words somebody scans a column for, and they are short enough
+            // that bold costs them nothing; "Needs intermediate necromancy" is a sentence to read once and it
+            // needs the room more than the weight.
+            if (state == ResearchState.Ready || state == ResearchState.Finished
+                                             || state == ResearchState.Researching)
+                chip = "<b>" + chip + "</b>";
+
+            TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - costWidth - 6f), band.height),
+                chip, flag, GameFont.Tiny);
         }
 
         /// <summary>
@@ -267,7 +328,8 @@ namespace Gideon.UIOverhaul.Features.Research
         /// A ghost is dashed in the mockup and is drawn faded here instead: IMGUI has no dashed rectangle, and
         /// faking one out of a dozen box fills per node is a lot of draw calls to say what a flat alpha says.
         /// </summary>
-        private static void Body(Rect rect, UIColorPaletteDef palette, ResearchState state, bool selected,
+        private static void Body(Rect rect, ResearchProjectDef project, UIColorPaletteDef palette,
+            ResearchState state, bool selected,
             bool over, bool dimmed)
         {
             Color inside = state == ResearchState.Ghost || dimmed
@@ -287,7 +349,28 @@ namespace Gideon.UIOverhaul.Features.Research
                             new Color(palette.Success.r, palette.Success.g, palette.Success.b, 0.5f))
                         : palette.Border;
 
-            UIElementPainter.OutlineRounded(rect, border, inside, selected ? 2f : 1f);
+            UIElementPainter.Outline(rect, border, inside, selected ? 2f : 1f);
+
+            // A finished project gets the diagonal stripe wash in green -- the same card art the work grid and the
+            // work panel use to mark a cell, so a done card is recognisable as done from the corner of the eye
+            // rather than by reading the word on it. Skipped when the node is dimmed, since a washed card that is
+            // also faded reads as neither.
+            if (state == ResearchState.Finished && !dimmed)
+                UIElementPainter.PaintStripeWash(rect.ContractedBy(1f),
+                    new Color(palette.Success.r, palette.Success.g, palette.Success.b, DoneWashAlpha));
+
+            // The project actually being worked on fills from the left as it goes. The thin bar at the foot of
+            // every card gives the exact fraction; this is the one that can be found across a canvas of three
+            // hundred without hunting for a three pixel line.
+            if (state == ResearchState.Researching && !dimmed)
+            {
+                float percent = Mathf.Clamp01(project.ProgressPercent);
+
+                if (percent > 0f)
+                    Widgets.DrawBoxSolid(new Rect(rect.x + 1f, rect.y + 1f, (rect.width - 2f) * percent,
+                            rect.height - 2f),
+                        new Color(palette.Accent.r, palette.Accent.g, palette.Accent.b, ProgressFillAlpha));
+            }
         }
 
         private static void Stripe(Rect rect, Color accent, ResearchState state, bool dimmed)
@@ -296,7 +379,12 @@ namespace Gideon.UIOverhaul.Features.Research
                 ? new Color(accent.r, accent.g, accent.b, 0.35f)
                 : accent;
 
-            Widgets.DrawBoxSolid(new Rect(rect.x + 1f, rect.y + 4f, StripeWidth, rect.height - 8f), color);
+            // The whole edge, flush to the corners, on Aaron's instruction of 2026-08-23. It was inset four
+            // pixels top and bottom, which made it a dash floating beside the card rather than part of it; the
+            // mockup drew this as the card's left border and that is what it should be. Painted over the outline
+            // on that edge deliberately -- a band colour interrupted by two pixels of grey at each corner reads
+            // as a mistake.
+            Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, StripeWidth + 1f, rect.height), color);
         }
 
         private static Color Ink(UIColorPaletteDef palette, ResearchState state, bool dimmed)
@@ -322,6 +410,28 @@ namespace Gideon.UIOverhaul.Features.Research
         /// Wrapped rather than ellipsed on one line, because a two-word project name is the common case and
         /// "Microelectronics ba..." is worse than two short lines.
         /// </summary>
+        /// <summary>
+        /// How wide a string draws at the node font, with no ellipsis reserve.
+        ///
+        /// For text that is right-aligned and never shortened, where <c>UIRichText.WidthOf</c>'s thirteen pixel
+        /// reserve would be room taken from whatever sits beside it.
+        /// </summary>
+        private static float Measure(string text)
+        {
+            GameFont font = Text.Font;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+
+                return Text.CalcSize(text).x;
+            }
+            finally
+            {
+                Text.Font = font;
+            }
+        }
+
         private static void Name(Rect band, string text, Color color)
         {
             GameFont font = Text.Font;
@@ -330,11 +440,16 @@ namespace Gideon.UIOverhaul.Features.Research
 
             try
             {
-                Text.Font = GameFont.Tiny;
-                Text.WordWrap = true;
+                Text.Font = GameFont.Small;
+
+                // Never wrapped, from 2026-08-23. A wrapping name forces every node in the game to be as tall
+                // as the longest name in it, and the second line landed on the row beneath whenever the reserve
+                // was wrong -- which is the truncation family this mod has now hit six times. One line with an
+                // ellipsis is a fixed height, and the full name is in the tooltip and the detail panel.
+                Text.WordWrap = false;
                 GUI.color = color;
 
-                Widgets.Label(band, text);
+                UIRichText.Label(band, text);
             }
             finally
             {

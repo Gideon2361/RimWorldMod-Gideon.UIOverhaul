@@ -24,10 +24,16 @@ namespace Gideon.UIOverhaul.Features.Inspector
     /// touches. The chips are the same shape the mockup asked for, in the position the rest of the game needs
     /// them.
     ///
-    /// <b>No chip opens a window.</b> Health, Gear, Social, Needs, Bio and Log are rebuilt in the pane, and
-    /// everything else -- a workbench's bills, an animal's training, a prisoner's settings, whatever a mod has
-    /// added -- is drawn in the pane too by <see cref="InspectForeignTab"/>, with the pane grown to the size that
-    /// tab asks for. Half the row rendering in place and half popping out was the worst of both.
+    /// <b>Practically no chip opens a window.</b> Health, Gear, Social, Needs, Bio and Log are rebuilt in the
+    /// pane, and everything else -- a workbench's bills, an animal's training, a prisoner's settings, whatever a
+    /// mod has added -- is drawn in the pane too by <see cref="InspectForeignTab"/>, with the pane grown to the
+    /// size that tab asks for. Half the row rendering in place and half popping out was the worst of both.
+    ///
+    /// <b>The exception is a named list, and it has to exist.</b> A handful of tabs are not panels at all: they
+    /// size themselves from the screen, or draw their own chrome, and hosting one does exactly what it asked for
+    /// and covers the map. Those are named in <see cref="InspectTabExclusions"/> and keep their own window. It
+    /// is a list rather than a test because there is nothing to test -- a tab that wants the screen and a tab
+    /// that is genuinely large make the same request of us.
     /// </summary>
     internal static class InspectTabStrip
     {
@@ -178,7 +184,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
                 InspectBody body;
 
-                if (!Ours(tab, out body))
+                // An excluded tab is open in its own window, so there is nothing here for the pane to draw and
+                // nothing for it to grow to. Answering null is the whole of the exclusion as far as the pane,
+                // the metrics and the width patch are concerned -- all three ask this one question.
+                if (!Ours(tab, out body) && !InspectTabExclusions.Excluded(tab))
                     found = tab;
 
                 break;
@@ -249,11 +258,24 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     x -= SlotWidth;
                 }
 
-                // Nothing opens a window any more. A tab of ours is drawn by the pane's body; anybody else's is
-                // drawn there too, by InspectForeignTab, so the chip row behaves the same way all the way along
-                // it. DoTabGUI is what is deliberately not called here.
+                // Almost nothing opens a window any more. A tab of ours is drawn by the pane's body; anybody
+                // else's is drawn there too, by InspectForeignTab, so the chip row behaves the same way all the
+                // way along it.
                 if (open && ours)
                     pane.CloseOpenTab();
+
+                // The exception, and the one line of vanilla's DoTabs the rebuild otherwise drops. A tab on the
+                // exclusion list is one that cannot be a panel -- see InspectTabExclusions -- so it is drawn
+                // where it was built to be drawn. Nothing else here changes: its chip is placed and lit by the
+                // same code as every other, so from the row it behaves identically and only the destination
+                // differs. RecentHeight is vanilla's own companion to this call, and the pane reads it.
+                if (open && !ours && InspectTabExclusions.Excluded(tab))
+                {
+                    UIGuard.Try("Inspector.PopoutTab", tab.DoTabGUI,
+                        "That tab could not be drawn in its own window.");
+
+                    pane.RecentHeight = InspectPaneMetrics.OpenTabRecentHeight;
+                }
             }
 
             if (anyOurs)

@@ -110,7 +110,7 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         private static readonly UITextBoxControl Search = new UITextBoxControl
         {
-            Placeholder = "Search species or names",
+            Placeholder = "Search animals",
             Icon = TexButton.Search,
             MaxLength = 30
         };

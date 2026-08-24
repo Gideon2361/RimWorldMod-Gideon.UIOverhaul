@@ -79,8 +79,10 @@ namespace Gideon.UIOverhaul.Features.Options
             settings.ApplyTheme();
 
             // Written onto defs rather than read where they are used, so a file edited on disk changes nothing
-            // until they are written again. The other features here reload data; this one has to push it.
+            // until they are written again. The other features here reload data; these three have to push it.
             Features.Gravships.GravshipTuning.Apply();
+            Features.Salvage.AncientSalvage.Apply();
+            Features.Mood.MoodFixes.Apply();
         }
 
         /// <summary>

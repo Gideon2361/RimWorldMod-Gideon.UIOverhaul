@@ -55,7 +55,10 @@ namespace Gideon.UIOverhaul.Features.Bills
             if (bill != null && bill.GetStoreMode() == BillStoreModeDefOf.SpecificStockpile)
                 return height + VisibleRows * RowHeight;
 
-            return height + 34f;
+            // The segments and nothing else. This was 34 pixels taller for a sentence restating whichever
+            // segment was lit, and a height left behind after the thing it measured is gone is a gap the next
+            // person has to work out the reason for.
+            return height;
         }
 
         internal static void Draw(Rect rect, Bill_Production bill, UIColorPaletteDef palette)
@@ -111,15 +114,9 @@ namespace Gideon.UIOverhaul.Features.Bills
                 return;
             }
 
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-
-            Widgets.Label(new Rect(rect.x, y, rect.width, 34f),
-                mode == BillStoreModeDefOf.DropOnFloor
-                    ? "Products are left on the floor where they are made."
-                    : "Products are hauled to the best stockpile that accepts them.");
-
-            GUI.color = previous;
+            // The chosen segment is the answer, so nothing is written under it. "Products are hauled to the best
+            // stockpile that accepts them" is the segment labelled Best stockpile, in a sentence. Removed
+            // 2026-08-23 on Aaron's instruction; see HeightFor, which no longer reserves the room.
         }
 
         /// <summary>

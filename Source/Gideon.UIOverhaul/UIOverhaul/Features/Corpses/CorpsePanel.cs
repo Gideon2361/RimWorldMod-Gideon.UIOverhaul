@@ -383,13 +383,33 @@ namespace Gideon.UIOverhaul.Features.Corpses
         /// <summary>Between the switches, and after the last of them. Wide enough that they read as separate.</summary>
         private const float ToggleGap = 10f;
 
+        /// <summary>
+        /// The two build buttons, each the width its own label needs.
+        ///
+        /// <b>Measured, not halved or guessed.</b> These were literals -- 108 and 132 with the second at x plus
+        /// 114 -- and "Build a sarcophagus" came out as "Build a sarcopha...". This is the same fault the two
+        /// action buttons on the bodies side of this very tab already had, and the same fix: a button takes the
+        /// width of the words in it. The Filters button four lines up was already doing it.
+        ///
+        /// Nothing downstream depends on where this ends: the readouts measure leftwards from the bar's right
+        /// edge, so the pair can be as wide as its labels want.
+        /// </summary>
         private static void BuildButtons(Rect bar, float x, UIColorPaletteDef palette)
         {
-            if (TabParts.Button(new Rect(x, bar.y + 4f, 108f, ToolbarHeight - 8f), "Build a grave", palette,
-                    true, false, "Closes the tab with the grave tool in hand."))
+            const string grave = "Build a grave";
+            const string sarcophagus = "Build a sarcophagus";
+            const float gap = 6f;
+
+            float height = ToolbarHeight - 8f;
+            float width = TabParts.ButtonWidth(grave);
+
+            if (TabParts.Button(new Rect(x, bar.y + 4f, width, height), grave, palette, true, false,
+                    "Closes the tab with the grave tool in hand."))
                 GraveActions.Build("Grave");
 
-            if (TabParts.Button(new Rect(x + 114f, bar.y + 4f, 132f, ToolbarHeight - 8f), "Build a sarcophagus",
+            x += width + gap;
+
+            if (TabParts.Button(new Rect(x, bar.y + 4f, TabParts.ButtonWidth(sarcophagus), height), sarcophagus,
                     palette, true, false, "Closes the tab with the sarcophagus tool in hand."))
                 GraveActions.Build("Sarcophagus");
         }

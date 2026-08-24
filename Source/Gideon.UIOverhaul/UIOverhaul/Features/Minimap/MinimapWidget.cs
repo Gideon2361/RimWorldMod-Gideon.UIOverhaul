@@ -199,7 +199,8 @@ namespace Gideon.UIOverhaul.Features.Minimap
             if (current == null)
                 return;
 
-            if (current.type == EventType.MouseDown && current.button == 0 && header.Contains(current.mousePosition))
+            if (current.type == EventType.MouseDown && current.button == 0 && !Covered()
+                && header.Contains(current.mousePosition))
             {
                 dragging = true;
                 dragOffset = current.mousePosition - new Vector2(panel.x, panel.y);
@@ -417,10 +418,56 @@ namespace Gideon.UIOverhaul.Features.Minimap
                     continue;
                 }
 
+                Color color = ColorOf(marker.Kind);
+
+                Bloom(point, dot, color);
+
                 Widgets.DrawBoxSolid(
                     new Rect(point.x - dot * 0.5f, point.y - dot * 0.5f, dot, dot),
-                    ColorOf(marker.Kind));
+                    color);
             }
+        }
+
+        /// <summary>Around every dot: two discs, widening and fading. Aaron's slight bloom, 2026-08-23.</summary>
+        private static readonly float[] DotBloomScale = { 3.2f, 2.0f };
+
+        private static readonly float[] DotBloomAlpha = { 0.10f, 0.16f };
+
+        /// <summary>
+        /// A faint halo under a pawn's dot, in the pawn's own colour.
+        ///
+        /// <b>Why a dot needs one.</b> A marker is two or three pixels on a panel of baked terrain, and terrain
+        /// has texture -- gravel, rubble, a stone floor all put light pixels next to dark ones. A two pixel dot
+        /// competes with that on equal terms and loses. The halo gives it a few pixels of its own colour to sit
+        /// in, so the eye finds people before it finds ground.
+        ///
+        /// <b>In the marker's colour, not a fixed one.</b> The predator bloom is always red because it says one
+        /// specific thing -- something here hunts. This one says only "a pawn is here", so it carries whatever the
+        /// dot carries and adds no meaning of its own. A blue haze is more colonists, not a different fact about
+        /// them.
+        ///
+        /// <b>Two discs rather than the predator's three, at lower alphas.</b> Every pawn on the map gets this,
+        /// where the predator bloom marks a handful; the same weight applied to forty markers would be a wash of
+        /// colour rather than forty pawns. It is meant to be noticed only by its absence.
+        /// </summary>
+        private static void Bloom(Vector2 point, float dot, Color color)
+        {
+            if (UIShapes.Disc == null)
+                return;
+
+            Color previous = GUI.color;
+
+            for (int i = 0; i < DotBloomScale.Length; i++)
+            {
+                float size = dot * DotBloomScale[i];
+
+                GUI.color = new Color(color.r, color.g, color.b, DotBloomAlpha[i]);
+
+                GUI.DrawTexture(new Rect(point.x - size * 0.5f, point.y - size * 0.5f, size, size),
+                    UIShapes.Disc);
+            }
+
+            GUI.color = previous;
         }
 
         /// <summary>Under the paw: three discs, widening and fading. Aaron's faint red bloom, 2026-08-22.</summary>
@@ -547,11 +594,32 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// view around never completes one, the same reason the schedule strip reads the mouse directly. The
         /// event is consumed either way, so a click meant for the minimap never also lands on the map behind it.
         /// </summary>
+        /// <summary>
+        /// Whether a window is drawn over the cursor, in which case the minimap must not react to input at all.
+        ///
+        /// <b>This is why dragging a research queue row used to pan the camera.</b> The widget is drawn from
+        /// <c>MapInterfaceOnGUI_AfterMainTabs</c> -- after the main tab windows, so it paints over them -- and both
+        /// of its input handlers tested a bare <c>Rect.Contains</c>. Any drag whose screen position happened to
+        /// fall inside the minimap moved the camera, whatever was on top of it, so reordering the queue in the
+        /// research tab scrolled the map instead. Found by Aaron on 2026-08-23.
+        ///
+        /// <c>Rect.Contains</c> is a geometry test and nothing more. <c>Mouse.IsOver</c> is the one that also asks
+        /// whether input is blocked, and reading raw events -- which this widget does for the good reason written
+        /// on <see cref="HandleClicks"/> -- opts out of that half without saying so. So the check is made
+        /// explicitly, with the same call <c>CameraDriver</c> uses for its own <c>mouseCoveredByUI</c>.
+        /// </summary>
+        private static bool Covered()
+        {
+            return UIGuard.Try("Minimap.Covered", () => Find.WindowStack != null
+                                                        && Find.WindowStack.GetWindowAt(
+                                                            UI.MousePositionOnUIInverted) != null, false, null);
+        }
+
         private static void HandleClicks(Rect fitted, Map map, IntVec3 size)
         {
             Event current = Event.current;
 
-            if (current == null || !fitted.Contains(current.mousePosition))
+            if (current == null || Covered() || !fitted.Contains(current.mousePosition))
                 return;
 
             bool pressed = current.type == EventType.MouseDown && current.button == 0;

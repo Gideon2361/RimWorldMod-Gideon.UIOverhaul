@@ -315,13 +315,26 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// </summary>
         internal static AnimalTameOdds TameOdds(Pawn animal)
         {
+            return TameOddsWith(animal, null);
+        }
+
+        /// <summary>
+        /// The same answer for a named handler rather than the best one available.
+        ///
+        /// <b>For a taming bill with a tamer assigned to it,</b> added 2026-08-23. A bill planned around the best
+        /// handler in the colony is planned around somebody who may not be the one doing it, and the chance is
+        /// the whole basis of the bill's minimum-chance guard -- so a bill that names a tamer has to be able to
+        /// ask about that tamer. Null falls back to the colony's best, which is what every readout wants.
+        /// </summary>
+        internal static AnimalTameOdds TameOddsWith(Pawn animal, Pawn handler)
+        {
             AnimalTameOdds odds = new AnimalTameOdds { Chance = -1f };
 
             if (animal == null || animal.Map == null)
                 return odds;
 
             odds.MinSkill = TrainableUtility.MinimumHandlingSkill(animal);
-            odds.Handler = BestHandler(animal.Map);
+            odds.Handler = handler ?? BestHandler(animal.Map);
 
             if (odds.Handler == null)
                 return odds;

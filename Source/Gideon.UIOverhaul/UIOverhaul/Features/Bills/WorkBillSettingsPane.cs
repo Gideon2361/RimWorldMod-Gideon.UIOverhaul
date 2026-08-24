@@ -119,25 +119,12 @@ namespace Gideon.UIOverhaul.Features.Bills
             if (wanted != radius)
                 bill.ingredientSearchRadius = wanted;
 
-            y += 30f;
-
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-
-            string note = radius >= 999
-                ? "The whole map. A crafter may walk to the far corner for one item."
-                : "Ingredients further than " + radius + " tiles away are ignored.";
-
-            // Measured rather than assumed. This was a fixed 32 with a 36 advance, and the two line case needed
-            // more than that, so the second line landed on the WORKER heading below it. Asking for the height is
-            // the only version of this that cannot be wrong at some string length.
-            float noteHeight = Text.CalcHeight(note, inner.width);
-
-            Widgets.Label(new Rect(inner.x, y, inner.width, noteHeight), note);
-
-            GUI.color = previous;
-
-            y += noteHeight + 10f;
+            // No sentence under the number saying what the number means. It read "Ingredients further than 30
+            // tiles away are ignored", which is the word "Radius" and the figure 30 spelled out again, and it
+            // cost two lines of a pane that has to hold the whole bill. Removed 2026-08-23 on Aaron's
+            // instruction. The one thing the line said that the box does not is that 999 reaches the whole map,
+            // and that belongs on the box, not under it.
+            y += 40f;
 
             Heading(inner, ref y, "OUTPUT");
 
@@ -191,16 +178,11 @@ namespace Gideon.UIOverhaul.Features.Bills
             if (low != range.min || high != range.max)
                 bill.allowedSkillRange = new IntRange(Mathf.Min(low, high), Mathf.Max(low, high));
 
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-
-            Widgets.Label(new Rect(inner.x, y + 62f, inner.width, 18f),
-                bill.recipe.workSkill.LabelCap + " between " + bill.allowedSkillRange.min + " and "
-                + bill.allowedSkillRange.max);
-
-            GUI.color = previous;
-
-            y += 84f;
+            // "Cooking between 0 and 20" was the two boxes above it read back in a sentence, and at the pane's
+            // width it truncated as well. Removed 2026-08-23 on Aaron's instruction. The skill the range applies
+            // to is the only part the boxes do not say, and Min skill sitting under a WORKER heading in a recipe's
+            // own editor is not ambiguous about which skill it means.
+            y += 66f;
         }
 
         /// <summary>

@@ -316,7 +316,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// Extreme leads because <see cref="InspectPaneParts.Need"/> draws the first tick heavier than the rest,
         /// and extreme is the one there is no coming back from.
         /// </summary>
-        private static float[] MoodTicks(Pawn pawn)
+        internal static float[] MoodTicks(Pawn pawn)
         {
             return UIGuard.Try("Inspector.MoodTicks", () =>
             {
@@ -335,7 +335,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>Mood read against this pawn's own thresholds rather than against a flat percentage.</summary>
-        private static Color MoodColor(Pawn pawn, float level, UIColorPaletteDef palette)
+        internal static Color MoodColor(Pawn pawn, float level, UIColorPaletteDef palette)
         {
             return UIGuard.Try("Inspector.MoodColor", () =>
             {
@@ -730,6 +730,20 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <summary>
         /// Where an animal is allowed, who it answers to and how it is treated, using the same readers the
         /// animals tab uses so the two cannot word the same fact differently.
+        ///
+        /// <b>Area and pen are set from here as well as read, asked for on 2026-08-24.</b> Both go through the
+        /// controls the animals tab already uses -- <c>PawnAreas.Choose</c> and
+        /// <c>AnimalGroupActions.ChoosePenFor</c> -- so an area set from the pane and one set from the tab are
+        /// the same act, and neither can drift from the other. Selecting the animal is already the fastest way to
+        /// find it, and having to open a tab afterwards to act on what the pane just told you was the gap.
+        ///
+        /// <b>The area row is a plain fact when the animal cannot take one,</b> with <c>PawnAreas.Reason</c> in
+        /// the tooltip. A menu that opens onto a setting the game will refuse is worse than a row that says why
+        /// it is not offering one -- and for livestock that reason is usually the pen row directly below.
+        ///
+        /// <b>Master is left alone.</b> It was not asked for, and it is the one of the three that changes what a
+        /// colonist does rather than where an animal goes: a master is a bonded handler, and reassigning one from
+        /// a passing glance at the pane is a heavier act than it looks.
         /// </summary>
         private static float AnimalAssignment(Rect view, float y, Pawn animal, UIColorPaletteDef palette)
         {
@@ -738,9 +752,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             y = InspectPaneParts.Cap(view, y, "Assignment", null, palette);
 
-            y = InspectPaneParts.Fact(view, y, "Area",
+            bool areas = UIGuard.Try("Inspector.AnimalAreaAssignable", () => PawnAreas.Assignable(animal), false,
+                null);
+
+            y = InspectPaneParts.Choice(view, y, "Area",
                 UIGuard.Try("Inspector.AnimalArea", () => PawnAreas.Label(animal), null, null),
-                palette.TextPrimary, palette);
+                areas ? palette.TextPrimary : palette.TextDisabled, palette,
+                areas ? (System.Action) (() => PawnAreas.Choose(animal)) : null,
+                areas ? null : UIGuard.Try("Inspector.AnimalAreaReason", () => PawnAreas.Reason(animal), null,
+                    null));
 
             Pawn master = animal.playerSettings.Master;
 
@@ -751,9 +771,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
             CompAnimalPenMarker pen = UIGuard.Try("Inspector.AnimalPen", () => AnimalFacts.Pen(animal), null, null);
 
             if (animal.Roamer)
-                y = InspectPaneParts.Fact(view, y, "Pen",
+                y = InspectPaneParts.Choice(view, y, "Pen",
                     pen != null && pen.parent != null ? pen.parent.LabelShortCap.ToString() : "none",
-                    pen != null ? palette.TextPrimary : palette.Warning, palette);
+                    pen != null ? palette.TextPrimary : palette.Warning, palette,
+                    () => AnimalGroupActions.ChoosePenFor(animal),
+                    "Choose which pen takes this species.\n\nA pen states which species it accepts rather "
+                    + "than which animals, so this allows every " + animal.def.label + " in the pen you pick "
+                    + "and disallows them in the rest. The whole species moves, not just this one.");
 
             y = InspectPaneParts.Fact(view, y, "Medical care",
                 UIGuard.Try("Inspector.AnimalCare", () => animal.playerSettings.medCare.GetLabel(), null, null),

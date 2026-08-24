@@ -314,7 +314,12 @@ namespace Gideon.UIFramework.Controls
             if (before.NullOrEmpty() && !Placeholder.NullOrEmpty() && !wantFocus)
             {
                 GUI.color = palette.TextDisabled;
-                Widgets.Label(inner, Placeholder);
+
+                // Ellipsed and never wrapped. Widgets.Label wraps, and a placeholder one word too long for its
+                // box then puts its second line on top of whatever is under the box -- which reads as two
+                // overlapping controls rather than as a hint short of room. Fifth time this shape has bitten.
+                UIRichText.Label(inner, Placeholder);
+
                 GUI.color = previousColor;
             }
 

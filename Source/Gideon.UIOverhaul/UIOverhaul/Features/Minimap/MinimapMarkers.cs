@@ -150,7 +150,18 @@ namespace Gideon.UIOverhaul.Features.Minimap
             if (player != null && pawn.HostileTo(player))
                 return MinimapMarkerKind.Hostile;
 
-            if (pawn.IsColonist || pawn.IsColonyMech)
+            // A tamed animal counts as ours, from 2026-08-23 on Aaron's instruction. Orange means wildlife --
+            // something the colony does not own and mostly does not care about the position of -- and a muffalo
+            // the player paid for and can order about is not that. The faction is the whole test: taming is what
+            // sets it, and it is what every other part of the game reads to answer the same question.
+            bool ours = pawn.IsColonist || pawn.IsColonyMech
+                        || (pawn.RaceProps != null && pawn.RaceProps.Animal && player != null
+                            && pawn.Faction == player);
+
+            // Downed applies to them too rather than only to colonists. A cow bleeding out reads the same as a
+            // colonist bleeding out, which is what the colour is for, and leaving tamed animals blue while downed
+            // would have invented an inconsistency this did not have before.
+            if (ours)
                 return pawn.Downed ? MinimapMarkerKind.Downed : MinimapMarkerKind.Colonist;
 
             if (pawn.RaceProps != null && pawn.RaceProps.Animal)

@@ -65,6 +65,16 @@ namespace Gideon.UIOverhaul.Features.Editor
         internal bool Permanent;
 
         /// <summary>
+        /// The level of a <c>Hediff_Level</c>, or 0 for everything else.
+        ///
+        /// <b>Severity cannot stand in for it.</b> <c>Hediff_Level.TickInterval</c> assigns severity from the
+        /// level every tick, so the two agree on a pawn that has been ticking -- but the level is the field that
+        /// means something, and a freshly made hediff starts at level 1 whatever severity is set to. Written and
+        /// read separately for that reason.
+        /// </summary>
+        internal int Level;
+
+        /// <summary>
         /// Implants come after missing parts and before everything else, which is the order they have to be
         /// written back in.
         /// </summary>
@@ -316,15 +326,24 @@ namespace Gideon.UIOverhaul.Features.Editor
         }
 
         /// <summary>
-        /// The hediffs that are the body rather than the afternoon.
+        /// Every hediff the pawn has, in the order they have to be written back.
         ///
-        /// <b>Four categories, in the order they have to be written back.</b> Missing parts first, because a part
-        /// cannot be missing after something has been installed in it. Implants second, since installing one
-        /// restores whatever it needs. Scars and chronic conditions last, since they sit on parts the first two
+        /// <b>Everything travels, from 2026-08-23.</b> This used to keep only what it judged durable -- implants,
+        /// missing parts, scars, chronic conditions -- and drop fresh wounds, diseases, blood loss and addictions
+        /// on the reasoning that nobody exporting a character means to export the gunshot that was still bleeding.
+        /// Aaron overruled it, and the argument he gave is the right one: <b>the editor can already delete
+        /// anything before saving</b>, so a filter here is the mod deciding for the player something the player
+        /// has a control for. It also silently lost anything the rule had never heard of -- One with Death's
+        /// control expansion among them, which is exactly the kind of thing a character is.
+        ///
+        /// <b>The ordering still matters and is all that is left of the categories.</b> Missing parts first,
+        /// because a part cannot be missing after something has been installed in it. Implants second, since
+        /// installing one restores whatever it needs. Everything else last, since it sits on parts the first two
         /// have already settled.
         ///
         /// Also used as the snapshot that makes applying a template's health reversible: the same reader runs over
-        /// the target before it is overwritten, and the undo entry writes that back.
+        /// the target before it is overwritten, and the undo entry writes that back. That got more faithful with
+        /// this change rather than less, since the snapshot now covers what it used to skip.
         /// </summary>
         internal static List<TemplateHediff> Durable(Pawn pawn)
         {
@@ -346,9 +365,6 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                     int order = Category(hediff);
 
-                    if (order < 0)
-                        continue;
-
                     found.Add(new TemplateHediff
                     {
                         DefName = hediff.def.defName,
@@ -358,6 +374,7 @@ namespace Gideon.UIOverhaul.Features.Editor
                         PartIndex = IndexOf(pawn, hediff.Part),
                         Severity = hediff.Severity,
                         Permanent = hediff is Hediff_Injury && hediff.IsPermanent(),
+                        Level = hediff is Hediff_Level levelled ? levelled.level : 0,
                         Order = order
                     });
                 }
@@ -369,10 +386,11 @@ namespace Gideon.UIOverhaul.Features.Editor
         }
 
         /// <summary>
-        /// Which of the four durable categories a hediff belongs to, or -1 for the ones that do not travel.
+        /// The write order for a hediff. Never refuses one any more.
         ///
-        /// The return value doubles as the write order, which is why it is a number rather than an enum: there is
-        /// exactly one consumer and it needs it sorted.
+        /// The return value is the sort key, which is why it is a number rather than an enum: there is exactly one
+        /// consumer and it needs it sorted. It used to double as the "does this travel" test by returning -1, and
+        /// that half is gone -- see <see cref="Durable"/> for why everything travels now.
         /// </summary>
         private static int Category(Hediff hediff)
         {
@@ -382,10 +400,7 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (hediff.def.countsAsAddedPartOrImplant || hediff is Hediff_AddedPart)
                 return 1;
 
-            if (hediff is Hediff_Injury)
-                return hediff.IsPermanent() ? 2 : -1;
-
-            return hediff.def.chronic ? 2 : -1;
+            return 2;
         }
 
         /// <summary>
@@ -923,7 +938,15 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                 UIGuard.Try("Template.WriteHediff", () =>
                 {
-                    Hediff made = HediffMaker.MakeHediff(def, pawn, part);
+                    // A levelled hediff refuses a null part in its own PostAdd, and a template written before
+                    // this field existed can carry one. Filled from the body rather than skipped, so an older
+                    // template still imports its psylink or its control expansion.
+                    BodyPartRecord on = HediffPlacement.Resolve(pawn, def, part);
+
+                    if (on == null && HediffPlacement.NeedsPart(def))
+                        return;
+
+                    Hediff made = HediffMaker.MakeHediff(def, pawn, on);
 
                     if (made == null)
                         return;
@@ -931,7 +954,12 @@ namespace Gideon.UIOverhaul.Features.Editor
                     if (entry.Severity > 0f)
                         made.Severity = entry.Severity;
 
-                    pawn.health.AddHediff(made, part);
+                    pawn.health.AddHediff(made, on);
+
+                    // After AddHediff, because SetLevelTo goes through ChangeLevel and clamps against the def --
+                    // and because a level set before the hediff is on the pawn is a level PostAdd may overwrite.
+                    if (entry.Level > 0 && made is Hediff_Level levelled)
+                        levelled.SetLevelTo(entry.Level);
 
                     if (!entry.Permanent)
                         return;

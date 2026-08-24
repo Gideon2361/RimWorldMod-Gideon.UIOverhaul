@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<LanguageData>
+
+  <!--
+    The manage-policies window inherits RimWorld's own layout, which reads both of these through
+    Translate. They are keys rather than literals so a translation of this mod has somewhere to put
+    its version of them.
+  -->
+  <Gideon_WeaponPolicyTitle>Manage weapon policies</Gideon_WeaponPolicyTitle>
+  <Gideon_WeaponPolicyTip>A weapon policy decides which weapons a colonist may carry. Colonists fetch the best weapon their policy allows, and stop picking up ones it does not.\n\nTightening a policy does not disarm anybody: a weapon that is no longer allowed is put down as part of picking up one that is.</Gideon_WeaponPolicyTip>
+
+</LanguageData>

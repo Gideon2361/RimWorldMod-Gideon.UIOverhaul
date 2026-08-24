@@ -117,6 +117,10 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (bill == null)
                 return;
 
+            // Once, here: a bill saved before the meats-only restriction may allow rows the window will no
+            // longer show, and an invisible row cannot be turned off. See HuntingBill.ConfineToMeat.
+            bill.ConfineToMeat();
+
             Name.Text = bill.label ?? string.Empty;
             Target.Text = bill.targetCount.ToString();
             Resume.Text = bill.resumeAt < 0 ? string.Empty : bill.resumeAt.ToString();
@@ -404,7 +408,8 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (bill.filter == null)
                 bill.filter = new ThingFilter();
 
-            ThingFilterUI.DoThingFilterConfigWindow(rect, filterState, bill.filter, null, 8);
+            // The meat universe as the parent, so the tree opens on Meat and nothing else can be ticked.
+            ThingFilterUI.DoThingFilterConfigWindow(rect, filterState, bill.filter, HuntingBill.Meats, 8);
         }
 
         /// <summary>

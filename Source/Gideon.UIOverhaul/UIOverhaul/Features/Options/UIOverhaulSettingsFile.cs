@@ -388,6 +388,61 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool autoCutBlightedPlants = true;
 
         /// <summary>
+        /// Whether finishing a research project reports itself as a letter instead of a popup.
+        ///
+        /// <b>On by default, on Aaron's instruction of 2026-08-23.</b> The completion popup is a modal dialog: it
+        /// takes the keyboard, it stops the game responding to anything else until somebody dismisses it, and it
+        /// arrives at a moment the player did not pick -- which for a colony running three benches is several
+        /// times a day, often in the middle of a raid. Nothing in it is urgent. It names the project that
+        /// finished and then repeats the description already written on that project's own page.
+        ///
+        /// <b>The letter is ours, not the one RimWorld already sends.</b> <c>ResearchManager.FinishProject</c>
+        /// sends a letter only for a project carrying a <c>discoveredLetterTitle</c>, and eight of the game's
+        /// hundred and sixty-four projects carry one. Suppressing the popup and leaning on that would mean the
+        /// other hundred and fifty-six finished in silence, which is a worse outcome than the popup.
+        /// </summary>
+        public bool quietResearchCompletion = true;
+
+        /// <summary>
+        /// What the research canvas is cut into blocks along: "theme", "source" or "tech".
+        ///
+        /// <b>Theme by default,</b> which is the point of the rework: a block per mod answers what a mod added,
+        /// and that is almost never the question somebody opens the research tab with. "source" reproduces the
+        /// layout that shipped in 14162 exactly, for anybody who wants it back.
+        ///
+        /// A word rather than a number so a hand-edited file reads, and an unknown value falls back to theme.
+        /// See <see cref="Research.ResearchGroupings"/>.
+        /// </summary>
+        public string researchGrouping = "theme";
+
+        /// <summary>
+        /// Whether ancient wreckage can be deconstructed for steel and components.
+        ///
+        /// <b>Off by default, because it changes what a generated map is worth.</b> A ruined tank is currently
+        /// scenery you build around: not deconstructible, and shooting it apart leaves nothing. On, it becomes a
+        /// pile of salvage priced off its own footprint. That is a real change to the early game's material
+        /// budget, and a player who wants the wrecks left as obstacles should not have to find the switch to keep
+        /// them.
+        ///
+        /// Named wreckage only, never quest machinery. See <c>AncientSalvage</c> for why that is a list rather
+        /// than a rule.
+        ///
+        /// Asked for on 2026-08-24.
+        /// </summary>
+        public bool salvageAncientWrecks;
+
+        /// <summary>
+        /// Whether sleeping in a barracks costs mood.
+        ///
+        /// The penalty runs from -7 to -1 across the room-quality stages, and it is charged for a decision the
+        /// player made deliberately: a barracks is what an early colony can afford. On, those stages read zero;
+        /// the four stages above them are a bonus rather than a penalty and are left alone.
+        ///
+        /// Asked for on 2026-08-24.
+        /// </summary>
+        public bool barracksAreNeutral;
+
+        /// <summary>
         /// Whether livestock can be given an allowed area, which RimWorld refuses.
         ///
         /// <b>Off by default, and that is not caution for its own sake.</b> This is the only setting in this file
@@ -1175,6 +1230,14 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.penAnimalsUseAreas = value.EqualsIgnoreCase("true");
                             break;
 
+                        case "salvageAncientWrecks":
+                            settings.salvageAncientWrecks = value.EqualsIgnoreCase("true");
+                            break;
+
+                        case "barracksAreNeutral":
+                            settings.barracksAreNeutral = value.EqualsIgnoreCase("true");
+                            break;
+
                         // The same strict reading, and for a stronger reason: this one decides whether a tool
                         // that rewrites pawns exists. A malformed value must leave it absent.
                         case "characterEditor":
@@ -1253,6 +1316,15 @@ namespace Gideon.UIOverhaul.Features.Options
                         // Defaults on, so it is read the other way round: only an explicit false turns it off.
                         case "autoCutBlightedPlants":
                             settings.autoCutBlightedPlants = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "quietResearchCompletion":
+                            settings.quietResearchCompletion = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "researchGrouping":
+                            settings.researchGrouping =
+                                Research.ResearchGroupings.Store(Research.ResearchGroupings.Parse(value));
                             break;
 
                         case "showMineableOverlay":
@@ -1509,6 +1581,9 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
                     writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
+                    writer.WriteElementString("salvageAncientWrecks",
+                        salvageAncientWrecks ? "true" : "false");
+                    writer.WriteElementString("barracksAreNeutral", barracksAreNeutral ? "true" : "false");
                     writer.WriteElementString("characterEditor", characterEditor ? "true" : "false");
                     writer.WriteElementString("musicPlayer", musicPlayer ? "true" : "false");
                     writer.WriteElementString("showMusicWidget", showMusicWidget ? "true" : "false");
@@ -1532,6 +1607,9 @@ namespace Gideon.UIOverhaul.Features.Options
                         siteFadeLandmarkDays.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("autoCutBlightedPlants",
                         autoCutBlightedPlants ? "true" : "false");
+                    writer.WriteElementString("quietResearchCompletion",
+                        quietResearchCompletion ? "true" : "false");
+                    writer.WriteElementString("researchGrouping", researchGrouping ?? "theme");
                     writer.WriteElementString("showMineableOverlay",
                         showMineableOverlay ? "true" : "false");
                     writer.WriteElementString("tradeBeaconRadius",

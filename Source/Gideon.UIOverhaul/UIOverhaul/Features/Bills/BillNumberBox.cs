@@ -2,6 +2,7 @@ using System.Globalization;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Shared;
 using UnityEngine;
 using Verse;
 
@@ -126,21 +127,19 @@ namespace Gideon.UIOverhaul.Features.Bills
             box.Text = value.ToString(CultureInfo.InvariantCulture);
         }
 
+        /// <summary>
+        /// One end of the stepper.
+        ///
+        /// <b>The mod's own button rather than a painted rect,</b> changed on 2026-08-23: Aaron said these did
+        /// not look like buttons and he was right. <c>PaintButton</c> draws a bordered raised box, which is a
+        /// button on its own and is not one sitting against a text field that has the same border and the same
+        /// height -- the row read as three fields, one of which happened to contain a minus sign.
+        /// <c>TabParts.Button</c> is what every button he does recognise is drawn with, so using it makes the
+        /// question moot rather than answering it with another shade of grey.
+        /// </summary>
         private static bool Step(Rect rect, string glyph, UIColorPaletteDef palette)
         {
-            bool over = Mouse.IsOver(rect);
-
-            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = palette.TextPrimary;
-
-            Widgets.Label(rect, glyph);
-
-            Text.Anchor = TextAnchor.UpperLeft;
-
-            return Widgets.ButtonInvisible(rect);
+            return TabParts.Button(rect, glyph, palette);
         }
     }
 }

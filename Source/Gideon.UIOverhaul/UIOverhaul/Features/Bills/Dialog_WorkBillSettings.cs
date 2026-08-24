@@ -108,13 +108,9 @@ namespace Gideon.UIOverhaul.Features.Bills
         {
             Widgets.DrawBoxSolid(rect, GzpPalette.BGD);
 
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-
-            Widgets.Label(new Rect(rect.x + Pad, rect.y + 16f, rect.width - 200f, 24f),
-                "Changes apply as you make them.");
-
-            GUI.color = previous;
+            // No "Changes apply as you make them." Every control in this window has always applied on the spot,
+            // which is what a window with no Cancel button means; the sentence was reassurance about behaviour
+            // nobody had reason to doubt. Removed 2026-08-23 on Aaron's instruction.
 
             if (GzpPalette.GrayButton(new Rect(rect.xMax - Pad - 120f, rect.y + 10f, 120f, 32f), "Done", true, true))
                 Close();

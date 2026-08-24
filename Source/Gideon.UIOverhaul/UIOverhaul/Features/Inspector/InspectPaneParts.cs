@@ -1,7 +1,9 @@
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.Sound;
 
 namespace Gideon.UIOverhaul.Features.Inspector
 {
@@ -165,6 +167,48 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
+        /// A fact you can change: the same row, with a highlight under the pointer and a menu on click.
+        ///
+        /// <b>The same row, and that is the point.</b> A setting the pane already reports is the obvious place to
+        /// change it, and giving it a control of its own would say the fact and the setting were two different
+        /// things sitting next to each other. The block reads identically until the pointer is over a row that
+        /// does something.
+        ///
+        /// <b>A null action leaves it a plain fact,</b> which is what a caller wants for a setting this pawn
+        /// cannot take -- the value still shows and the tooltip can say why, without offering a menu that would
+        /// open onto nothing.
+        /// </summary>
+        internal static float Choice(Rect view, float y, string name, string value, Color color,
+            UIColorPaletteDef palette, System.Action chosen, string tooltip = null)
+        {
+            float before = y;
+
+            y = Fact(view, y, name, value, color, palette);
+
+            // The gap below the row is left out of the hit area: RowGap is what separates this row from the next
+            // one, and a hit area that ate it would light up when the pointer is nearer the row underneath.
+            Rect row = new Rect(view.x, before, view.width, Mathf.Max(0f, y - before - RowGap));
+
+            if (Mouse.IsOver(row))
+            {
+                if (chosen != null)
+                    Widgets.DrawHighlight(row);
+
+                if (!tooltip.NullOrEmpty())
+                    TooltipHandler.TipRegion(row, (TipSignal) tooltip);
+            }
+
+            if (chosen != null && Widgets.ButtonInvisible(row))
+            {
+                SoundDefOf.Click.PlayOneShotOnCamera();
+
+                chosen();
+            }
+
+            return y;
+        }
+
+        /// <summary>
         /// A bare progress track: a sunken lane with a fill in it.
         ///
         /// <b>Drawn rather than handed to <c>UIProgressBarControl</c>,</b> because the ticks and the ranged fill
@@ -206,6 +250,23 @@ namespace Gideon.UIOverhaul.Features.Inspector
         internal static float Need(Rect view, float y, string name, string value, Color valueColor, float fraction,
             Color fill, float[] ticks, string note, UIColorPaletteDef palette)
         {
+            Rect ignored;
+
+            return Need(view, y, name, value, valueColor, fraction, fill, ticks, note, palette, out ignored);
+        }
+
+        /// <summary>
+        /// The same row, reporting the track it drew.
+        ///
+        /// <b>For the character editor, which draws these and then lets you drag them.</b> The track's position
+        /// is a function of the font's line height and this method's own spacing, so an editor that worked it out
+        /// again would be a second copy of this layout that has to be kept in step by hand -- and the first time
+        /// the caption font changed, the bar and the thing you grab would part company. Handing it back is one
+        /// line and cannot drift.
+        /// </summary>
+        internal static float Need(Rect view, float y, string name, string value, Color valueColor, float fraction,
+            Color fill, float[] ticks, string note, UIColorPaletteDef palette, out Rect track)
+        {
             float line = UIFonts.LineHeightOf(GameFont.Tiny);
 
             GameFont previousFont = Text.Font;
@@ -243,6 +304,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
             y += line + 1f;
 
             Rect lane = new Rect(view.x, y, view.width, TrackHeight);
+
+            track = lane;
 
             Track(lane, fraction, fill, palette);
 

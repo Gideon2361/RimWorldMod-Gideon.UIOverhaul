@@ -14,13 +14,24 @@ namespace Gideon.UIOverhaul.Features.Research
         /// <summary>Where it sits in canvas coordinates, which the panel offsets by its own scroll.</summary>
         internal Rect Rect;
 
-        /// <summary>The longest prerequisite chain reaching it <em>inside its own branch</em>. Its column there.</summary>
+        /// <summary>The longest prerequisite chain reaching it <em>inside its own branch</em>.</summary>
         internal int Depth;
+
+        /// <summary>
+        /// Which horizontal slot of its branch it is drawn in.
+        ///
+        /// <b>Not the same as <see cref="Depth"/>, and that is the whole point.</b> Depth is a fact about the
+        /// prerequisite chain and must never be adjusted to suit the layout. A slot is where the drawing puts it,
+        /// and one depth may span several slots when it holds more nodes than a column should be tall -- see
+        /// <c>ResearchGraph.MaxRowsPerColumn</c>. Every node at a given depth still sits to the right of every
+        /// node it depends on, so no arrow ever runs backwards.
+        /// </summary>
+        internal int Slot;
 
         /// <summary>Which branch of its group it belongs to, or -1 when it stands alone.</summary>
         internal int Branch = -1;
 
-        /// <summary>The mod, DLC or Core this project came from. What the blocks are cut along.</summary>
+        /// <summary>The block this project sits in, under whatever grouping is in force.</summary>
         internal ResearchGroup Group;
 
         /// <summary>
@@ -48,13 +59,17 @@ namespace Gideon.UIOverhaul.Features.Research
     }
 
     /// <summary>
-    /// One block of the canvas: everything from one mod, one DLC, or Core.
+    /// One block of the canvas: a theme band, a mod, or a tech level, depending on the grouping.
     ///
-    /// <b>The mod is the clustering signal, and it is the only good one available.</b> A player looking for the
-    /// necromancy chain is looking for a mod's worth of projects, and they were authored together, named together
-    /// and depend on each other. Connected components on their own do not work: RimWorld's own tree is very
-    /// nearly one component, and almost every mod project descends from a core one, so a component-first grouping
-    /// pulls the whole game back into a single block -- which is the wall this replaced.
+    /// <b>The mod used to be the only signal, and it was the wrong axis.</b> That version answered "what did this
+    /// mod add", which is close to never the question somebody opens the research tab with -- and the scan of
+    /// 2026-08-23 measured the cost across 354 projects: it produced 48 blocks, 26 of which held one or two
+    /// projects, while the 23 medical and genetic projects were spread over four of them. Theme bands are the
+    /// default now; grouping by mod is still offered and still exact. See <see cref="ResearchGroupings"/>.
+    ///
+    /// <b>Connected components on their own were never an option.</b> RimWorld's tree is very nearly one
+    /// component and almost every mod project descends from a core one, so a component-first grouping pulls the
+    /// whole game into a single block. Blocks come from the key; components only decide branches inside a block.
     /// </summary>
     internal sealed class ResearchGroup
     {
@@ -63,8 +78,17 @@ namespace Gideon.UIOverhaul.Features.Research
         /// <summary>Where the caption goes, in canvas coordinates.</summary>
         internal Rect Header;
 
-        /// <summary>Load order, so Core comes first and the blocks stay in the order the player sees elsewhere.</summary>
+        /// <summary>Sort key: load order, tech level, or the band's own priority. Lower comes first.</summary>
         internal int Order;
+
+        /// <summary>
+        /// The band, when the grouping is by theme. Null otherwise.
+        ///
+        /// Carried on the group rather than looked up from the label, because a label is a display string and two
+        /// bands could be renamed into the same one; and because the header, the rail, the node stripes and the
+        /// cross-band chips all want the same color from the same place.
+        /// </summary>
+        internal ResearchBand? Band;
 
         internal readonly List<ResearchNode> Nodes = new List<ResearchNode>();
     }
@@ -112,7 +136,29 @@ namespace Gideon.UIOverhaul.Features.Research
     /// </summary>
     internal static class ResearchGraph
     {
-        internal const float NodeWidth = 140f;
+        /// <summary>
+        /// How wide a node is.
+        ///
+        /// <b>Widened from 140 on 2026-08-23.</b> At 140 a name wrapped to two lines, so the card was three rows
+        /// tall and every node in the game was as tall as the longest name in it. At 196 almost every name in
+        /// vanilla and the expansions fits on one line, the card is a fixed two rows, and the canvas comes out
+        /// shorter overall despite the wider cards -- which is the trade Aaron asked for.
+        /// </summary>
+        internal const float NodeWidth = 196f;
+
+        /// <summary>
+        /// The most rows one depth level may occupy before it is split into side-by-side sub-columns.
+        ///
+        /// <b>This is the fix for the pillars.</b> A column is a depth in the prerequisite chain, and a branch of
+        /// forty projects four deep is four columns of ten -- a pillar, taller than the window, with the canvas
+        /// three quarters empty to its right. Nothing can move a node to another depth without lying about what
+        /// it needs, but a depth with ten nodes in it can be drawn as two columns of five side by side: the same
+        /// depth, twice the width, half the height.
+        ///
+        /// Six because that is about a screen's worth of rows at the node height, so a level that fits stays one
+        /// column and only the ones that would run off the bottom get split.
+        /// </summary>
+        private const int MaxRowsPerColumn = 6;
 
         /// <summary>Air between one column's right edge and the next column's left, where the arrows run.</summary>
         private const float ColumnGap = 38f;
@@ -207,10 +253,20 @@ namespace Gideon.UIOverhaul.Features.Research
             return byProject.TryGetValue(project, out node) ? node : null;
         }
 
-        /// <summary>Throws the layout away, so the next ask rebuilds it.</summary>
+        /// <summary>
+        /// Throws the layout away, so the next ask rebuilds it.
+        ///
+        /// The band and source caches go with it. Both are keyed on defs and so cannot go stale during a session
+        /// on their own -- but this is also the call a grouping change makes, and it is the only moment in the
+        /// session when anything is entitled to a fresh answer. Clearing them here rather than on every tab open
+        /// keeps the reclassification of three hundred and fifty projects to the handful of times it is asked for.
+        /// </summary>
         internal static void Invalidate()
         {
             signature = null;
+
+            ResearchTaxonomy.Invalidate();
+            ResearchSourceMarks.Invalidate();
         }
 
         /// <summary>
@@ -267,8 +323,11 @@ namespace Gideon.UIOverhaul.Features.Research
                     ghosts++;
             }
 
+            // The grouping is in here because it decides the blocks, and nothing else in this string would move
+            // if it changed -- so without it, switching from Theme to Source would leave the old canvas up until
+            // something unrelated happened to relay it.
             return all.Count + "/" + ghosts + "/" + Mathf.RoundToInt(ResearchNodeArt.NodeHeight) + "/"
-                   + Mathf.RoundToInt(TargetWidth);
+                   + Mathf.RoundToInt(TargetWidth) + "/" + ResearchGroupings.Store(ResearchGroupings.Current);
         }
 
         /// <summary>
@@ -358,21 +417,35 @@ namespace Gideon.UIOverhaul.Features.Research
         }
 
         /// <summary>
-        /// Sorts every project into its mod's block, in load order.
+        /// Sorts every project into its block, under whatever grouping is in force.
         ///
-        /// Load order rather than alphabetical, so Core is first, the DLCs follow in the order the game lists
-        /// them, and a mod sits where the player already expects it from every other list in the game.
+        /// <b>One key function, three groupings, and no branch in here at all.</b> This method used to read
+        /// <c>modContentPack</c> directly; it now asks <see cref="ResearchGroupings.KeyFor"/> for a label, a sort
+        /// number and possibly a band, which is the only thing that differs between grouping by theme, by mod and
+        /// by tech level. Everything downstream -- branches, columns, rows, arrows, the header rail -- was already
+        /// written against an arbitrary key and did not need touching.
+        ///
+        /// <b>Order first, then label.</b> Order is load order for mods, the game's own enum for tech levels, and
+        /// the classifier's priority order for bands. The label is the tie-break so two blocks that claim the same
+        /// number still come out the same way round in every session.
         /// </summary>
         private static void BuildGroups()
         {
             Dictionary<string, ResearchGroup> byName = new Dictionary<string, ResearchGroup>();
-            List<ModContentPack> running = LoadedModManager.RunningModsListForReading;
+            ResearchGrouping grouping = ResearchGroupings.Current;
 
             for (int i = 0; i < nodes.Count; i++)
             {
                 ResearchNode node = nodes[i];
-                ModContentPack pack = node.Project.modContentPack;
-                string label = pack == null ? "Other" : pack.Name;
+
+                string label;
+                int order;
+                ResearchBand? band;
+
+                ResearchGroupings.KeyFor(node.Project, grouping, out label, out order, out band);
+
+                if (label.NullOrEmpty())
+                    label = "Other";
 
                 ResearchGroup group;
 
@@ -381,7 +454,8 @@ namespace Gideon.UIOverhaul.Features.Research
                     group = new ResearchGroup
                     {
                         Label = label,
-                        Order = pack == null || running == null ? int.MaxValue : running.IndexOf(pack)
+                        Order = order,
+                        Band = band
                     };
 
                     byName[label] = group;
@@ -622,14 +696,12 @@ namespace Gideon.UIOverhaul.Features.Research
         private static void Arrange(Shape shape, float columnStride, float rowStride)
         {
             Dictionary<int, List<ResearchNode>> columns = new Dictionary<int, List<ResearchNode>>();
-            int deepest = 0;
 
             for (int i = 0; i < shape.Members.Count; i++)
             {
                 ResearchNode node = shape.Members[i];
 
                 node.Depth = DepthOf(node);
-                deepest = Mathf.Max(deepest, node.Depth);
 
                 List<ResearchNode> column;
 
@@ -665,13 +737,32 @@ namespace Gideon.UIOverhaul.Features.Research
                     Sweep(columns[order[i]], false);
             }
 
+            // Slots, after the sweeps: a depth level taller than MaxRowsPerColumn becomes several columns side by
+            // side. Done here rather than in the packer because only this method knows which nodes share a depth,
+            // and done after the sweeps rather than before so the chunks inherit the ordering that reduced
+            // crossings -- chopping an ordered list preserves the relative order inside each chunk.
+            int slot = 0;
             int tallest = 0;
 
             for (int i = 0; i < order.Count; i++)
-                tallest = Mathf.Max(tallest, columns[order[i]].Count);
+            {
+                List<ResearchNode> column = columns[order[i]];
 
-            shape.Columns = deepest + 1;
-            shape.Rows = tallest;
+                int subs = Mathf.Max(1, Mathf.CeilToInt(column.Count / (float) MaxRowsPerColumn));
+                int perSub = Mathf.Max(1, Mathf.CeilToInt(column.Count / (float) subs));
+
+                for (int r = 0; r < column.Count; r++)
+                {
+                    column[r].Slot = slot + r / perSub;
+                    column[r].Row = r % perSub;
+                }
+
+                slot += subs;
+                tallest = Mathf.Max(tallest, Mathf.Min(column.Count, perSub));
+            }
+
+            shape.Columns = Mathf.Max(1, slot);
+            shape.Rows = Mathf.Max(1, tallest);
             shape.Width = shape.Columns * columnStride - ColumnGap;
             shape.Height = shape.Rows * rowStride - RowGap;
         }
@@ -764,7 +855,7 @@ namespace Gideon.UIOverhaul.Features.Research
                 {
                     ResearchNode node = shape.Members[m];
 
-                    node.Rect = new Rect(x + node.Depth * columnStride, y + node.Row * rowStride, NodeWidth,
+                    node.Rect = new Rect(x + node.Slot * columnStride, y + node.Row * rowStride, NodeWidth,
                         ResearchNodeArt.NodeHeight);
                 }
 

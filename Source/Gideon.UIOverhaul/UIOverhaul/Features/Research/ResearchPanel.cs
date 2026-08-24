@@ -36,6 +36,42 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private const float QueueWidth = 236f;
 
+        /// <summary>The narrowest the open rail goes, whatever its labels measure.</summary>
+        private const float MinRailWidth = 152f;
+
+        /// <summary>
+        /// The widest it goes. A mod name can be any length at all, and a rail that grew to fit "Vanilla Furniture
+        /// Expanded - Props and Decor" would be half the window; past this the label ellipses and the tooltip has
+        /// the rest.
+        /// </summary>
+        private const float MaxRailWidth = 268f;
+
+        /// <summary>Folded: a column of colour ticks, and the arrow to unfold it.</summary>
+        private const float FoldedRailWidth = 18f;
+
+        /// <summary>Below this the canvas is not worth having, so the rail is dropped rather than the graph.</summary>
+        private const float MinCanvasWidth = 420f;
+
+        /// <summary>
+        /// The text row itself, measured from the font rather than written down.
+        ///
+        /// The rail labels are Small from 2026-08-23, on Aaron's instruction -- they are names to read, not
+        /// figures to scan. A literal 20 suited Tiny and would clip Small, and it is a setting anyway: a player
+        /// who turns tiny text off gets taller lines than either.
+        /// </summary>
+        private static float RailRowHeight
+        {
+            get { return Mathf.Ceil(UIFonts.LineHeightOf(GameFont.Small) + 2f); }
+        }
+
+        /// <summary>
+        /// Air below each rail row, on top of the row and its progress hairline.
+        ///
+        /// Ten rather than five from 2026-08-23: at five, twelve rows of coloured text with a coloured bar under
+        /// each read as one striped block instead of twelve entries. The gap is what makes a row a row.
+        /// </summary>
+        private const float RailRowGap = 10f;
+
         private const float ToolbarHeight = 40f;
 
         private const float ControlHeight = 24f;
@@ -80,11 +116,30 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private static bool showAvailable = true;
         private static bool showLocked = true;
-        private static bool showDone = true;
+
+        /// <summary>
+        /// Off to start with, from 2026-08-23.
+        ///
+        /// A finished project is the one kind you never open this tab to look for: it is done, there is nothing to
+        /// decide about it, and on a mature colony it is most of the canvas. Starting with them hidden means the
+        /// tab opens showing what is left to do, and the toggle is right there for anybody who wants the history.
+        /// </summary>
+        private static bool showDone;
         private static bool showAnomaly = true;
         private static bool overview;
 
         private static readonly HashSet<TechLevel> hiddenLevels = new HashSet<TechLevel>();
+
+        /// <summary>
+        /// Whether the contents rail is folded to a strip of ticks.
+        ///
+        /// Static, and deliberately not in the settings file: it is a this-session working preference like the
+        /// scroll position beside it, and a player who folds it to read one wide chain does not mean to fold it
+        /// for every colony they ever load.
+        /// </summary>
+        private static bool railFolded;
+
+        private static Vector2 railScroll;
 
         /// <summary>Which queue row is being dragged, or -1. Cleared on mouse up wherever that happens.</summary>
         private static int dragFrom = -1;
@@ -163,7 +218,24 @@ namespace Gideon.UIOverhaul.Features.Research
             if (showDetail)
                 right -= DetailWidth + Gap;
 
-            Canvas(new Rect(content.x, top, right - content.x, height), palette);
+            // The contents rail, on the left, and it folds. Three rails around one canvas is too many, so this
+            // one collapses to a strip of coloured ticks that still says how many blocks there are and still
+            // jumps to one -- the same "only take the room you have earned" rule the other two rails follow by
+            // vanishing when empty. This one can never be empty, so it folds instead.
+            float left = content.x;
+            float railWidth = railFolded ? FoldedRailWidth : RailWidth(palette);
+
+            // Not in the overview, which is a whole-canvas view: a table of contents for a picture you can
+            // already see all of is furniture.
+            bool showRail = !overview && railWidth < (right - content.x) - MinCanvasWidth;
+
+            if (showRail)
+                left += railWidth + Gap;
+
+            Canvas(new Rect(left, top, right - left, height), palette);
+
+            if (showRail)
+                ContentsRail(new Rect(content.x, top, railWidth, height), palette);
 
             if (showDetail)
                 Detail(detailRect, palette);
@@ -208,6 +280,45 @@ namespace Gideon.UIOverhaul.Features.Research
             x = StateToggle(x, y, "Locked", showLocked, palette, () => showLocked = !showLocked);
             x = StateToggle(x, y, "Done", showDone, palette, () => showDone = !showDone);
 
+            // Group by sits next to the state filters rather than out on the right, because it decides what the
+            // canvas *is* and the tech levels only decide what is dimmed on it. A segmented control and not
+            // toggles: the three are mutually exclusive, which is the one case a segment is right for.
+            x += 12f;
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = palette.TextDisabled;
+
+            float captionWidth = UIRichText.WidthOf("Group by") + 4f;
+
+            Widgets.Label(new Rect(x, y + 3f, captionWidth, ControlHeight), "Group by");
+
+            GUI.color = palette.TextPrimary;
+            Text.Font = GameFont.Small;
+
+            x += captionWidth + 4f;
+
+            ResearchGrouping grouping = ResearchGroupings.Current;
+
+            for (int i = 0; i < ResearchGroupings.All.Length; i++)
+            {
+                ResearchGrouping which = ResearchGroupings.All[i];
+                string label = ResearchGroupings.LabelOf(which);
+                float width = TabParts.ButtonWidth(label, 12f);
+                Rect segment = new Rect(x, y, width, ControlHeight);
+
+                bool on = grouping == which;
+
+                TabParts.IconToggle(segment, null, on, palette, () =>
+                {
+                    if (!on)
+                        ResearchGroupings.Set(which);
+                }, ResearchGroupings.TooltipOf(which));
+
+                Overlay(segment, label, on, palette);
+
+                x += width + TabParts.SegmentGap;
+            }
+
             // From the right: the overview switch, then the tech levels, so the levels grow leftwards into
             // whatever room is left rather than colliding with the state segments.
             float right = bar.xMax - 8f;
@@ -236,12 +347,20 @@ namespace Gideon.UIOverhaul.Features.Research
             }
 
             List<TechLevel> levels = LevelsPresent();
+            bool anyLevel = false;
 
             for (int i = levels.Count - 1; i >= 0; i--)
             {
                 TechLevel level = levels[i];
                 string label = level.ToStringHuman().CapitalizeFirst();
                 float width = TabParts.ButtonWidth(label, 12f);
+
+                // The levels grow leftwards and now have something to run into: Group by ends at x, and the
+                // "Tech level" caption still needs its 66 pixels to the left of whatever is drawn last. Stopping
+                // is right and clipping is not -- a toggle drawn under another control is a control that silently
+                // does the wrong thing when clicked, which is the fault the pawns tab hit test taught.
+                if (right - width - TabParts.SegmentGap < x + 70f)
+                    break;
 
                 right -= width;
 
@@ -256,15 +375,22 @@ namespace Gideon.UIOverhaul.Features.Research
                 Overlay(new Rect(right, y, width, ControlHeight), label, on, palette);
 
                 right -= TabParts.SegmentGap;
+                anyLevel = true;
             }
 
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextDisabled;
+            // Only when there is something for it to name. On a narrow window the loop above stops early, and a
+            // caption reading "Tech level" with no toggles beside it is worse than no caption: it says a control
+            // is there and it is not.
+            if (anyLevel)
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = palette.TextDisabled;
 
-            Widgets.Label(new Rect(right - 66f, y, 62f, ControlHeight), "Tech level");
+                Widgets.Label(new Rect(right - 66f, y, 62f, ControlHeight), "Tech level");
 
-            GUI.color = palette.TextPrimary;
-            Text.Font = GameFont.Small;
+                GUI.color = palette.TextPrimary;
+                Text.Font = GameFont.Small;
+            }
         }
 
         /// <summary>
@@ -383,7 +509,16 @@ namespace Gideon.UIOverhaul.Features.Research
                     outRect.height + 80f);
 
                 GroupCaptions(palette, scale, visible);
-                Edges(palette, scale, visible);
+
+                // No arrows, on Aaron's instruction of 2026-08-23: "really messy", and he is right about what
+                // they had become. A banded canvas puts most of a chain's links across band boundaries, and the
+                // rule that a crossing arrow is only drawn when one end is selected meant the visible arrows were
+                // the short local ones -- the links you least need drawn, since two cards side by side in
+                // dependency order already say it.
+                //
+                // The edges are still built and still used: they decide depth, branches and the crossing-reducing
+                // row order, they drive the highlight, and the detail panel's Requires and Leads to lists read
+                // them. Only the lines are gone.
                 Nodes(palette, scale, visible);
             }
             finally
@@ -514,21 +649,71 @@ namespace Gideon.UIOverhaul.Features.Research
 
                 for (int i = 0; i < groups.Count; i++)
                 {
-                    Rect band = Scaled(groups[i].Header, scale);
+                    ResearchGroup group = groups[i];
+                    Rect band = Scaled(group.Header, scale);
 
                     if (!visible.Overlaps(band))
                         continue;
 
-                    GUI.color = palette.TextSecondary;
+                    // A theme band gets its own hue on the caption, the rule and a swatch; a mod name and a tech
+                    // level get the ordinary secondary text. Eleven bands need a colour to be told apart at a
+                    // glance and a mod name does not, so colouring both would be decoration pretending to be
+                    // information.
+                    Color tint = group.Band.HasValue
+                        ? ResearchBands.ColorFor(group.Band.Value, palette)
+                        : palette.TextSecondary;
 
-                    float width = UIRichText.WidthOf(groups[i].Label) + 6f;
+                    float x = band.x;
 
-                    Widgets.Label(new Rect(band.x, band.y, width, band.height), groups[i].Label);
+                    if (group.Band.HasValue)
+                    {
+                        Widgets.DrawBoxSolid(new Rect(x, band.center.y - 4f, 8f, 8f), tint);
 
-                    GUI.color = new Color(palette.Border.r, palette.Border.g, palette.Border.b, 0.8f);
+                        x += 13f;
+                    }
 
-                    Widgets.DrawLineHorizontal(band.x + width + 4f, band.center.y + 1f,
-                        Mathf.Max(0f, band.width - width - 8f));
+                    GUI.color = tint;
+
+                    // Bold, as the mockup had it, via the rich text tag rather than a second font: IMGUI has
+                    // three sizes and no weights. Measured with the tag still on, because Text.CalcSize goes
+                    // through the same GUIStyle that renders it and so accounts for the extra width bold costs --
+                    // measuring the bare string would under-report and let the rule run over the last letter.
+                    // Uppercase as well as bold, which is how the mockup drew it. IMGUI has no letter-spacing, so
+                    // caps is the whole of what separates a heading from a node name here -- and it is the thing
+                    // doing the work, since both are the same font at the same size.
+                    string caption = "<b>" + group.Label.ToUpperInvariant() + "</b>";
+                    float width = UIRichText.WidthOf(caption) + 6f;
+
+                    UIRichText.Label(new Rect(x, band.y, width, band.height), caption);
+
+                    x += width;
+
+                    // Done of total, in the quieter colour, so a band says how far through it you are without
+                    // anybody having to count nodes. Off in the overview, which has no room for it.
+                    string tally = Tally(group);
+
+                    if (!tally.NullOrEmpty())
+                    {
+                        Text.Font = GameFont.Tiny;
+                        GUI.color = palette.TextDisabled;
+
+                        float tallyWidth = UIRichText.WidthOf(tally) + 6f;
+
+                        Widgets.Label(new Rect(x, band.y + 3f, tallyWidth, band.height), tally);
+
+                        x += tallyWidth;
+
+                        // Back to the caption's font, not to the caller's: the outer finally restores that, and
+                        // the next block's caption is drawn by the next turn of this loop.
+                        Text.Font = GameFont.Small;
+                    }
+
+                    GUI.color = group.Band.HasValue
+                        ? new Color(tint.r, tint.g, tint.b, 0.45f)
+                        : new Color(palette.Border.r, palette.Border.g, palette.Border.b, 0.8f);
+
+                    Widgets.DrawLineHorizontal(x + 4f, band.center.y + 1f,
+                        Mathf.Max(0f, band.xMax - x - 8f));
                 }
             }
             finally
@@ -536,6 +721,295 @@ namespace Gideon.UIOverhaul.Features.Research
                 GUI.color = color;
                 Text.Font = font;
             }
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Contents rail
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// A table of contents for whatever the grouping is: one row per block, with its progress, jumping the
+        /// canvas to it.
+        ///
+        /// <b>One control, three meanings.</b> Grouped by theme it lists bands; by source, mods; by tech level,
+        /// tech levels. Nothing in here knows which -- it walks <c>ResearchGraph.Groups</c>, which is already
+        /// whatever the grouping made it, and asks each group for its colour. That is why switching the grouping
+        /// needs no second rail and no branch in this method.
+        ///
+        /// <b>It exists because the old canvas had no usable index.</b> Grouped by mod, a table of contents is a
+        /// list of mod names, which says nothing about where anything is, and the block headings said the same
+        /// thing and were already on screen. A list of subjects with "4 of 23" beside each is the first version of
+        /// this that answers a question.
+        /// </summary>
+        private static float railMeasured = MinRailWidth;
+
+        private static int railMeasuredFor = -1;
+
+        private static string railMeasuredKey;
+
+        /// <summary>
+        /// How wide the open rail needs to be for the labels it is about to draw.
+        ///
+        /// <b>Measured rather than fixed, from 2026-08-23.</b> A fixed 152 was chosen for the theme names and was
+        /// the right number for them. Grouped by source it produced nine consecutive rows reading "Vanilla
+        /// Fur..." -- nine different mods, indistinguishable, which is a list that has stopped being a list. The
+        /// two groupings want different widths and neither should lose so the other can win.
+        ///
+        /// The widest label plus what the row spends on furniture: the colour tick and its gap, the tally, and the
+        /// scrollbar. Clamped both ends, so it never gets narrower than the themes want or wider than a window can
+        /// spare.
+        ///
+        /// <b>Recomputed only when the block list changes,</b> keyed on the grouping and the block count.
+        /// Measuring forty-eight labels with <c>CalcSize</c> sixty times a second to produce the same number is
+        /// the fault this mod has fixed in four other panels.
+        /// </summary>
+        private static float RailWidth(UIColorPaletteDef palette)
+        {
+            List<ResearchGroup> groups = ResearchGraph.Groups;
+            string key = ResearchGroupings.Store(ResearchGroupings.Current);
+
+            if (railMeasuredFor == groups.Count && railMeasuredKey == key)
+                return railMeasured;
+
+            railMeasuredFor = groups.Count;
+            railMeasuredKey = key;
+
+            GameFont font = Text.Font;
+
+            try
+            {
+                float widest = 0f;
+
+                for (int i = 0; i < groups.Count; i++)
+                {
+                    ResearchGroup group = groups[i];
+
+                    // Each half measured at the font it is drawn in -- the tally at Tiny, the label at Small.
+                    // One measurement taken in the wrong font is exactly what truncated the node captions.
+                    Text.Font = GameFont.Tiny;
+
+                    float tally = UIRichText.WidthOf(Finished(group) + "/" + group.Nodes.Count);
+
+                    // Measured bolded, because that is how it is drawn: bold is wider, and measuring the plain
+                    // string would size the rail to text it never renders.
+                    Text.Font = GameFont.Small;
+
+                    widest = Mathf.Max(widest, UIRichText.WidthOf("<b>" + group.Label + "</b>") + tally);
+                }
+
+                // 10 for the tick and its gap, 6 between label and tally, 4 for the tally's own right margin,
+                // 18 for the scrollbar, 2 for the rail's border.
+                railMeasured = Mathf.Clamp(widest + 40f, MinRailWidth, MaxRailWidth);
+            }
+            finally
+            {
+                Text.Font = font;
+            }
+
+            return railMeasured;
+        }
+
+        /// <summary>What the rail is a list of, for its own heading.</summary>
+        private static string RailHeading()
+        {
+            switch (ResearchGroupings.Current)
+            {
+                case ResearchGrouping.Source:
+                    return "SOURCES";
+
+                case ResearchGrouping.Tech:
+                    return "TECH LEVELS";
+
+                default:
+                    return "THEMES";
+            }
+        }
+
+        private static void ContentsRail(Rect rail, UIColorPaletteDef palette)
+        {
+            UIElementPainter.OutlineRounded(rail, palette.Border, palette.PanelBackground);
+
+            List<ResearchGroup> groups = ResearchGraph.Groups;
+
+            Rect fold = new Rect(rail.x + 1f, rail.y + 1f, rail.width - 2f, 16f);
+
+            if (Mouse.IsOver(fold))
+                Widgets.DrawHighlight(fold);
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = railFolded ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
+            GUI.color = palette.TextDisabled;
+
+            Widgets.Label(railFolded ? fold : new Rect(fold.x + 5f, fold.y, fold.width - 5f, fold.height),
+                railFolded ? ">>" : RailHeading());
+
+            Text.Anchor = TextAnchor.UpperLeft;
+            GUI.color = palette.TextPrimary;
+            Text.Font = GameFont.Small;
+
+            TooltipHandler.TipRegion(fold,
+                (TipSignal) (railFolded ? "Show the contents rail." : "Fold the contents rail."));
+
+            if (Widgets.ButtonInvisible(fold))
+            {
+                railFolded = !railFolded;
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+
+                return;
+            }
+
+            Rect body = new Rect(rail.x + 1f, fold.yMax + 2f, rail.width - 2f, rail.yMax - fold.yMax - 4f);
+
+            // Rows are five pixels taller than their text when open, because each carries a progress hairline
+            // underneath. Folded, a row is the colour tick and nothing else.
+            float rowHeight = railFolded ? 14f : RailRowHeight + RailRowGap;
+            float bar = groups.Count * rowHeight > body.height ? 18f : 0f;
+
+            Rect view = new Rect(0f, 0f, body.width - bar, groups.Count * rowHeight);
+
+            Widgets.BeginScrollView(body, ref railScroll, view);
+
+            try
+            {
+                for (int i = 0; i < groups.Count; i++)
+                    RailRow(new Rect(0f, i * rowHeight, view.width, rowHeight), groups[i], palette);
+            }
+            finally
+            {
+                Widgets.EndScrollView();
+            }
+        }
+
+        private static void RailRow(Rect row, ResearchGroup group, UIColorPaletteDef palette)
+        {
+            Color tint = group.Band.HasValue
+                ? ResearchBands.ColorFor(group.Band.Value, palette)
+                : palette.TextSecondary;
+
+            int done = Finished(group);
+
+            bool here = selected != null && selected.Group == group;
+
+            if (here)
+                Widgets.DrawBoxSolid(row, palette.AccentMuted);
+            else if (Mouse.IsOver(row))
+                Widgets.DrawHighlight(row);
+
+            Widgets.DrawBoxSolid(new Rect(row.x + 2f, row.y + 3f, 4f, Mathf.Max(4f, row.height - 8f)), tint);
+
+            if (!railFolded)
+            {
+                Text.Font = GameFont.Tiny;
+
+                string tally = done + "/" + group.Nodes.Count;
+                float tallyWidth = UIRichText.WidthOf(tally) + 4f;
+
+                // Measured at Tiny above, because that is what the tally draws at; the label below switches to
+                // Small. Two fonts in one row means two measurements, and taking one number from the wrong font
+                // is the fault that truncated the node captions.
+
+                GUI.color = here ? palette.TextSecondary : palette.TextDisabled;
+                Text.Anchor = TextAnchor.MiddleRight;
+
+                Widgets.Label(new Rect(row.xMax - tallyWidth - 3f, row.y, tallyWidth, RailRowHeight), tally);
+
+                // The label in the band's own colour, not grey. A four pixel tick is not enough of a hue to read
+                // as "this is the medicine band" at a glance, and the canvas heading it jumps to is coloured, so
+                // a grey rail was the one place a band had no colour. Grouped by source or tech level there is no
+                // band, tint is the ordinary secondary text, and this is a no-op.
+                GUI.color = here && !group.Band.HasValue ? palette.TextPrimary : tint;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                Text.Font = GameFont.Small;
+
+                UIRichText.Label(new Rect(row.x + 11f, row.y,
+                        Mathf.Max(0f, row.width - tallyWidth - 17f), RailRowHeight),
+                    "<b>" + group.Label + "</b>");
+
+                Text.Anchor = TextAnchor.UpperLeft;
+
+                // The hairline, drawn even at zero: a row with no track under it reads as a row that does not
+                // have progress rather than one that has none yet.
+                // Pinned under the text rather than to the bottom of the cell, so the extra air added below goes
+                // between one entry and the next instead of between a label and its own progress bar.
+                Rect track = new Rect(row.x + 11f, row.y + RailRowHeight - 1f,
+                    Mathf.Max(0f, row.width - 17f), 2f);
+
+                Widgets.DrawBoxSolid(track, palette.SurfaceSunken);
+
+                if (done > 0 && group.Nodes.Count > 0)
+                    Widgets.DrawBoxSolid(
+                        new Rect(track.x, track.y, track.width * done / group.Nodes.Count, track.height),
+                        new Color(tint.r, tint.g, tint.b, 0.85f));
+            }
+
+            GUI.color = palette.TextPrimary;
+
+            TooltipHandler.TipRegion(row, new TipSignal(
+                () => group.Label + "\n" + done + " of " + group.Nodes.Count + " finished"
+                      + (group.Band.HasValue
+                          ? "\n\n" + ResearchBands.Info(group.Band.Value).Tooltip
+                          : string.Empty),
+                group.Label.GetHashCode()));
+
+            if (Widgets.ButtonInvisible(row))
+                JumpTo(group);
+        }
+
+        /// <summary>
+        /// Scrolls the canvas to a block's heading.
+        ///
+        /// <b>Scrolls and does not select.</b> Clicking a band means "show me this", not "I have chosen a
+        /// project", and selecting the block's first node would open the detail panel, narrow the canvas, and move
+        /// the very thing the player was just told they were being taken to. The same rule as the colonist bar:
+        /// click to select, then click to jump, and never both at once.
+        ///
+        /// The heading is put a little way down from the top rather than flush with it, so the block reads as
+        /// having arrived rather than as being cut off above.
+        /// </summary>
+        private static void JumpTo(ResearchGroup group)
+        {
+            if (group == null)
+                return;
+
+            canvasScroll.y = Mathf.Max(0f, group.Header.y - 12f);
+            canvasScroll.x = 0f;
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>How many of a block's projects are finished. Knowledge projects count; they finish too.</summary>
+        private static int Finished(ResearchGroup group)
+        {
+            if (group == null)
+                return 0;
+
+            int done = 0;
+
+            for (int i = 0; i < group.Nodes.Count; i++)
+            {
+                ResearchProjectDef project = group.Nodes[i].Project;
+
+                if (project != null && project.IsFinished)
+                    done++;
+            }
+
+            return done;
+        }
+
+        /// <summary>
+        /// "6 of 15" for a block, or empty when it holds nothing finished and nothing to finish.
+        ///
+        /// Ghosts are counted in the total because they are drawn: a total that disagreed with the number of nodes
+        /// somebody can see is worse than no total. Knowledge projects count too -- they finish, just not with
+        /// research points.
+        /// </summary>
+        private static string Tally(ResearchGroup group)
+        {
+            if (group == null || group.Nodes.Count == 0)
+                return string.Empty;
+
+            return Finished(group) + " of " + group.Nodes.Count;
         }
 
         private static void Nodes(UIColorPaletteDef palette, float scale, Rect visible)
@@ -551,7 +1025,15 @@ namespace Gideon.UIOverhaul.Features.Research
                 if (!visible.Overlaps(rect))
                     continue;
 
-                bool dimmed = !Passes(node);
+                // Excluded by a filter or the search: not drawn, and so not clickable either, which is the point.
+                // A ghost that still answered a click was a card the player had asked not to see.
+                if (!Passes(node))
+                    continue;
+
+                // Nothing dims any more. The flag stays on the drawing calls because a difficulty-hidden ghost
+                // still wants the faded treatment, and that is decided from the node's own state rather than from
+                // a filter -- see ResearchState.Ghost.
+                const bool dimmed = false;
 
                 if (overview)
                 {
@@ -682,9 +1164,15 @@ namespace Gideon.UIOverhaul.Features.Research
         /// <summary>
         /// Whether a node passes the filters and the search.
         ///
-        /// <b>A node that fails is dimmed, not removed.</b> Removing one would leave a hole in a chain, and a hole
-        /// with nothing to explain it reads as a missing mod -- the same reason the difficulty-hidden projects are
-        /// drawn as ghosts. It also keeps the layout fixed while a filter is being fiddled with.
+        /// <b>A node that fails is not drawn at all, from 2026-08-23.</b> It used to be dimmed, on the argument
+        /// that removing one leaves a hole in a chain and a hole reads as a missing mod. Aaron asked for it gone
+        /// and the argument no longer holds: the arrows that made a chain visible are gone too, so there is no
+        /// chain left for a hole to interrupt -- and a filter that only fades what it excludes leaves a canvas of
+        /// three hundred ghosts on a mature colony, which is the thing the filter was for.
+        ///
+        /// <b>The layout does not reflow,</b> so hiding leaves gaps where the excluded cards were. That is the
+        /// deliberate half of the trade: relaying the graph on every toggle would move every card the player is
+        /// looking at, and the signature that decides the layout is kept free of progress on purpose.
         /// </summary>
         private static bool Passes(ResearchNode node)
         {
@@ -816,7 +1304,14 @@ namespace Gideon.UIOverhaul.Features.Research
         /// </summary>
         private static float DetailHeight(ResearchProjectDef project, bool masked)
         {
-            float height = 30f + 18f + 26f;
+            // The filed row: the band and source line, plus the reason, which wraps. Reasons run to about a
+            // hundred and forty characters at their longest ("It unlocks the surgery install bionic arm.") so
+            // three lines of tiny text is the honest reserve; TabParts.Note returns where it actually ended, so
+            // over-reserving costs a little scroll space and under-reserving clips nothing.
+            // The filed block: the band inset (26), the reason, which wraps to about three lines of tiny text
+            // (42), the Source heading (22) and its row (20). TabParts.Note returns where it actually ended, so
+            // over-reserving costs a little scroll space while under-reserving would clip the sections below it.
+            float height = 30f + 18f + 26f + (masked ? 0f : 26f + 42f + 6f + 22f + 20f);
 
             height += 22f + Mathf.Min(UnlockCount(project), 10) * 18f;
             height += 22f + Mathf.Min(ChildCount(), 10) * 18f;
@@ -871,6 +1366,14 @@ namespace Gideon.UIOverhaul.Features.Research
                 y += 20f;
             }
 
+            // Where it was filed, and why. Below the progress bar and above the description, because it answers
+            // "why is this here and not where I looked for it" -- the question the banded canvas creates, and the
+            // one thing that makes a placement you disagree with legible rather than arbitrary. Masked projects
+            // are skipped: the reason names what a project unlocks, and not knowing that yet is what masked
+            // means.
+            if (!masked)
+                y = Filed(body, y, project, palette);
+
             if (!masked && !project.description.NullOrEmpty())
             {
                 y = TabParts.Note(new Rect(body.x, y, body.width, 0f), y, project.description, palette,
@@ -890,7 +1393,79 @@ namespace Gideon.UIOverhaul.Features.Research
             Requires(body, y, project, masked, palette);
         }
 
+        /// <summary>
+        /// The band this project was filed in, one sentence saying why, and where it came from.
+        ///
+        /// <b>Built to the mockup's shape on 2026-08-23.</b> The first cut put the band and the mod on one
+        /// eighteen-pixel row and it read as a caption rather than as a fact about the project. The mockup had the
+        /// band in a bordered inset -- the same device the queue rail uses for a row -- with the reason beneath it
+        /// and the source under its own small heading, and that reads as three answers instead of one crowded one.
+        ///
+        /// <b>The reason is why this exists at all.</b> A project sits in exactly one band and some genuinely
+        /// belong to two: bionic replacements is a surgery and a crafting recipe both. So a placement will
+        /// sometimes look wrong and be correct by the rule, and printing which unlock decided it turns that from an
+        /// argument with the mod into a fact the player can read. See <see cref="ResearchTaxonomy"/>.
+        ///
+        /// Drawn whatever the grouping is: the band is what the project is <em>about</em>, and that stays
+        /// interesting when the canvas happens to be cut by mod instead.
+        /// </summary>
+        private static float Filed(Rect body, float y, ResearchProjectDef project, UIColorPaletteDef palette)
+        {
+            ResearchBand band = ResearchTaxonomy.BandOf(project);
+            Color tint = ResearchBands.ColorFor(band, palette);
+
+            Rect box = new Rect(body.x, y, body.width, 22f);
+
+            UIElementPainter.Outline(box, palette.Border, palette.SurfaceSunken);
+
+            GameFont font = Text.Font;
+            TextAnchor anchor = Text.Anchor;
+            Color color = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+
+                Widgets.DrawBoxSolid(new Rect(box.x + 6f, box.center.y - 4f, 8f, 8f), tint);
+
+                GUI.color = tint;
+
+                UIRichText.Label(new Rect(box.x + 19f, box.y, box.width - 24f, box.height),
+                    "<b>" + ResearchBands.LabelOf(band) + "</b>");
+
+                y += 26f;
+
+                GUI.color = palette.TextDisabled;
+                Text.Anchor = TextAnchor.UpperLeft;
+            }
+            finally
+            {
+                GUI.color = color;
+                Text.Anchor = anchor;
+                Text.Font = font;
+            }
+
+            y = TabParts.Note(new Rect(body.x, y, body.width, 0f), y, ResearchTaxonomy.ReasonFor(project),
+                palette, GameFont.Tiny, palette.TextDisabled);
+
+            y += 6f;
+
+            y = Section(body, y, "Source", palette);
+
+            Rect source = new Rect(body.x, y, body.width, 16f);
+
+            Widgets.DrawBoxSolid(new Rect(source.x + 2f, source.y + 3f, 3f, 10f),
+                ResearchSourceMarks.ColorFor(project, palette));
+
+            TabParts.RowLabel(new Rect(source.x + 11f, source.y, source.width - 11f, source.height),
+                ResearchSourceMarks.NameFor(project), palette.TextSecondary, GameFont.Tiny);
+
+            return y + 20f;
+        }
+
         private static string Meta(ResearchProjectDef project)
+
         {
             if (project.knowledgeCategory != null)
                 return project.knowledgeCategory.LabelCap.ToString() + " knowledge "

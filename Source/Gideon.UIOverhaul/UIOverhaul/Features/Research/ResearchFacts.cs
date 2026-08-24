@@ -160,10 +160,18 @@ namespace Gideon.UIOverhaul.Features.Research
 
             switch (state)
             {
+                // These three said nothing at all until 2026-08-23, on the reasoning that a node the player can
+                // start needs no caption. Aaron asked for the mockup's words back and he is right: a caption slot
+                // that is empty on some nodes and full on others reads as missing information rather than as
+                // "nothing to report", and the eye cannot scan a column for Available if Available is blank.
                 case ResearchState.Ready:
+                    return "Available";
+
                 case ResearchState.Finished:
+                    return "Done";
+
                 case ResearchState.Researching:
-                    return null;
+                    return "Researching";
 
                 case ResearchState.Unknown:
                     // The one readable thing on a masked node. Left in as the mockup had it; whether it survives
@@ -171,7 +179,7 @@ namespace Gideon.UIOverhaul.Features.Research
                     return "Not yet understood";
 
                 case ResearchState.Ghost:
-                    return "Hidden by your difficulty settings";
+                    return "Hidden by difficulty";
 
                 case ResearchState.Prerequisite:
                     return Missing(project);
@@ -196,52 +204,10 @@ namespace Gideon.UIOverhaul.Features.Research
             }
         }
 
-        /// <summary>
-        /// The picture that goes on a node for one state, or null when the node should say nothing.
-        ///
-        /// <b>Null for a missing prerequisite, which is the important one.</b> That state is what the arrows into
-        /// a node already say, and it is far and away the commonest: putting a chip on it meant almost every node
-        /// on the canvas carried a truncated "Needs Intermedi..." restating its own incoming arrow. Removing it is
-        /// what lets the five rare states -- the ones a player genuinely cannot work out from the graph -- read at
-        /// a glance instead of drowning.
-        ///
-        /// Null for Ready, Researching and Finished too: how the node is drawn already says all three.
-        /// </summary>
-        internal static Texture2D IconFor(ResearchState state)
-        {
-            switch (state)
-            {
-                case ResearchState.Bench:
-                    return ResearchGlyphs.Bench;
-
-                case ResearchState.Analyze:
-                case ResearchState.Inspect:
-                    return ResearchGlyphs.Eye;
-
-                case ResearchState.Mechanitor:
-                    return ResearchGlyphs.Cross;
-
-                case ResearchState.Techprint:
-                    return ResearchGlyphs.Plus;
-
-                default:
-                    return null;
-            }
-        }
-
-        /// <summary>
-        /// The two or three characters that go beside the icon, or null.
-        ///
-        /// Only the techprint state has one, and it is the reason that state gets numbers rather than a flag:
-        /// <b>2/3</b> tells you whether to keep buying and a warning triangle does not.
-        /// </summary>
-        internal static string MarkFor(ResearchState state, ResearchProjectDef project)
-        {
-            if (state != ResearchState.Techprint || project == null)
-                return null;
-
-            return project.TechprintsApplied + "/" + project.TechprintCount;
-        }
+        // IconFor and MarkFor were here until 2026-08-23. The node now spells its state out in words on
+        // its second row -- Done, Available, Needs microelectronics -- and a glyph plus a mark saying the
+        // same thing in a second alphabet was two channels competing to explain one fact. ChipFor is what
+        // replaced them, and the techprint count it returns is the 2 of 3 that MarkFor existed for.
 
         /// <summary>The colour a chip and a node's stripe take for one state.</summary>
         internal static Color ColorFor(ResearchState state, UIColorPaletteDef palette,
@@ -255,8 +221,12 @@ namespace Gideon.UIOverhaul.Features.Research
                 case ResearchState.Researching:
                     return knowledge != null ? palette.Mood : palette.Accent;
 
+                // Blue, not green, from 2026-08-23. Ready and Finished were both Success, so the two states a
+                // player most needs to tell apart were the same colour -- and now that both spell themselves out
+                // in words, "Available" and "Done" sat side by side down a column in identical green. Accent is
+                // what this mod uses everywhere else for "you can act on this".
                 case ResearchState.Ready:
-                    return palette.Success;
+                    return knowledge != null ? palette.Mood : palette.Accent;
 
                 case ResearchState.Unknown:
                     return palette.Mood;

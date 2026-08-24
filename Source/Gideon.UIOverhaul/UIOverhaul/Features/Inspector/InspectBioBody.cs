@@ -4,6 +4,7 @@ using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.Sound;
 
 namespace Gideon.UIOverhaul.Features.Inspector
 {
@@ -46,12 +47,161 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             secondY = Traits(second, secondY, pawn, palette);
             secondY = Standing(second, secondY, pawn, palette);
+            secondY = Workout(second, secondY, pawn, palette);
 
             // No editor button here. It was one, until 2026-08-23: a button on this panel can only be reached on
             // something that has this panel, and a corpse does not -- which made a dead pawn the one selection
             // that could not open the editor. It is an icon in the pane's own corner now, beside the info card,
             // where it works on every selection. See Editor.EditorButton.
             return (split ? Mathf.Max(leftY, secondY) : secondY) - view.y;
+        }
+
+        /// <summary>
+        /// Rimbody's workout goals, when Rimbody is running.
+        ///
+        /// <b>Here because this is the panel about the body,</b> asked for on 2026-08-23. Rimbody keeps them on
+        /// its own tab, which is one more tab to open for two numbers that belong beside a pawn's traits and
+        /// standing.
+        ///
+        /// <b>Absent when Rimbody is not running, and absent for a pawn it has not measured.</b> The comp starts
+        /// with both values at -1 and fills them in later, so a caption with two empty bars would be this mod
+        /// inventing a state Rimbody does not have.
+        ///
+        /// <b>Each goal is a need row plus a control row.</b> The need row is the pane's own vocabulary -- name,
+        /// value, a track, and the goal drawn on it as a tick -- which is the shape that makes a bar mean
+        /// something, and it answers "are they there yet" without being touched. The control row underneath is
+        /// the only interactive thing on this panel, and it is two controls rather than a text field because the
+        /// question is a rough target and not a precise figure.
+        /// </summary>
+        private static float Workout(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        {
+            if (!Integrations.RimbodyIntegration.Available)
+                return y;
+
+            ThingComp comp = Integrations.RimbodyIntegration.Physique(pawn);
+
+            if (comp == null)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Workout goals", null, palette);
+
+            y = Goal(view, y, comp, palette, true);
+            y = Goal(view, y, comp, palette, false);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// One goal: where the body is now, where it is being taken, and the two controls that say so.
+        ///
+        /// <paramref name="muscle"/> picks which of the pair this is. One method rather than two, because the two
+        /// differ in four values and nothing else -- and Rimbody spells one field <c>useFatgoal</c> and the other
+        /// <c>useMuscleGoal</c>, which is exactly the sort of difference that gets copied wrong twice.
+        /// </summary>
+        private static float Goal(Rect view, float y, ThingComp comp, UIColorPaletteDef palette, bool muscle)
+        {
+            float ceiling = Integrations.RimbodyIntegration.Ceiling;
+
+            float current = muscle
+                ? Integrations.RimbodyIntegration.MuscleMass(comp)
+                : Integrations.RimbodyIntegration.BodyFat(comp);
+
+            bool on = muscle
+                ? Integrations.RimbodyIntegration.UseMuscleGoal(comp)
+                : Integrations.RimbodyIntegration.UseFatGoal(comp);
+
+            float goal = muscle
+                ? Integrations.RimbodyIntegration.MuscleGoal(comp)
+                : Integrations.RimbodyIntegration.FatGoal(comp);
+
+            string value = on
+                ? current.ToString("0.0") + " to " + goal.ToString("0.0")
+                : current.ToString("0.0");
+
+            Color fill = muscle ? palette.Accent : palette.Info;
+
+            y = InspectPaneParts.Need(view, y, muscle ? "Muscle mass" : "Body fat", value,
+                on ? palette.TextPrimary : palette.TextSecondary, current / ceiling, fill,
+                on ? new[] { goal / ceiling } : null, null, palette);
+
+            return Controls(view, y, comp, palette, muscle, on, goal);
+        }
+
+        /// <summary>
+        /// The switch and the slider.
+        ///
+        /// <b>The slider is only drawn when the goal is on,</b> because a slider that moves a number nothing
+        /// reads is a control that lies about having an effect. With the goal off the row says so in words
+        /// instead, which is also what tells you the switch is the thing to press.
+        /// </summary>
+        private static float Controls(Rect view, float y, ThingComp comp, UIColorPaletteDef palette, bool muscle,
+            bool on, float goal)
+        {
+            const float box = 14f;
+            const float gap = 6f;
+
+            float row = Mathf.Max(box, UIFonts.LineHeightOf(GameFont.Tiny));
+
+            Rect switchRect = new Rect(view.x, y + (row - box) * 0.5f, box, box);
+
+            UIElementPainter.PaintCheckbox(switchRect,
+                on ? MultiCheckboxState.On : MultiCheckboxState.Off, palette, false);
+
+            Rect hit = new Rect(view.x, y, box + gap, row);
+
+            if (Widgets.ButtonInvisible(hit))
+            {
+                if (muscle)
+                    Integrations.RimbodyIntegration.SetUseMuscleGoal(comp, !on);
+                else
+                    Integrations.RimbodyIntegration.SetUseFatGoal(comp, !on);
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            TooltipHandler.TipRegion(hit, (TipSignal) (muscle
+                ? "While this is on and the goal is above their muscle, they eat more often and pick strength "
+                  + "exercises."
+                : "While this is on and the goal is below their fat, they eat only when hungry and pick cardio."));
+
+            Rect rest = new Rect(view.x + box + gap, y, Mathf.Max(20f, view.width - box - gap), row);
+
+            if (!on)
+            {
+                GameFont previousFont = Text.Font;
+                Color previousColor = GUI.color;
+
+                try
+                {
+                    Text.Font = GameFont.Tiny;
+                    GUI.color = palette.TextDisabled;
+
+                    UIRichText.Label(rest, muscle ? "No muscle goal" : "No fat goal");
+                }
+                finally
+                {
+                    GUI.color = previousColor;
+                    Text.Font = previousFont;
+                }
+
+                return y + row + InspectPaneParts.RowGap;
+            }
+
+            // Rimbody's own bounds and its own rounding. Written straight to the field, as its card does: there
+            // is no setter and nothing to notify, and the comp is scribed by the game either way.
+            float moved = Widgets.HorizontalSlider(rest, goal, 0f,
+                Integrations.RimbodyIntegration.Ceiling, true, null, null, null,
+                Integrations.RimbodyIntegration.Step);
+
+            if (Mathf.Abs(moved - goal) >= 0.001f)
+            {
+                if (muscle)
+                    Integrations.RimbodyIntegration.SetMuscleGoal(comp, moved);
+                else
+                    Integrations.RimbodyIntegration.SetFatGoal(comp, moved);
+            }
+
+            return y + row + InspectPaneParts.RowGap;
         }
 
         /// <summary>The two backstories, each with its own description including what it did to the skills.</summary>
@@ -76,8 +226,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             y = InspectPaneParts.Entry(view, y, title, when, palette.TextDisabled, null, palette);
 
-            string description = UIGuard.Try("Inspector.BackstoryText",
-                () => story.FullDescriptionFor(pawn).Resolve(), null, null);
+            // Cached, and this pane needs it more than the editor does: it redraws for as long as anything is
+            // selected. See Shared.BackstoryText for what FullDescriptionFor actually costs.
+            string description = Shared.BackstoryText.For(story, pawn);
 
             if (!description.NullOrEmpty())
                 y = InspectPaneParts.Note(view, y, description, palette) + InspectPaneParts.RowGap;
@@ -175,7 +326,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
             return y + rowHeight + InspectPaneParts.BlockGap;
         }
 
-        /// <summary>Age, faith, rank and time served: the facts that are about position rather than history.</summary>
+        /// <summary>
+        /// Age, kind, faith, rank and time served: the facts that are about standing rather than history.
+        ///
+        /// Every row here is one line and conditional on the expansion that invented it, so a vanilla install
+        /// sees two lines and a fully expanded one sees six, without any of them being drawn empty.
+        /// </summary>
         private static float Standing(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
         {
             y = InspectPaneParts.Cap(view, y, "Standing", null, palette);
@@ -191,6 +347,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
                         : biological + " (born " + chronological + " years ago)",
                     palette.TextPrimary, palette);
             }
+
+            y = Xenotype(view, y, pawn, palette);
 
             if (ModsConfig.IdeologyActive)
             {
@@ -234,6 +392,53 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     served.ToStringTicksToPeriod(false, false, false), palette.TextSecondary, palette);
 
             return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// What kind of human this is, when Biotech is installed.
+        ///
+        /// <b>Beside Age rather than under Traits,</b> which was the other candidate. A xenotype is not a trait
+        /// and it is not a list -- it is the single answer to "what are they", the same shape of fact as their
+        /// age and their ideoligion, and it belongs in the run of one-line answers those two are already in.
+        ///
+        /// <b>Every pawn with genes has one, and Baseliner is a real answer.</b> <c>Xenotype</c> falls back to
+        /// Baseliner rather than null, so there is no such thing as a colonist without a xenotype to report and
+        /// nothing here needs an "unknown" case. <c>XenotypeLabelCap</c> also covers the two shapes the plain
+        /// def cannot: a custom xenotype the player built, and a pawn whose genes match no xenotype at all,
+        /// which the game calls unique.
+        ///
+        /// <b>The description on hover, because the label alone assumes you know the set.</b> Hussar, Genie and
+        /// Neanderthal say nothing about what they cost or what they are for, and <c>XenotypeDescShort</c> is
+        /// what the game shows for the same question on its own bio tab.
+        ///
+        /// Absent without Biotech, and absent for anything with no gene tracker -- an animal, a mech -- rather
+        /// than reported as Baseliner, which would be a true sentence about a muffalo and a useless one.
+        /// </summary>
+        private static float Xenotype(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        {
+            if (!ModsConfig.BiotechActive || pawn.genes == null)
+                return y;
+
+            string label = UIGuard.Try("Inspector.Xenotype", () => pawn.genes.XenotypeLabelCap, null, null);
+
+            if (label.NullOrEmpty())
+                return y;
+
+            float before = y;
+
+            y = InspectPaneParts.Fact(view, y, "Xenotype", label, palette.TextPrimary, palette);
+
+            Rect row = new Rect(view.x, before, view.width, y - before);
+
+            if (!Mouse.IsOver(row))
+                return y;
+
+            string tip = UIGuard.Try("Inspector.XenotypeTip", () => pawn.genes.XenotypeDescShort, null, null);
+
+            if (!tip.NullOrEmpty())
+                TooltipHandler.TipRegion(row, (TipSignal) tip);
+
+            return y;
         }
     }
 }

@@ -40,6 +40,16 @@ namespace Gideon.UIOverhaul.Features.Inspector
         internal const float TabStripHeight = InspectPaneUtility.TabHeight;
 
         /// <summary>
+        /// What <c>RecentHeight</c> is set to while a tab is open in its own window.
+        ///
+        /// Vanilla's own number, written as a bare 700 in <c>DoTabs</c> beside the <c>DoTabGUI</c> call. It is
+        /// how the pane tells the rest of the UI that something tall is on screen, and the two go together: the
+        /// only place this mod calls <c>DoTabGUI</c> is for an excluded tab, and that call has to carry vanilla's
+        /// other half with it or the pane reports the wrong height for as long as the tab is open.
+        /// </summary>
+        internal const float OpenTabRecentHeight = 700f;
+
+        /// <summary>
         /// The gap vanilla leaves under every main tab, which is the main button bar.
         ///
         /// Taken from the def rather than copied as the literal 35 that <c>MainTabWindow</c> writes, so a bar

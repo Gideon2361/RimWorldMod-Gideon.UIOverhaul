@@ -419,8 +419,9 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (def == null)
                 return y;
 
-            string text = UIGuard.Try<string>("Editor.BackstoryDesc",
-                () => def.FullDescriptionFor(pawn).Resolve(), null, null);
+            // Cached, because this is not a getter. See Shared.BackstoryText: built straight it runs the grammar
+            // resolver twice a frame for a paragraph that changes when the player changes it and not otherwise.
+            string text = Shared.BackstoryText.For(def, pawn);
 
             if (text.NullOrEmpty())
                 return y;

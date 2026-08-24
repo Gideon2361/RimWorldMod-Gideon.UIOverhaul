@@ -142,6 +142,24 @@ namespace Gideon.UIFramework.Helpers
         /// The palette's overlay roles are all translucent by design, so the fix is to composite them here
         /// against whatever is actually behind the control and hand the result over opaque.
         /// </summary>
+        /// <summary>
+        /// A square outline: two filled rects, the inner one in the color behind.
+        ///
+        /// The square sibling of <see cref="OutlineRounded"/>, and it takes the inside color for the same reason
+        /// -- it is painted as two fills, so anything translucent handed to it composites over the border rather
+        /// than over the surface. Run it through <see cref="Composite"/> first if what you have is an overlay
+        /// role.
+        ///
+        /// <b>Not everything wants a rounded corner.</b> A card in a dense grid reads as a cell when its corners
+        /// are square and as a pill when they are not. Added 2026-08-23 for the research nodes, on Aaron's
+        /// instruction.
+        /// </summary>
+        internal static void Outline(Rect rect, Color color, Color inside, float thickness = 1f)
+        {
+            Widgets.DrawBoxSolid(rect, color);
+            Widgets.DrawBoxSolid(rect.ContractedBy(thickness), inside);
+        }
+
         internal static Color Composite(Color background, Color overlay)
         {
             Color solid = new Color(overlay.r, overlay.g, overlay.b, 1f);

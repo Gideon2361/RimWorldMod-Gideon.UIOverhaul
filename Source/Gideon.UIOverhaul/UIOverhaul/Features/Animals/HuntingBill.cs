@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -152,6 +153,72 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         internal HuntingBill()
         {
+        }
+
+        /// <summary>
+        /// The universe a hunting bill's filter may choose from: raw meat and nothing else.
+        ///
+        /// <b>A parent filter rather than a rule enforced afterwards,</b> asked for on 2026-08-23 -- nothing but
+        /// meats should be selectable. Vanilla's filter window takes a parent, roots its tree at that parent's
+        /// narrowest containing category and refuses anything the parent disallows, so handing it this is the
+        /// game's own way of saying "these are the choices". Our panel is a replacement for that window and
+        /// honours the same argument.
+        ///
+        /// <b>Built once and shared, because it is a constant.</b> It describes what a hunting bill is for, not
+        /// what any one bill counts. <c>RecalculateDisplayRootCategory</c> is what makes the tree open on Meat
+        /// rather than at the root of everything.
+        ///
+        /// Human and insect meat are in it. They are meat, a colony may well want to stock them, and deciding
+        /// otherwise here would be this mod having an opinion about somebody else's colony.
+        /// </summary>
+        internal static ThingFilter Meats
+        {
+            get
+            {
+                if (meats != null)
+                    return meats;
+
+                return meats = UIGuard.Try("Animals.MeatUniverse", () =>
+                {
+                    ThingFilter made = new ThingFilter();
+
+                    made.SetDisallowAll();
+                    made.SetAllow(ThingCategoryDefOf.MeatRaw, true);
+                    made.ResolveReferences();
+                    made.RecalculateDisplayRootCategory();
+
+                    return made;
+                }, null, null);
+            }
+        }
+
+        private static ThingFilter meats;
+
+        /// <summary>
+        /// Drops anything from this bill's filter that the meat universe does not allow.
+        ///
+        /// <b>For bills saved before the restriction existed.</b> The filter window will stop showing a non-meat
+        /// row the moment a parent is passed, and a row that cannot be seen is a row nobody can turn off -- so a
+        /// bill that was counting eggs would go on counting them invisibly. Called when the editor opens rather
+        /// than per frame: it walks every allowed def, and the answer cannot change while nothing is editing it.
+        /// </summary>
+        internal void ConfineToMeat()
+        {
+            UIGuard.Try("Animals.ConfineToMeat", () =>
+            {
+                ThingFilter universe = Meats;
+
+                if (filter == null || universe == null)
+                    return;
+
+                List<ThingDef> allowed = new List<ThingDef>(filter.AllowedThingDefs);
+
+                for (int i = 0; i < allowed.Count; i++)
+                {
+                    if (!universe.Allows(allowed[i]))
+                        filter.SetAllow(allowed[i], false);
+                }
+            }, null);
         }
 
         /// <summary>A new bill counting raw meat, which is what most of these will ever be.</summary>

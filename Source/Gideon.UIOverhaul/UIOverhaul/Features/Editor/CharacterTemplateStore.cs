@@ -200,6 +200,7 @@ namespace Gideon.UIOverhaul.Features.Editor
                             PartIndex = Number(node, "partIndex"),
                             Severity = Real(node, "severity"),
                             Permanent = Text(node, "permanent") == "true",
+                            Level = Number(node, "level", 0),
                             Order = Number(node, "order", 2)
                         });
                     }
@@ -466,6 +467,11 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                             if (entry.Permanent)
                                 Element(writer, "permanent", "true");
+
+                            // Only when there is one, so the file stays readable: every hediff would otherwise
+                            // carry "level 0", which means nothing for the ones that are not levelled.
+                            if (entry.Level > 0)
+                                Element(writer, "level", entry.Level.ToString(CultureInfo.InvariantCulture));
 
                             Element(writer, "order", entry.Order.ToString(CultureInfo.InvariantCulture));
 

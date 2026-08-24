@@ -438,13 +438,31 @@ namespace Gideon.UIOverhaul.Features.Options
             // there is nothing to watch for. See XmlExtensionsIntegration for why that one mod is worth it.
             bool hosting = XmlExtensionsIntegration.Hosts(mod);
 
-            // Only Layout and Repaint are watched, and that is what tells a redirect apart from a page doing
-            // something perfectly ordinary. A float menu off a dropdown, or a confirmation dialog, is opened in
-            // response to a click, which arrives as a mouse event -- never on these two passes. A redirect opens
-            // its window unconditionally, so it shows up here on the first pass of the first frame.
+            // Only Layout and Repaint are watched: a redirect opens its window unconditionally, so it shows up
+            // on the first pass of the first frame, while an ordinary child window is opened in response to
+            // input.
+            //
+            // <b>"In response to input" is not the same as "on a mouse event pass",</b> and that mistake shipped
+            // here. This condition used to be Layout-or-Repaint alone, on the reasoning that a float menu off a
+            // dropdown arrives as a mouse event and so could never be seen. It can.
+            // <c>Widgets.Dropdown</c> ends in <c>Widgets.ButtonInvisibleDraggable</c>, which tests
+            // <c>Input.GetMouseButtonUp(0)</c> -- Unity's polling API, not <c>Event.current</c> -- and that is
+            // true on *every* pass of the frame the button came up on, Layout and Repaint included. So the menu
+            // was added during a watched pass, read as a redirect, and this window closed itself. OgreStack found
+            // it on 2026-08-23; every dropdown in every hosted settings page did it.
+            //
+            // The frame a mouse button changed state on is therefore not judged at all. That is the exact inverse
+            // of the fault and needs no list of window types to keep current: a redirect is unconditional, so it
+            // will still be caught on the next quiet frame, and a menu opened by a click is already in the
+            // snapshot by then rather than new.
             WindowStack stack = Find.WindowStack;
 
+            bool clicking = Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0)
+                                                        || Input.GetMouseButtonDown(1) || Input.GetMouseButtonUp(1)
+                                                        || Input.GetMouseButtonDown(2) || Input.GetMouseButtonUp(2);
+
             bool watching = !hosting
+                            && !clicking
                             && stack != null
                             && (Event.current == null
                                 || Event.current.type == EventType.Layout
@@ -507,7 +525,13 @@ namespace Gideon.UIOverhaul.Features.Options
                     // ImmediateWindow is the one thing vanilla adds during Repaint by design: it is how
                     // Find.WindowStack.ImmediateWindow draws an overlay, and the first call for a given ID creates
                     // one. Counting it would call a page a redirect for drawing a tooltip over itself.
-                    if (opened is ImmediateWindow || WindowsBeforePage.Contains(opened))
+                    //
+                    // A FloatMenu is never a redirect either, whatever frame it lands on. A page that replaces
+                    // itself opens a dialog to be read instead of this window; a float menu is a transient list
+                    // of choices belonging to a control inside the page, and it closes itself the moment
+                    // something is picked. Named as well as covered by the frame test above, because the two
+                    // catch it for different reasons and this one holds even if a menu is ever opened from a key.
+                    if (opened is ImmediateWindow || opened is FloatMenu || WindowsBeforePage.Contains(opened))
                         continue;
 
                     redirected = true;
@@ -782,6 +806,7 @@ namespace Gideon.UIOverhaul.Features.Options
                 MakeCategory("Additional Features", "Extras beyond the restyling",
                     DrawAdditionalFeaturesSection),
                 MakeCategory("Raids and Incidents", "Turn off the ones you dislike", DrawThreatsSection),
+                MakeCategory("Quality of Life", "Interruptions and busywork", DrawQualityOfLifeSection),
                 MakeCategory("Diagnostics", "Logging", DrawDiagnosticsSection),
                 MakeCategory("Developer Tools", "For working on mods", DrawDeveloperToolsSection),
                 MakeModSettingsCategory()
@@ -2363,6 +2388,112 @@ namespace Gideon.UIOverhaul.Features.Options
         /// would blur a category that currently means exactly one thing. The heading names a kind rather than a
         /// feature so the next optional addition has somewhere to go.
         /// </summary>
+        /// <summary>
+        /// Things the game does to you that this mod can stop doing.
+        ///
+        /// <b>Its own category rather than a group inside Additional Features,</b> added 2026-08-23. That
+        /// category is for things this mod <em>adds</em> -- an overlay, a radius, a designation it issues for you
+        /// -- and every one of its toggles turns a new behaviour on. These take something away instead: an
+        /// interruption the game insists on, or a refusal it makes on the player's behalf. A player hunting for
+        /// the setting that stops the research popup is not looking under a heading called Additional Features.
+        ///
+        /// <b>The livestock area setting moved here on Aaron's call,</b> and it is the case that shows the line is
+        /// about direction rather than about size. It reads both ways -- it grants livestock an ability they did
+        /// not have -- but what it actually does is lift RimWorld's refusal to give a roaming animal an area, and
+        /// a refusal lifted belongs with the other refusals. It is still the one setting in this mod that changes
+        /// what pawns are allowed to do, which is why it alone starts switched off.
+        ///
+        /// The heading names a kind rather than a feature, so the next interruption worth silencing has an
+        /// obvious home and nobody has to widen a category to fit it.
+        /// </summary>
+        private void DrawQualityOfLifeSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Quality of Life", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "Interruptions RimWorld hands you and refusals it makes on your behalf, that this mod can take "
+                + "back. Each is switched separately, and switching one off never affects the rest.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Research");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Disable alert on research completion",
+                settings.quietResearchCompletion, value => settings.quietResearchCompletion = value,
+                "Finishing a research project sends a letter instead of stopping the game with a popup.\n\n"
+                + "RimWorld's popup is modal: it takes the keyboard and nothing else responds until you dismiss "
+                + "it, and it arrives on the colony's clock rather than yours -- which with three benches running "
+                + "is several times a day, often mid-raid. Nothing in it needs an answer. It names the project "
+                + "and then repeats the description already written on that project's page.\n\n"
+                + "The letter says the same thing and waits in the corner until you want it. A project that "
+                + "carries its own discovery letter still sends that one and no letter of ours, since that text "
+                + "was written for the discovery.\n\n"
+                + "Switch this off and the popup comes back exactly as the game shipped it.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Animals");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Let an allowed area keep livestock",
+                settings.penAnimalsUseAreas, value => settings.penAnimalsUseAreas = value,
+                "RimWorld refuses an allowed area to any animal that roams, which is every animal the pen system "
+                + "exists for: cows, sheep, chickens, muffalo. Turn this on and they can be given one like any "
+                + "other animal, from this mod's animals tab or RimWorld's.\n\nThe whole AI honors it, so an area "
+                + "keeps a cow out of your crops or off a bridge, and an animal left outside its area walks back "
+                + "to it the way a penned one walks back to its pen.\n\nIt also stops them wandering off the map. "
+                + "Livestock with an area, or standing in a pen meant for them, no longer starts roaming, and one "
+                + "already on its way turns back the moment you give it either. RimWorld's own rule only counts "
+                + "ropes and a fully enclosed pen, so a fence with a gap in it loses you the herd.\n\nAn animal an "
+                + "area is keeping stops being pen business: nobody tries to rope it, and it can use ordinary "
+                + "doors, which a roaming animal normally cannot. The other side of that is that a fence no "
+                + "longer holds it either -- the area is what keeps it in now, so an area drawn wider than your "
+                + "fence line will let it out.\n\nThis is the one setting in this mod that changes what pawns are "
+                + "allowed to do rather than how something is drawn, which is why it starts switched off.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Mood Fixes");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Barracks are neutral",
+                settings.barracksAreNeutral, value =>
+                {
+                    settings.barracksAreNeutral = value;
+                    Mood.MoodFixes.Apply();
+                },
+                "Sleeping in a shared room stops costing mood.\n\nRimWorld charges between -1 and -7 for it, "
+                + "scaled by how good the room is, on top of whatever the room's own quality is already worth. A "
+                + "barracks is what an early colony can afford and what a large one often still wants, so the "
+                + "penalty falls hardest on a decision the player made deliberately.\n\nThe four best stages are "
+                + "a bonus rather than a penalty -- a barracks impressive enough that nobody minds sharing it -- "
+                + "and those are left as they are. This sets a floor, not a flat zero.\n\nIt applies to memories "
+                + "colonists are already carrying, so the mood tab agrees the moment you switch it.",
+                !Mood.MoodFixes.BarracksAvailable);
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Salvage");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Ancient wreckage can be deconstructed",
+                settings.salvageAncientWrecks, value =>
+                {
+                    settings.salvageAncientWrecks = value;
+                    Salvage.AncientSalvage.Apply();
+                },
+                "Ruined tanks, APCs, warwalker limbs, dropships and the rest of the ancient junk a map generates "
+                + "become deconstructible, and yield steel and components when they are.\n\nRimWorld marks them "
+                + "non-deconstructible with no cost list, so the only way to clear one is to shoot it apart, and "
+                + "that leaves nothing behind. What you get is priced off the wreck's own footprint: "
+                + "five steel a cell, and a component for every eight, up to four. A ruined tank is fifteen "
+                + "cells.\n\nOnly wreckage, named piece by piece. Cryptosleep pods, mech gestators and anything "
+                + "Anomaly's quests are counting on stay exactly as they are.\n\nSwitch it off and they go back "
+                + "to scenery. Any deconstruct order already standing on one is cleared at the same time.",
+                !Salvage.AncientSalvage.Available);
+
+            y += 8f;
+        }
+
         private void DrawAdditionalFeaturesSection(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings)
         {
@@ -2451,22 +2582,6 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "each one.\n\nA pending harvest order on the plant is replaced, since it cannot yield. A plant "
                 + "you have set to never be cut is left alone. Blight already on the map when you switch this on "
                 + "is left alone too; from then on, new blight is marked.");
-
-            y += 8f;
-
-            GroupLabel(view, ref y, palette, "Animals");
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Let an allowed area keep livestock",
-                settings.penAnimalsUseAreas, value => settings.penAnimalsUseAreas = value,
-                "RimWorld refuses an allowed area to any animal that roams, which is every animal the pen system "
-                + "exists for: cows, sheep, chickens, muffalo. Turn this on and they can be given one like any "
-                + "other animal, from this mod's animals tab or RimWorld's.\n\nThe whole AI honors it, so an area "
-                + "keeps a cow out of your crops or off a bridge.\n\nIt also stops them wandering off the map. "
-                + "Livestock with an area, or standing in a pen meant for them, no longer starts roaming, and one "
-                + "already on its way turns back the moment you give it either. RimWorld's own rule only counts "
-                + "ropes and a fully enclosed pen, so a fence with a gap in it loses you the herd.\n\nThis is the "
-                + "one setting here that changes what pawns are allowed to do rather than how something is drawn, "
-                + "which is why it starts switched off.");
 
             y += 8f;
 
@@ -3369,6 +3484,25 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "menu does. The confirmation also offers an Always allow button, which turns this on.");
 
             y += 6f;
+
+            GroupLabel(view, ref y, palette, "Research bands");
+
+            if (SmallButton(new Rect(Indent, y, 200f, RowHeight), "Open research bands", palette))
+            {
+                Research.Dialog_ResearchBands.Open();
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 4f;
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(Indent, y, view.width - Indent, 72f),
+                "Every research project in the game, the band the research tab sorted it into, and the sentence "
+                + "saying why.\n\nThe bands are worked out from what a project unlocks, so a mod nobody has "
+                + "written yet still lands somewhere. Filter to Other to see the projects that rule could not "
+                + "read: if a whole mod is sitting there, it wants naming outright.");
+            y += 76f;
+            GUI.color = palette.TextPrimary;
 
             GroupLabel(view, ref y, palette, "XML Workbench");
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -152,7 +153,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 if (remaining <= 0f)
                     return;
 
-                bool showFooter = contents && ShowsFooter(kind, roomForBody);
+                bool showFooter = contents && ShowsFooter(kind, roomForBody, thing);
 
                 float footerHeight = showFooter ? remaining : 0f;
 
@@ -457,9 +458,54 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// and its expiry, stun and stagger timers, a royal title, a trader's kind, ability cooldowns, and the
         /// inspect lines some hediffs write.
         /// </summary>
-        private static bool ShowsFooter(InspectBodyKind kind, bool roomForBody)
+        private static bool ShowsFooter(InspectBodyKind kind, bool roomForBody, Thing thing)
         {
-            return !roomForBody || kind != InspectBodyKind.Pawn;
+            if (!roomForBody)
+                return true;
+
+            if (kind == InspectBodyKind.Pawn)
+                return false;
+
+            return !ListsItsOwnContents(thing);
+        }
+
+        /// <summary>
+        /// Whether a tab on this very thing already lists what its inspect string is repeating.
+        ///
+        /// <b>Dropped for containers on Aaron's instruction of 2026-08-23, and the reason he gave was the scroll
+        /// wheel.</b> Vanilla draws the inspect string through <c>Widgets.LabelScrollable</c>, which consumes the
+        /// wheel whenever the text is long enough to need a scrollbar. A crate holding forty-four stacks writes
+        /// every one of them into that string, so the footer becomes a second scrolling list under the first, and
+        /// the pointer only has to stray into it for the wheel to move the wrong list.
+        ///
+        /// <b>Losing nothing is what makes this safe.</b> The footer's whole justification is that mods write
+        /// into the inspect string and this mod cannot know what they put there -- so it is kept verbatim
+        /// everywhere except where the string is a list of contents and a tab on the same thing already shows
+        /// that list, better, with icons and a search box. This is the second such exception; a pawn was the
+        /// first, for the same reason and by the same test.
+        ///
+        /// <b>Keyed on the tab the thing offers, not on its class.</b> <c>Building_Storage</c> would catch
+        /// shelves and crates and miss caskets, transporters, and every modded container that reached for
+        /// vanilla's own contents tab. Asking whether a contents tab is offered is asking the question that
+        /// actually matters, and it answers correctly for a mod nobody has written yet.
+        /// </summary>
+        private static bool ListsItsOwnContents(Thing thing)
+        {
+            return UIGuard.Try("Inspector.ContentsTabTest", () =>
+            {
+                List<InspectTabBase> tabs = thing?.def?.inspectorTabsResolved;
+
+                if (tabs == null)
+                    return false;
+
+                for (int i = 0; i < tabs.Count; i++)
+                {
+                    if (tabs[i] is ITab_ContentsBase || tabs[i] is ITab_Storage)
+                        return true;
+                }
+
+                return false;
+            }, false, null);
         }
 
         /// <summary>

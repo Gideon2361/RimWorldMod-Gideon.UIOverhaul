@@ -52,26 +52,103 @@ namespace Gideon.UIOverhaul.Features.Architect
             Cache.Clear();
         }
 
+        /// <summary>
+        /// Categories whose art is a particular building's rather than whatever comes first, by defName.
+        ///
+        /// The fallback picks the first designator in the list, which is a reasonable guess and sometimes the
+        /// wrong one: a category's first buildable is not always the thing a player pictures when they read its
+        /// name. Naming the building instead of shipping a drawing keeps the mod's own art -- which a player
+        /// already recognizes from the build menu -- and costs nothing when the mod is absent.
+        ///
+        /// Keyed and valued by defName strings on purpose. Neither side is a hard reference, so a category from
+        /// a mod that is not installed is simply a lookup that finds nothing.
+        /// </summary>
+        private static readonly Dictionary<string, string> ThingIcons = new Dictionary<string, string>
+        {
+            // Mycohazard. Aaron's call, 2026-08-24: the cloudmaker is the mod's signature, and the fungal node
+            // that happens to sort first is a small orange blob nobody would read as a category.
+            { "DE_Fungal", "DE_Cloudmaker" }
+        };
+
         private static Texture Resolve(DesignationCategoryDef category)
         {
             Texture2D authored = ContentFinder<Texture2D>.Get(IconFolder + category.defName, false);
             if (Usable(authored))
                 return authored;
 
+            Texture named = NamedIcon(category);
+            if (named != null)
+                return named;
+
             Texture expansion = ExpansionIcon(category);
             if (expansion != null)
                 return expansion;
 
-            // AllResolvedDesignators rather than ResolvedAllowedDesignators: the allowed set shrinks and
-            // grows with research, and a category's icon changing as the game progresses would be worse
-            // than a slightly odd choice that stays put.
+            // Two passes, and the order is the whole point. Every category may list special designators --
+            // Cancel and Deconstruct, near enough always -- and ResolveDesignators puts them at the front of
+            // the list, ahead of anything the category is actually about. Taking the first usable icon
+            // therefore stamped Cancel's red circle-slash onto every modded category that shipped no art of
+            // its own, which is most of them. Buildables first, specials only if nothing else answered, so a
+            // category that genuinely is nothing but orders still gets an icon.
+            Texture buildable = FirstIcon(category, false);
+            if (buildable != null)
+                return buildable;
+
+            Texture special = FirstIcon(category, true);
+            if (special != null)
+                return special;
+
+            return Fallback;
+        }
+
+        /// <summary>The icon of the building this category was told to wear, or null.</summary>
+        private static Texture NamedIcon(DesignationCategoryDef category)
+        {
+            if (!ThingIcons.TryGetValue(category.defName, out string thing))
+                return null;
+
+            ThingDef def = DefDatabase<ThingDef>.GetNamedSilentFail(thing);
+
+            return def != null && Usable(def.uiIcon) ? def.uiIcon : null;
+        }
+
+        /// <summary>
+        /// The first designator icon in the category, from one side of the special/buildable line or the other.
+        ///
+        /// AllResolvedDesignators rather than ResolvedAllowedDesignators: the allowed set shrinks and grows with
+        /// research, and a category's icon changing as the game progresses would be worse than a slightly odd
+        /// choice that stays put.
+        ///
+        /// A designator is special when its type is one the def named in <c>specialDesignatorClasses</c>, which
+        /// is the def's own account of which of its entries are orders rather than things -- so this reads the
+        /// same list the game read when it built the category, and a mod's own special designator is covered
+        /// without being named here.
+        /// </summary>
+        private static Texture FirstIcon(DesignationCategoryDef category, bool specials)
+        {
             foreach (Designator designator in category.AllResolvedDesignators)
             {
-                if (designator != null && Usable(designator.icon))
+                if (designator == null || !Usable(designator.icon))
+                    continue;
+
+                if (IsSpecial(category, designator) == specials)
                     return designator.icon;
             }
 
-            return Fallback;
+            return null;
+        }
+
+        private static bool IsSpecial(DesignationCategoryDef category, Designator designator)
+        {
+            List<Type> classes = category.specialDesignatorClasses;
+
+            for (int i = 0; classes != null && i < classes.Count; i++)
+            {
+                if (classes[i] != null && classes[i].IsInstanceOfType(designator))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>

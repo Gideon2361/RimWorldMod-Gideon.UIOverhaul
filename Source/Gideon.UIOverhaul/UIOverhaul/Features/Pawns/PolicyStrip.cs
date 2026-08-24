@@ -55,8 +55,69 @@ namespace Gideon.UIOverhaul.Features.Pawns
             return pawn != null && Slots(pawn).Count > 0 ? Height : 0f;
         }
 
-        /// <summary>Below this a chip cannot say anything useful, so it is left out of the line.</summary>
+        /// <summary>
+        /// How much room <c>Text.ClampTextWithEllipsis</c> keeps back for the three dots.
+        ///
+        /// <b>Not optional, and not visible in any signature.</b> That method returns the text unchanged only
+        /// when it measures at or under <c>rect.width - 13</c>, so a label drawn through
+        /// <c>Widgets.LabelEllipses</c> into a rect sized to the label's own measurement is always clipped -- by
+        /// thirteen pixels, whatever the string. This chip measured itself exactly and came out two pixels inside
+        /// the reserve, which is why every one of the four read "APPAREL: Anythi..." on 2026-08-24 while a
+        /// straight width comparison said they fitted.
+        /// </summary>
+        private const float EllipsisReserve = 13f;
+
+        /// <summary>
+        /// Characters of text a chip is sized to hold before its own label is considered.
+        ///
+        /// Aaron's number, 2026-08-24. It is a floor rather than the width: a chip whose caption and value need
+        /// more than this still gets what it asks for.
+        /// </summary>
+        private const int MinimumCharacters = 25;
+
+        /// <summary>
+        /// The absolute floor, below which a chip is left out of the line rather than drawn saying nothing.
+        ///
+        /// Separate from <see cref="MinimumCharacters"/> on purpose: that one is how wide a chip should be, this
+        /// one is whether there is any point drawing it at all.
+        /// </summary>
         private const float MinimumChipWidth = 74f;
+
+        /// <summary>The measured width of one average character, and the frame it was measured on.</summary>
+        private static float characterWidth;
+
+        private static int characterFrame = -1;
+
+        /// <summary>
+        /// What one character is worth, averaged over both cases.
+        ///
+        /// <b>Measured rather than assumed, and over a mixed sample.</b> These strings are an upper-case caption
+        /// followed by a mixed-case value, so an average taken over lower case alone would size the chip short
+        /// and one taken over "M" repeated would make every chip enormous. The sample is the alphabet in both
+        /// cases plus the space that separates the two runs.
+        ///
+        /// Measured at whatever font the caller has set, which <see cref="Draw"/> has already made Tiny --
+        /// measuring under a different font than the one that draws is the other half of the bug above. Stamped
+        /// per frame so a panel of forty rows pays for one measurement rather than two hundred.
+        /// </summary>
+        private static float CharacterWidth()
+        {
+            if (characterFrame == Time.frameCount && characterWidth > 0f)
+                return characterWidth;
+
+            const string sample = "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz";
+
+            characterFrame = Time.frameCount;
+            characterWidth = Text.CalcSize(sample).x / sample.Length;
+
+            return characterWidth;
+        }
+
+        /// <summary>How wide a chip has to be to hold <see cref="MinimumCharacters"/> of text plus its chrome.</summary>
+        private static float PreferredMinimum()
+        {
+            return CharacterWidth() * MinimumCharacters + ChipPadding + CaretWidth + EllipsisReserve;
+        }
 
         /// <summary>One picker: what it is called, what it currently says, and what opens its menu.</summary>
         private struct Slot
@@ -95,11 +156,21 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             float x = rect.x;
 
+            float minimum = PreferredMinimum();
+
             for (int i = 0; i < slots.Count; i++)
             {
-                float width = Mathf.Max(MinimumChipWidth, WidthOf(slots[i]));
+                float width = Mathf.Max(minimum, WidthOf(slots[i]));
 
+                // Narrowed rather than dropped, down to the point where a chip stops saying anything. The
+                // preferred minimum is three times the old one, so on a tab dragged narrow it would otherwise
+                // start costing the player whole policies to make the remaining ones roomier, which is a worse
+                // trade than a shortened label -- and shortening only happens after every chip's own width has
+                // already failed to fit.
                 if (x + width > rect.xMax)
+                    width = rect.xMax - x;
+
+                if (width < MinimumChipWidth)
                     break;
 
                 DrawChip(new Rect(x, rect.y + TopPad, width, CellHeight), slots[i], palette);
@@ -118,7 +189,10 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// </summary>
         private static float WidthOf(Slot slot)
         {
-            return Text.CalcSize(Caption(slot)).x + ChipPadding + CaretWidth;
+            // The reserve is the fix for the truncation, not padding for taste. See EllipsisReserve: the value
+            // run is drawn through LabelEllipses, which clips anything not thirteen pixels inside its rect, so a
+            // chip measured to its own text is thirteen pixels too narrow by construction.
+            return Text.CalcSize(Caption(slot)).x + ChipPadding + CaretWidth + EllipsisReserve;
         }
 
         private static string Caption(Slot slot)
@@ -147,6 +221,28 @@ namespace Gideon.UIOverhaul.Features.Pawns
                         chosen => pawn.outfits.CurrentApparelPolicy = (ApparelPolicy) chosen,
                         () => new Dialog_ManageApparelPolicies(pawn.outfits.CurrentApparelPolicy))
                 });
+            }
+
+            // Weapons, which is this mod's own policy rather than one of RimWorld's -- see Features.Weapons.
+            // Directly after apparel because it is the other half of the same question: what a colonist is
+            // allowed to be wearing and carrying. The picker and the manager are the same controls as every
+            // other slot on this row, which is the whole reason the policy was built to RimWorld's shape.
+            if (Weapons.WeaponPolicies.Applies(pawn))
+            {
+                Weapons.WeaponPolicies set = Weapons.WeaponPolicies.Current;
+
+                if (set != null)
+                {
+                    slots.Add(new Slot
+                    {
+                        Caption = "WEAPONS",
+                        Label = NameOf(set.For(pawn)),
+                        Open = () => Menu(
+                            Widen(set.All),
+                            chosen => set.Set(pawn, (Weapons.WeaponPolicy) chosen),
+                            () => new Weapons.Dialog_ManageWeaponPolicies(set.For(pawn)))
+                    });
+                }
             }
 
             // Configurable is vanilla's own test, and it is not the same question as whether a tracker exists:

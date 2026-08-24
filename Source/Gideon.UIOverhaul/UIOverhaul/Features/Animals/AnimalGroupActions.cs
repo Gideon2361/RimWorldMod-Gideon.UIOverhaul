@@ -299,7 +299,30 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// </summary>
         internal static void ChoosePen(AnimalGroup group, Action changed)
         {
-            List<CompAnimalPenMarker> pens = PensOn(group.Map);
+            ChoosePen(group?.Map, group?.Def, changed);
+        }
+
+        /// <summary>
+        /// The same menu for one animal, for the inspect pane.
+        ///
+        /// <b>It still moves the whole species, and it has to.</b> Everything in the summary above applies
+        /// unchanged: a pen states which species it accepts and there is no per-animal setting to write, so
+        /// choosing a pen for the cow in front of you allows cows in that pen and disallows them in the others.
+        /// One animal is simply where the player happened to click. The menu wording is the same, so what the
+        /// click does is not described differently in two places -- and the inspect pane's own row says which
+        /// species it is about, since it is that animal's row.
+        /// </summary>
+        internal static void ChoosePenFor(Pawn animal, Action changed = null)
+        {
+            ChoosePen(animal?.MapHeld, animal?.def, changed);
+        }
+
+        private static void ChoosePen(Map map, ThingDef species, Action changed)
+        {
+            if (map == null || species == null)
+                return;
+
+            List<CompAnimalPenMarker> pens = PensOn(map);
             List<FloatMenuOption> options = new List<FloatMenuOption>();
 
             if (pens.Count == 0)
@@ -320,7 +343,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                     foreach (CompAnimalPenMarker other in pens)
                     {
                         if (other.AnimalFilter != null)
-                            other.AnimalFilter.SetAllow(group.Def, other == captured);
+                            other.AnimalFilter.SetAllow(species, other == captured);
                     }
 
                     changed?.Invoke();
@@ -332,7 +355,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                 foreach (CompAnimalPenMarker other in pens)
                 {
                     if (other.AnimalFilter != null)
-                        other.AnimalFilter.SetAllow(group.Def, true);
+                        other.AnimalFilter.SetAllow(species, true);
                 }
 
                 changed?.Invoke();
