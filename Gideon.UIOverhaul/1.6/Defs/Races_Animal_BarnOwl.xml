@@ -1,0 +1,362 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!-- ===========================================================================================
+       The barn owl.
+
+       Everything here is Core only. The obvious parent would be Odyssey's SmallBirdThingBase, which
+       already carries the flight fields, but inheriting it would make this mod require Odyssey for
+       the sake of about fifteen lines. Flight itself is a 1.6 Core feature and the chicken carries
+       the same stats, so the base is AnimalThingBase and the bird properties are written out below.
+
+       Four plumage morphs ship as one animal rather than four. PawnKindDef.alternateGraphics takes a
+       weighted list and rolls one per pawn at spawn, so a colony sees mostly the common bird and the
+       occasional odd one, which is how the species actually varies in the wild.
+
+       Silent on purpose. RimWorld ships no owl audio, and the nearest Core bird sounds are the
+       chicken and the goose. A screech owl that clucks is worse than one that says nothing, so only
+       the baby stage has a call, borrowed from the chick because a nestling really does peep.
+       =========================================================================================== -->
+
+  <ThingDef ParentName="AnimalThingBase">
+    <defName>BarnOwl</defName>
+    <label>barn owl</label>
+    <description>A pale bird of prey with a heart-shaped face and almost silent flight. Barn owls hunt small animals from the air, and were kept around granaries for exactly that reason. They tolerate people well enough to be tamed, and take to a handler faster than most wild birds.</description>
+    <statBases>
+      <MoveSpeed>3.4</MoveSpeed>
+      <MarketValue>140</MarketValue>
+      <LeatherAmount>0</LeatherAmount>
+      <ComfyTemperatureMin>-25</ComfyTemperatureMin>
+      <FilthRate>2</FilthRate>
+      <MaxFlightTime>30</MaxFlightTime>
+      <FlightCooldown>10</FlightCooldown>
+      <Wildness>0.45</Wildness>
+    </statBases>
+    <race>
+      <body>Bird</body>
+      <baseHungerRate>0.10</baseHungerRate>
+      <baseBodySize>0.2</baseBodySize>
+      <baseHealthScale>0.15</baseHealthScale>
+
+      <!-- A predator, but a small one. maxPreyBodySize sits below the owl's own body size, so it
+           takes rats, squirrels and hares and never opens a fight it cannot finish. The house cat is
+           the closest vanilla comparison, at 0.25. -->
+      <foodType>CarnivoreAnimal, OvivoreAnimal</foodType>
+      <predator>true</predator>
+      <maxPreyBodySize>0.15</maxPreyBodySize>
+
+      <trainability>Intermediate</trainability>
+      <petness>0.2</petness>
+
+      <!-- Odyssey adds the attack-target trainable and the TrainableDef that backs it. MayRequire on
+           a list element is checked against active packageIds at load, so without Odyssey this line
+           is skipped and nothing errors: the owl is simply trained one step less far. -->
+      <specialTrainables>
+        <li MayRequire="Ludeon.RimWorld.Odyssey">AttackTarget</li>
+      </specialTrainables>
+      <mateMtbHours>12</mateMtbHours>
+      <lifeExpectancy>8</lifeExpectancy>
+      <manhunterOnDamageChance>0.05</manhunterOnDamageChance>
+      <manhunterOnTameFailChance>0.02</manhunterOnTameFailChance>
+
+      <!-- Deliberately no roamMtbDays. A roamer wanders out of its allowed area, and this mod's own
+           livestock area handling reads exactly that flag. An owl given a perch should stay on it. -->
+
+      <flightStartChanceOnJobStart>0.12</flightStartChanceOnJobStart>
+      <canFlyIntoMap>true</canFlyIntoMap>
+      <canLeaveMapFlying>true</canLeaveMapFlying>
+      <leaveMapOnFleeChance>1</leaveMapOnFleeChance>
+
+      <soundEating>Bird_Eat</soundEating>
+      <soundMeleeHitPawn>Pawn_Melee_SmallScratch_HitPawn</soundMeleeHitPawn>
+      <soundMeleeHitBuilding>Pawn_Melee_SmallScratch_HitBuilding</soundMeleeHitBuilding>
+      <soundMeleeMiss>Pawn_Melee_SmallScratch_Miss</soundMeleeMiss>
+
+      <lifeStageAges>
+        <li>
+          <def>AnimalBabyTiny</def>
+          <minAge>0</minAge>
+          <soundWounded>Pawn_Chick_Call</soundWounded>
+          <soundDeath>Pawn_Chick_Call</soundDeath>
+          <soundCall>Pawn_Chick_Call</soundCall>
+          <soundAngry>Pawn_Chick_Call</soundAngry>
+        </li>
+        <li>
+          <def>AnimalJuvenile</def>
+          <minAge>0.12</minAge>
+        </li>
+        <li>
+          <def>AnimalAdult</def>
+          <minAge>0.35</minAge>
+        </li>
+      </lifeStageAges>
+
+      <!-- Where a head shot lands, per facing. Taken from the vanilla small bird because the
+           silhouette is the same shape: head high and centered from front and back, offset a quarter
+           of a cell to the side in profile. -->
+      <headPosPerRotation>
+        <li>(0.0, 0, 0.32)</li>
+        <li>(0.25, 0, 0.3)</li>
+        <li>(0.0, 0, 0.26)</li>
+        <li>(-0.25, 0, 0.3)</li>
+      </headPosPerRotation>
+    </race>
+    <modExtensions>
+
+      <!-- What turns a fed owl into a working one. Vanilla predation is reached only through hunger,
+           and vanilla prey selection does not care whose animal it is; this extension drives a job
+           giver that fixes both. See Features/Animals/VerminHunterProperties.
+           The size cap is lower than the race maxPreyBodySize on purpose: 0.15 is what a starving owl
+           will risk, 0.10 is what a fed one will start. -->
+      <li Class="Gideon.UIOverhaul.Features.Animals.VerminHunterProperties">
+        <maxPreyBodySize>0.10</maxPreyBodySize>
+        <radius>30</radius>
+        <huntBelowFood>0.9</huntBelowFood>
+        <restTicks>2500</restTicks>
+      </li>
+    </modExtensions>
+    <comps>
+      <li Class="CompProperties_EggLayer">
+        <eggUnfertilizedDef>EggBarnOwlUnfertilized</eggUnfertilizedDef>
+        <eggFertilizedDef>EggBarnOwlFertilized</eggFertilizedDef>
+        <eggFertilizationCountMax>1</eggFertilizationCountMax>
+        <eggLayIntervalDays>6</eggLayIntervalDays>
+        <eggCountRange>1~2</eggCountRange>
+        <eggProgressUnfertilizedMax>0.5</eggProgressUnfertilizedMax>
+      </li>
+    </comps>
+    <tools>
+      <li>
+        <label>talons</label>
+        <capacities>
+          <li>Scratch</li>
+        </capacities>
+        <power>4</power>
+        <cooldownTime>1.6</cooldownTime>
+        <linkedBodyPartsGroup>Feet</linkedBodyPartsGroup>
+      </li>
+      <li>
+        <label>beak</label>
+        <capacities>
+          <li>Bite</li>
+        </capacities>
+        <power>3.2</power>
+        <cooldownTime>2</cooldownTime>
+        <linkedBodyPartsGroup>Beak</linkedBodyPartsGroup>
+      </li>
+      <li>
+        <label>head</label>
+        <capacities>
+          <li>Blunt</li>
+        </capacities>
+        <power>1</power>
+        <cooldownTime>1.5</cooldownTime>
+        <linkedBodyPartsGroup>HeadAttackTool</linkedBodyPartsGroup>
+        <ensureLinkedBodyPartsGroupAlwaysUsable>true</ensureLinkedBodyPartsGroupAlwaysUsable>
+        <chanceFactor>0.2</chanceFactor>
+      </li>
+    </tools>
+    <tradeTags>
+      <li>AnimalUncommon</li>
+      <li>AnimalPet</li>
+    </tradeTags>
+  </ThingDef>
+
+  <!-- ===========================================================================================
+       The kind, and the four morphs.
+
+       The morph roll has two stages, and missing the first one costs you the whole feature.
+       PawnGraphicUtils.TryGetAlternate first rolls alternateGraphicChance, and only if that passes
+       does it pick from alternateGraphics by relative weight. That field defaults to zero, so a
+       PawnKindDef carrying a full list of alternates and no chance value spawns the base texture
+       every single time and never errors.
+
+       So the numbers below are read as: 0.45 of birds are something other than white-breasted, and
+       within that group the weights split 25 / 15 / 5. The result is the intended sheet, roughly
+       55 percent white-breasted, 25 dark-breasted, 15 ashen, 5 sable. Change the chance and every
+       morph moves with it.
+
+       The dessicated corpse is one shared set. Vanilla does the same, and a mummified owl is the
+       same color whichever plumage it had.
+
+       Flight frames are numbered from one, not zero, and every frame needs all three facings:
+       AnimationDefGenerator_Flying builds paths as prefix, then index, then "_east" and so on.
+       Eight frames is therefore twenty-four files, which is worth knowing before counting them.
+       =========================================================================================== -->
+
+  <PawnKindDef ParentName="AnimalKindBase">
+    <defName>BarnOwl</defName>
+    <label>barn owl</label>
+    <race>BarnOwl</race>
+    <combatPower>35</combatPower>
+    <ecoSystemWeight>0.15</ecoSystemWeight>
+    <wildGroupSize>1~2</wildGroupSize>
+
+    <flyingAnimationFramePathPrefix>Things/Pawn/Animal/BarnOwl/BarnOwl_Flying_</flyingAnimationFramePathPrefix>
+    <flyingAnimationFrameCount>8</flyingAnimationFrameCount>
+    <flyingAnimationTicksPerFrame>3</flyingAnimationTicksPerFrame>
+    <flyingAnimationDrawSize>1.8</flyingAnimationDrawSize>
+    <flyingAnimationDrawSizeIsMultiplier>false</flyingAnimationDrawSizeIsMultiplier>
+    <flyingAnimationInheritColors>false</flyingAnimationInheritColors>
+
+    <alternateGraphicChance>0.45</alternateGraphicChance>
+    <alternateGraphics>
+      <li>
+        <weight>0.25</weight>
+        <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Dark</texPath>
+      </li>
+      <li>
+        <weight>0.15</weight>
+        <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Ashen</texPath>
+      </li>
+      <li>
+        <weight>0.05</weight>
+        <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Sable</texPath>
+      </li>
+    </alternateGraphics>
+
+    <lifeStages>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl</texPath>
+          <drawSize>0.60</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.60</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl</texPath>
+          <drawSize>0.72</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.72</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl</texPath>
+          <drawSize>0.85</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.85</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+    </lifeStages>
+  </PawnKindDef>
+
+  <!-- ===========================================================================================
+       The Duskwood variant: the same owl, drawn only from the two grey plumages.
+
+       A second PawnKindDef, because a biome table cannot say this any other way. BiomeDef
+       wildAnimals is a dictionary of PawnKindDef to weight, so the only unit a biome can ask for is
+       a kind. Restricting which morphs appear in one biome therefore means a kind whose graphic pool
+       is already restricted, which is what this is.
+
+       Same race, so it is the same animal in every way that is not the sprite: same stats, same
+       trainability, same hunting, same eggs. Only the plumage pool differs. Eggs still name the
+       standard kind as their hatcherPawn on purpose, so a Duskwood owl raised in the colony has
+       ordinary chicks rather than breeding a grey line.
+
+       Ashen is the base and sable is the alternate at a 0.35 chance, so the split is roughly two
+       ashen to one sable. Sable stays the rarer of the pair, as it is everywhere else, but at seven
+       times the 5 percent it gets on a normal map.
+       =========================================================================================== -->
+
+  <PawnKindDef ParentName="AnimalKindBase">
+    <defName>BarnOwl_Dusk</defName>
+    <label>barn owl</label>
+    <race>BarnOwl</race>
+    <combatPower>35</combatPower>
+    <ecoSystemWeight>0.15</ecoSystemWeight>
+    <wildGroupSize>1~2</wildGroupSize>
+
+    <flyingAnimationFramePathPrefix>Things/Pawn/Animal/BarnOwl/BarnOwl_Flying_</flyingAnimationFramePathPrefix>
+    <flyingAnimationFrameCount>8</flyingAnimationFrameCount>
+    <flyingAnimationTicksPerFrame>3</flyingAnimationTicksPerFrame>
+    <flyingAnimationDrawSize>1.8</flyingAnimationDrawSize>
+    <flyingAnimationDrawSizeIsMultiplier>false</flyingAnimationDrawSizeIsMultiplier>
+    <flyingAnimationInheritColors>false</flyingAnimationInheritColors>
+
+    <alternateGraphicChance>0.35</alternateGraphicChance>
+    <alternateGraphics>
+      <li>
+        <weight>1</weight>
+        <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Sable</texPath>
+      </li>
+    </alternateGraphics>
+
+    <lifeStages>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Ashen</texPath>
+          <drawSize>0.60</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.60</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Ashen</texPath>
+          <drawSize>0.72</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.72</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+      <li>
+        <bodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/BarnOwl_Ashen</texPath>
+          <drawSize>0.85</drawSize>
+        </bodyGraphicData>
+        <dessicatedBodyGraphicData>
+          <texPath>Things/Pawn/Animal/BarnOwl/Dessicated_BarnOwl</texPath>
+          <drawSize>0.85</drawSize>
+        </dessicatedBodyGraphicData>
+      </li>
+    </lifeStages>
+  </PawnKindDef>
+
+  <!-- Eggs. Both inherit the vanilla bases, which supply the graphic, the categories and the
+       spoilage comps, so neither needs new art. A clutch is small and slow next to poultry, because
+       an owl is not a farm bird and should not out-produce a chicken. -->
+
+  <ThingDef ParentName="EggUnfertBase">
+    <defName>EggBarnOwlUnfertilized</defName>
+    <label>owl egg (unfert.)</label>
+    <description>An unfertilized barn owl egg. Edible raw, and considerably better cooked.</description>
+    <graphicData>
+      <color>(242,238,230)</color>
+    </graphicData>
+    <statBases>
+      <MarketValue>9.0</MarketValue>
+    </statBases>
+  </ThingDef>
+
+  <ThingDef ParentName="EggFertBase">
+    <defName>EggBarnOwlFertilized</defName>
+    <label>owl egg (fert.)</label>
+    <description>A fertilized barn owl egg. Given warmth and time, it should hatch into an owlet.</description>
+    <possessionCount>1</possessionCount>
+    <graphicData>
+      <color>(248,246,240)</color>
+    </graphicData>
+    <statBases>
+      <MarketValue>9.0</MarketValue>
+    </statBases>
+    <comps>
+      <li Class="CompProperties_Hatcher">
+        <hatcherDaystoHatch>5</hatcherDaystoHatch>
+        <hatcherPawn>BarnOwl</hatcherPawn>
+      </li>
+    </comps>
+  </ThingDef>
+
+</Defs>

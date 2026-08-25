@@ -1,0 +1,189 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Patch>
+
+  <!-- ===========================================================================================
+       Puts barn owls into the wild animal tables.
+
+       Tyto alba has one of the widest natural ranges of any land bird, which argues for adding it
+       nearly everywhere. It is held back from that here for two reasons. Ice sheet, sea ice, tundra,
+       cold bog and extreme desert are out because there is nothing for a small predator to hunt.
+       Tropical rainforest is out because barn owls are birds of open country and hunt on the wing
+       over ground they can see.
+
+       Weights run 0.1 to 0.3, and the ceiling is the part worth explaining. Vanilla prices every
+       predator in the game at 0.07 without exception: wolf, fox, cougar, lynx, grizzly and warg all
+       carry that same number in every biome they appear in. Non-predator birds sit at 0.5. This is a
+       predator, so it belongs near the low end rather than the high one, and the margin it does get
+       over 0.07 is earned by maxPreyBodySize 0.15, which means it cannot threaten a colonist, a
+       muffalo, or anything else that matters. A wolf is kept rare because it is dangerous; an owl
+       is not, so it can be three or four times as common without changing what a map feels like.
+
+       Within that band the ranking is habitat. Open country ranks highest, cover and hard ground
+       lowest.
+
+       Everything past the Core block is gated. MayRequire on a list element is checked against
+       active packageIds at load, so an operation naming a mod that is not installed is skipped and
+       nothing errors. MayRequireAnyOf covers the case where two mods can supply the same biome.
+       PatchOperationFindMod would also work, but it matches on mod name rather than packageId,
+       which is the looser of the two.
+
+       The Core block is not conditional: every biome named there is Core and always present. A
+       PatchOperationAdd that finds nothing logs an error, which is the right outcome, because it
+       would mean the game renamed a biome and this patch needs revisiting.
+       =========================================================================================== -->
+
+  <Operation Class="PatchOperationSequence">
+    <success>Normal</success>
+    <operations>
+
+      <!-- Core: open country with prey in it. The best habitats. -->
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="TemperateForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.2</BarnOwl>
+        </value>
+      </li>
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="AridShrubland"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.2</BarnOwl>
+        </value>
+      </li>
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="TemperateSwamp"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.15</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Core: thinner ground. Present, but you will not trip over one. -->
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="BorealForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="Desert"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <li Class="PatchOperationAdd">
+        <xpath>Defs/BiomeDef[defName="TropicalSwamp"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Odyssey.
+
+           Grasslands is the top of the band at 0.3. Open grass with hedgerows is the signature barn
+           owl habitat, and it is the one biome where this should be the bird you half expect rather
+           than the one you notice. Glacial plain, lava field, Scarlands and orbit are left out for
+           the same reason as the Core exclusions: nothing there for a small predator to hunt.
+
+           Glowforest sits at the floor because it is dense cover, and an owl hunts on the wing over
+           ground it can see. -->
+
+      <li Class="PatchOperationAdd" MayRequire="Ludeon.RimWorld.Odyssey">
+        <xpath>Defs/BiomeDef[defName="Grasslands"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.3</BarnOwl>
+        </value>
+      </li>
+
+      <li Class="PatchOperationAdd" MayRequire="Ludeon.RimWorld.Odyssey">
+        <xpath>Defs/BiomeDef[defName="Glowforest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <!-- ReGrowth: Aspen. Open aspen woodland, with hare and squirrel at 1.0 and a red fox at the
+           usual 0.07, so it reads as temperate forest and is priced as one. -->
+
+      <li Class="PatchOperationAdd" MayRequire="ReGrowth.BOTR.AspenForest">
+        <xpath>Defs/BiomeDef[defName="RG_AspenForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.2</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Gulden Biome. A temperate forest variant with its own prey list, including Gulden_Rat and
+           the rabbitgaroo, both at 1.0. Same habitat, same weight as temperate forest. -->
+
+      <li Class="PatchOperationAdd" MayRequire="pphhyy.GuldenNew">
+        <xpath>Defs/BiomeDef[defName="TemperateGuldenForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.2</BarnOwl>
+        </value>
+      </li>
+
+      <!-- ReGrowth: Boiling. Forest, and hot, so it sits at the floor for the same reason boreal
+           does: prey is there, but it is cover rather than open hunting ground. -->
+
+      <li Class="PatchOperationAdd" MayRequire="ReGrowth.BOTR.BoilingForest">
+        <xpath>Defs/BiomeDef[defName="RG_BoilingForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Dark Forest. Supplied by either Standalone Dark Forest or the full Medieval Overhaul, and
+           the biome defName is the same in both, so this uses MayRequireAnyOf rather than two
+           operations that would collide when both mods are on. Dense cover, so the floor. -->
+
+      <li Class="PatchOperationAdd"
+          MayRequireAnyOf="DankPyon.Medieval.DarkForest,DankPyon.Medieval.Overhaul">
+        <xpath>Defs/BiomeDef[defName="DankPyon_DarkForest"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.1</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Lightless Empyrean.
+
+           A pale, ghost-faced bird belongs in a lightless realm, and that is the whole argument for
+           this one, because the ecological argument runs the other way: the biome's table is
+           predators and undead, with no hare, squirrel or rat anywhere in it. Nothing there is under
+           maxPreyBodySize for an owl to hunt.
+
+           That is deliberate rather than an oversight, and it is not a starvation sentence either.
+           The race is CarnivoreAnimal, so a wild owl here lives off corpses, and a realm like this
+           one supplies them. It simply will not hunt, which is a fair trade for the picture. -->
+
+      <li Class="PatchOperationAdd" MayRequire="pphhyy.lightlessempyrean">
+        <xpath>Defs/BiomeDef[defName="pphhyy_LightlessEmpyrean_Biome"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl>0.15</BarnOwl>
+        </value>
+      </li>
+
+      <!-- Duskwood, and the one biome that gets a different bird.
+
+           BarnOwl_Dusk rather than BarnOwl: a biome table keys on PawnKindDef, so the only way to
+           say "the grey ones here" is a kind whose graphic pool is already only the grey ones. See
+           the def file for what that kind is, and for why sharing the race is safe.
+
+           At 0.15 rather than the floor, because this mod prices its own cursed wolves and bears at
+           0.14, twice what vanilla gives a predator. An owl at the floor would vanish next to
+           them. -->
+
+      <li Class="PatchOperationAdd" MayRequire="Okagrim.duskwood">
+        <xpath>Defs/BiomeDef[defName="Duskwood"]/wildAnimals</xpath>
+        <value>
+          <BarnOwl_Dusk>0.15</BarnOwl_Dusk>
+        </value>
+      </li>
+
+    </operations>
+  </Operation>
+
+</Patch>

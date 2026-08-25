@@ -5,8 +5,18 @@
     The manage-policies window inherits RimWorld's own layout, which reads both of these through
     Translate. They are keys rather than literals so a translation of this mod has somewhere to put
     its version of them.
+
+    Both are held to the shape of the vanilla policy windows on purpose, and the tip has a hard
+    ceiling behind it: Dialog_ManagePolicies gives the tip a rect exactly 32px tall, sitting at a
+    fixed offset with the panels below it. Widgets.Label clips to that rect, so a tip that runs to a
+    second line is cut off mid sentence with nothing in the log to say so. One line, and the length
+    of vanilla's own policy tips is the safe bound.
+
+    What is deliberately not said here: that tightening a policy never disarms anybody. It is true
+    and it is worth knowing, but it does not fit, and a control that describes its own edge cases is
+    not the house style anyway.
   -->
-  <Gideon_WeaponPolicyTitle>Manage weapon policies</Gideon_WeaponPolicyTitle>
-  <Gideon_WeaponPolicyTip>A weapon policy decides which weapons a colonist may carry. Colonists fetch the best weapon their policy allows, and stop picking up ones it does not.\n\nTightening a policy does not disarm anybody: a weapon that is no longer allowed is put down as part of picking up one that is.</Gideon_WeaponPolicyTip>
+  <Gideon_WeaponPolicyTitle>Weapon policies</Gideon_WeaponPolicyTitle>
+  <Gideon_WeaponPolicyTip>Create and manage templates for controlling which weapons colony members can carry.</Gideon_WeaponPolicyTip>
 
 </LanguageData>

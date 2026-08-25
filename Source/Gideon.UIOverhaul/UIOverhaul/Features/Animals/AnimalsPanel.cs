@@ -503,12 +503,20 @@ namespace Gideon.UIOverhaul.Features.Animals
         // Rows
         // ---------------------------------------------------------------------------------------
 
-        /// <summary>A hunting bill, or the row that makes one, as a grid row payload.</summary>
+        /// <summary>
+        /// A bill of either kind, or the row that makes one, as a grid row payload.
+        ///
+        /// One payload type for both because the row chrome, the buttons and the add row are identical and only
+        /// the middle of the row differs. ForTaming is what an add row is asked, since it has neither bill to be
+        /// read from.
+        /// </summary>
         private sealed class BillRow
         {
             internal HuntingBill Bill;
+            internal TamingBill Tame;
             internal Map Map;
             internal bool IsNew;
+            internal bool ForTaming;
         }
 
         private static readonly List<BillRow> BillRows = new List<BillRow>();
@@ -696,9 +704,25 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (map.IsPlayerHome)
                 return true;
 
-            MapComponent_HuntingBills component = MapComponent_HuntingBills.For(map);
+            MapComponent_HuntingBills hunting = MapComponent_HuntingBills.For(map);
 
-            return component != null && component.Bills.Count > 0;
+            if (hunting != null && hunting.Bills.Count > 0)
+                return true;
+
+            // Taming counts too, or a map that is not a player home but carries a taming bill would hide the
+            // bill that is running on it.
+            MapComponent_TamingBills taming = MapComponent_TamingBills.For(map);
+
+            return taming != null && taming.Bills.Count > 0;
+        }
+
+        /// <summary>How many standing orders of both kinds a map has, for the place heading's count.</summary>
+        private static int Total(Map map)
+        {
+            MapComponent_HuntingBills hunting = MapComponent_HuntingBills.For(map);
+            MapComponent_TamingBills taming = MapComponent_TamingBills.For(map);
+
+            return (hunting == null ? 0 : hunting.Bills.Count) + (taming == null ? 0 : taming.Bills.Count);
         }
 
         /// <summary>The bills scope: the standing orders, and nothing else.</summary>
@@ -741,7 +765,9 @@ namespace Gideon.UIOverhaul.Features.Animals
                 Grid.Rows.Add(new UIDesignatorTabRow
                 {
                     SectionLabel = MapLabels.NameOf(map),
-                    SectionSuffix = bills.Count == 1 ? "1 bill" : bills.Count + " bills"
+                    // Both kinds, because both hang under this heading. Counting only the hunting ones would
+                    // have a place read "no bills" with a taming bill visibly sitting inside it.
+                    SectionSuffix = Total(map) == 1 ? "1 bill" : Total(map) + " bills"
                 });
             }
 
@@ -780,6 +806,71 @@ namespace Gideon.UIOverhaul.Features.Animals
             }
 
             BillRow add = new BillRow { Map = map, IsNew = true };
+
+            BillRows.Add(add);
+
+            Grid.Rows.Add(new UIDesignatorTabRow
+            {
+                Payload = add,
+                Height = Mathf.Max(28f, ValueHeight + 8f),
+                DrawBackground = DrawBillRow
+            });
+
+            TamingBills(map);
+        }
+
+        /// <summary>
+        /// A map's taming bills, under their own foldable sub-heading beside the hunting ones.
+        ///
+        /// <b>A second sub-heading rather than one list of both.</b> They are different orders that happen to
+        /// live in the same place: one sends somebody out with a rifle and the other with a handful of kibble,
+        /// and a player looking for one does not want to read past the other. Separate headings also means
+        /// separate folding, so a colony that has settled its herd can put taming away and keep hunting open.
+        /// </summary>
+        private static void TamingBills(Map map)
+        {
+            MapComponent_TamingBills component = MapComponent_TamingBills.For(map);
+
+            if (component == null)
+                return;
+
+            List<TamingBill> bills = component.Bills;
+
+            string key = (map?.uniqueID ?? -1) + "/taming";
+            bool folded = Folded.Contains(key) && Search.IsEmpty;
+
+            Grid.Rows.Add(new UIDesignatorTabRow
+            {
+                Payload = new SubHeader
+                {
+                    Label = "Taming bills",
+                    Suffix = bills.Count == 0
+                        ? "none yet"
+                        : bills.Count == 1 ? "1 bill" : bills.Count + " bills",
+                    Key = key
+                },
+                Height = SubHeaderHeight,
+                DrawBackground = DrawSubHeader
+            });
+
+            if (folded)
+                return;
+
+            for (int i = 0; i < bills.Count; i++)
+            {
+                BillRow row = new BillRow { Tame = bills[i], Map = map, ForTaming = true };
+
+                BillRows.Add(row);
+
+                Grid.Rows.Add(new UIDesignatorTabRow
+                {
+                    Payload = row,
+                    Height = RowHeight,
+                    DrawBackground = DrawBillRow
+                });
+            }
+
+            BillRow add = new BillRow { Map = map, IsNew = true, ForTaming = true };
 
             BillRows.Add(add);
 
@@ -2085,6 +2176,16 @@ namespace Gideon.UIOverhaul.Features.Animals
                 return;
             }
 
+            if (bill.Tame != null)
+            {
+                DrawTameRow(row, bill, palette);
+
+                return;
+            }
+
+            if (bill.Bill == null)
+                return;
+
             RowCard.AccentColor = bill.Bill.suspended ? palette.TextDisabled : palette.Accent;
             RowCard.BackgroundColor = palette.PanelBackground;
             RowCard.DrawChrome(row, palette);
@@ -2236,6 +2337,155 @@ namespace Gideon.UIOverhaul.Features.Animals
             return rect.x;
         }
 
+        /// <summary>
+        /// One taming bill: what it wants, how close it is, and what it is doing about it.
+        ///
+        /// <b>The bar counts animals rather than items,</b> which is the one real difference from the hunting row
+        /// beside it. Wanted is every male and female asked for across the species; held is what the colony has
+        /// of exactly those, so a bill asking for two of each muffalo reads 3 / 4 rather than pretending a herd
+        /// of males satisfies it.
+        /// </summary>
+        private static void DrawTameRow(Rect row, BillRow bill, UIColorPaletteDef palette)
+        {
+            RowCard.AccentColor = bill.Tame.suspended ? palette.TextDisabled : palette.Accent;
+            RowCard.BackgroundColor = palette.PanelBackground;
+            RowCard.DrawChrome(row, palette);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Rect inner = new Rect(row.x + RowCard.AccentWidth + 8f, row.y,
+                    Mathf.Max(0f, row.width - RowCard.AccentWidth - 16f), row.height);
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.UpperLeft;
+                GUI.color = palette.TextDisabled;
+
+                Widgets.LabelEllipses(new Rect(inner.x, inner.y + 2f, 260f, CaptionHeight),
+                    bill.Tame.suspended ? "Suspended" : "Taming");
+
+                Text.Font = GameFont.Small;
+                GUI.color = bill.Tame.suspended ? palette.TextDisabled : palette.TextPrimary;
+
+                Widgets.LabelEllipses(new Rect(inner.x, inner.y + CaptionHeight, 260f, ValueHeight),
+                    bill.Tame.Label);
+
+                Rect bar = new Rect(inner.x + 270f, inner.center.y - 8f, 200f, 16f);
+
+                int wanted;
+                int held;
+
+                TameProgress(bill.Tame, bill.Map, out wanted, out held);
+
+                if (wanted <= 0)
+                {
+                    Text.Anchor = TextAnchor.MiddleLeft;
+                    GUI.color = bill.Tame.suspended ? palette.TextDisabled : palette.Warning;
+
+                    Widgets.LabelEllipses(bar, "Nothing wanted yet");
+                }
+                else
+                {
+                    float fraction = Mathf.Clamp01(held / (float) wanted);
+
+                    UIProgressBarControl.Draw(bar, fraction, palette,
+                        fraction >= 1f ? palette.Success : palette.Accent);
+
+                    Text.Anchor = TextAnchor.MiddleCenter;
+                    GUI.color = palette.TextPrimary;
+
+                    Widgets.Label(bar, held + " / " + wanted);
+                }
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextSecondary;
+
+                Rect note = new Rect(bar.xMax + 10f, inner.y, Mathf.Max(0f, inner.xMax - bar.xMax - 200f),
+                    inner.height);
+
+                Widgets.LabelEllipses(note, TameNote(bill.Tame));
+
+                float x = inner.xMax;
+
+                x = BillButton(new Rect(x - 74f, inner.center.y - 11f, 74f, 22f), "Remove", palette, () =>
+                {
+                    MapComponent_TamingBills.For(bill.Map)?.Remove(bill.Tame);
+                });
+
+                x = BillButton(new Rect(x - 84f, inner.center.y - 11f, 80f, 22f),
+                    bill.Tame.suspended ? "Resume" : "Suspend", palette,
+                    () => bill.Tame.suspended = !bill.Tame.suspended);
+
+                BillButton(new Rect(x - 64f, inner.center.y - 11f, 60f, 22f), "Edit", palette,
+                    () => Find.WindowStack.Add(new Dialog_TamingBill(bill.Tame, bill.Map)));
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>
+        /// How many animals a taming bill wants and how many of those it has.
+        ///
+        /// Held is capped per species and sex at what was asked for, so a colony with nine males against a want
+        /// of two does not report itself over target and hide that the females are missing.
+        /// </summary>
+        private static void TameProgress(TamingBill bill, Map map, out int wanted, out int held)
+        {
+            wanted = 0;
+            held = 0;
+
+            if (bill.targets == null)
+                return;
+
+            for (int i = 0; i < bill.targets.Count; i++)
+            {
+                TamingTarget target = bill.targets[i];
+
+                if (target == null || target.species == null)
+                    continue;
+
+                wanted += target.males + target.females;
+
+                held += Mathf.Min(target.males, TamingBill.Held(map, target.species, Gender.Male));
+                held += Mathf.Min(target.females, TamingBill.Held(map, target.species, Gender.Female));
+            }
+        }
+
+        /// <summary>What the bill has to say for itself: what it wants, and what it last did.</summary>
+        private static string TameNote(TamingBill bill)
+        {
+            int species = 0;
+
+            for (int i = 0; bill.targets != null && i < bill.targets.Count; i++)
+            {
+                if (bill.targets[i] != null && bill.targets[i].species != null && !bill.targets[i].Empty)
+                    species++;
+            }
+
+            string what = species == 0
+                ? "no species chosen"
+                : species == 1 ? "1 species" : species + " species";
+
+            if (bill.tamer != null)
+                what += ", planned for " + bill.tamer.LabelShortCap;
+
+            if (bill.lastActedTick < 0)
+                return what + ", nothing ordered yet";
+
+            int ago = Find.TickManager.TicksGame - bill.lastActedTick;
+
+            return what + ", last ordered " + bill.lastOrderedCount + " about "
+                   + ago.ToStringTicksToPeriodVague() + " ago";
+        }
+
         private static void DrawNewBillRow(Rect row, BillRow bill, UIColorPaletteDef palette)
         {
             Rect button = new Rect(row.x + 8f, row.y, Mathf.Min(220f, row.width - 16f), row.height);
@@ -2254,7 +2504,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                 Text.Anchor = TextAnchor.MiddleCenter;
                 GUI.color = over ? palette.Accent : palette.TextSecondary;
 
-                Widgets.Label(button, "New hunting bill");
+                Widgets.Label(button, bill.ForTaming ? "New taming bill" : "New hunting bill");
             }
             finally
             {
@@ -2266,19 +2516,38 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (!Widgets.ButtonInvisible(button))
                 return;
 
-            UIGuard.Try("Animals.NewBill", () =>
+            if (bill.ForTaming)
             {
-                MapComponent_HuntingBills component = MapComponent_HuntingBills.For(bill.Map);
+                UIGuard.Try("Animals.NewTamingBill", () =>
+                {
+                    MapComponent_TamingBills component = MapComponent_TamingBills.For(bill.Map);
 
-                if (component == null)
-                    return;
+                    if (component == null)
+                        return;
 
-                HuntingBill made = HuntingBill.NewMeatBill();
+                    TamingBill made = TamingBill.NewBill();
 
-                component.Add(made);
+                    component.Add(made);
 
-                Find.WindowStack.Add(new Dialog_HuntingBill(made, bill.Map));
-            }, "The hunting bill was not created.");
+                    Find.WindowStack.Add(new Dialog_TamingBill(made, bill.Map));
+                }, "The taming bill was not created.");
+            }
+            else
+            {
+                UIGuard.Try("Animals.NewBill", () =>
+                {
+                    MapComponent_HuntingBills component = MapComponent_HuntingBills.For(bill.Map);
+
+                    if (component == null)
+                        return;
+
+                    HuntingBill made = HuntingBill.NewMeatBill();
+
+                    component.Add(made);
+
+                    Find.WindowStack.Add(new Dialog_HuntingBill(made, bill.Map));
+                }, "The hunting bill was not created.");
+            }
 
             SoundDefOf.Click.PlayOneShotOnCamera();
         }

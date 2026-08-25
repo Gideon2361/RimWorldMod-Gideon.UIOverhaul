@@ -1191,6 +1191,38 @@ namespace Gideon.UIOverhaul.Features.Options
         private void DrawColonistBarOptions(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings, float indent)
         {
+            // Ahead of the live view block, because that block returns early when the live view is off and
+            // anything after it would only ever be reachable with the live view on. The weapon row has nothing to
+            // do with how the tile is rendered.
+            ChoiceRow(view, ref y, palette, "Show carried weapon", WeaponDisplayLabel(settings.barWeaponDisplay),
+                () =>
+                {
+                    List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                    foreach (BarWeaponDisplay mode in
+                        (BarWeaponDisplay[]) System.Enum.GetValues(typeof(BarWeaponDisplay)))
+                    {
+                        BarWeaponDisplay captured = mode;
+
+                        options.Add(new FloatMenuOption(WeaponDisplayLabel(captured),
+                            UIGuard.Wrap("Options.BarWeaponDisplay", () =>
+                            {
+                                settings.barWeaponDisplay = captured;
+                                settings.Save();
+                            })));
+                    }
+
+                    Find.WindowStack.Add(new FloatMenu(options));
+                });
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(indent, y, view.width - indent, RowHeight * 2f),
+                "Anything but Never makes every tile taller, whether or not that pawn is carrying something. A "
+                + "row that appeared and vanished as pawns drafted would make the whole bar jump.");
+            GUI.color = palette.TextPrimary;
+
+            y += RowHeight * 2f;
+
             WidgetToggle(view, ref y, palette, settings, indent, "Live pawn view",
                 settings.livePawnView, value => settings.livePawnView = value,
                 "Draws each tile as a live camera view of the pawn and the ground around them, instead of their "
@@ -1228,6 +1260,27 @@ namespace Gideon.UIOverhaul.Features.Options
             GUI.color = palette.TextPrimary;
 
             y += RowHeight * 2f;
+        }
+
+        /// <summary>
+        /// The weapon row choices, worded as when rather than as what.
+        ///
+        /// "While drafted" rather than "Drafted" because the bare adjective reads as a filter on which pawns are
+        /// listed, which is a thing this bar also does elsewhere.
+        /// </summary>
+        private static string WeaponDisplayLabel(BarWeaponDisplay display)
+        {
+            switch (display)
+            {
+                case BarWeaponDisplay.Drafted:
+                    return "While drafted";
+
+                case BarWeaponDisplay.Always:
+                    return "Always";
+
+                default:
+                    return "Never";
+            }
         }
 
         /// <summary>

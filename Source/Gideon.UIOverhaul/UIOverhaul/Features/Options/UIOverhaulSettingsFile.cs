@@ -215,6 +215,14 @@ namespace Gideon.UIOverhaul.Features.Options
         public PawnViewRefresh pawnViewRefresh = PawnViewRefresh.Ms250;
 
         /// <summary>
+        /// When a colonist tile shows the weapon its pawn is carrying, under the meters.
+        ///
+        /// Never by default, because anything else makes every tile taller and the bar is the one panel that sits
+        /// over the map rather than beside it. Somebody who wants the information can spend the pixels.
+        /// </summary>
+        public BarWeaponDisplay barWeaponDisplay = BarWeaponDisplay.Never;
+
+        /// <summary>
         /// Whether worn headgear is drawn at all.
         ///
         /// Off by default, since a hat is a thing the player chose to put on somebody. On is for the colony where
@@ -1158,6 +1166,10 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.pawnViewRefresh = ParseEnum(value, PawnViewRefresh.Ms250);
                             break;
 
+                        case "barWeaponDisplay":
+                            settings.barWeaponDisplay = ParseEnum(value, BarWeaponDisplay.Never);
+                            break;
+
                         case "barHideHeadgear":
                             settings.barHideHeadgear = value.EqualsIgnoreCase("true");
                             break;
@@ -1563,6 +1575,7 @@ namespace Gideon.UIOverhaul.Features.Options
                         showGroupedColonistBar ? "true" : "false");
                     writer.WriteElementString("livePawnView", livePawnView ? "true" : "false");
                     writer.WriteElementString("pawnViewRefresh", pawnViewRefresh.ToString());
+                    writer.WriteElementString("barWeaponDisplay", barWeaponDisplay.ToString());
                     writer.WriteElementString("barHideHeadgear", barHideHeadgear ? "true" : "false");
                     writer.WriteElementString("minimapX",
                         minimapX.ToString(CultureInfo.InvariantCulture));

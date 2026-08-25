@@ -25,6 +25,9 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         /// <summary>A skull, standing in for the word "Undead" in a pawn's name. Null if the bake failed.</summary>
         internal static readonly Texture2D Skull;
 
+        /// <summary>Crossed swords, standing in for the letter D on a drafted pawn. Null if the bake failed.</summary>
+        internal static readonly Texture2D Swords;
+
         /// <summary>
         /// <b>Written out rather than through <c>UIGuard.Try</c>,</b> because a static constructor that throws
         /// leaves the CLR marking the type unusable and every later read of the field throws again from wherever it
@@ -35,12 +38,42 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             try
             {
                 Skull = BuildSkull();
+                Swords = BuildSwords();
             }
             catch (Exception ex)
             {
                 UIGuard.Report("Bar.Glyphs", ex,
-                    "Undead pawns in the colonist bar show their full name instead of a skull.");
+                    "Undead pawns in the colonist bar show their full name instead of a skull, and drafted pawns "
+                    + "show the letter D instead of crossed swords.");
             }
+        }
+
+        /// <summary>
+        /// Two crossed swords, points up, hilts down.
+        ///
+        /// <b>Four strokes and nothing else, for the same reason the skull has no teeth.</b> Pommels sized in
+        /// proportion land under two pixels across and read as grit on the blade, and a tapered point is lost
+        /// entirely: the capsule end a stroke already has does that job. What has to survive the shrink is the X
+        /// and the two crossbars, because that pair is the whole difference between "swords" and "scissors".
+        ///
+        /// <b>The crossbars are what set the size this is drawn at, and they nearly did not survive.</b> Drawn at
+        /// the name row's line height, about thirteen pixels, the guards merge into the blades and the glyph
+        /// collapses into a plain red X -- which in a game full of cancel buttons says something else entirely.
+        /// The blades are therefore thinner than the guards would suggest, the guards are pushed down toward the
+        /// hilts where there is clear space either side of them, and <c>ColonistBarPanel</c> draws this at a floor
+        /// of eighteen pixels rather than at the line height. Below that it is an X again.
+        ///
+        /// The blades cross at the center of the canvas rather than nearer the hilts, so the symbol reads as a
+        /// balanced X rather than as a wishbone.
+        /// </summary>
+        private static Texture2D BuildSwords()
+        {
+            return new UIIconCanvas(Baked)
+                .Line(7.5f, 24.5f, 25.5f, 6.5f, 2.4f)
+                .Line(24.5f, 24.5f, 6.5f, 6.5f, 2.4f)
+                .Line(5.6f, 17.2f, 13.6f, 25.2f, 2.4f)
+                .Line(26.4f, 17.2f, 18.4f, 25.2f, 2.4f)
+                .ToTexture("Gideon.Icon.BarDrafted");
         }
 
         /// <summary>

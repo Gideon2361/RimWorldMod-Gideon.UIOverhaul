@@ -495,7 +495,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
-        /// What it is worth and what it weighs, plus whether anybody is allowed to touch it.
+        /// What it is worth, how it looks and what it weighs, plus whether anybody is allowed to touch it.
         ///
         /// Last on purpose: it applies to nearly everything, so putting it first would push the block that is
         /// actually about this thing down the column.
@@ -509,7 +509,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
             bool forbidden = UIGuard.Try("Inspector.Forbidden",
                 () => thing.Spawned && thing.IsForbidden(Faction.OfPlayer), false, null);
 
-            if (value <= 0f && mass <= 0f && !forbidden)
+            float beauty = UIGuard.Try("Inspector.Beauty",
+                () => thing.GetStatValue(StatDefOf.Beauty), 0f, null);
+
+            // Beauty is the one number here that can be meaningfully negative, so it is tested against zero from
+            // both sides. Filth, corpses and slag all have it, and an ugly thing is exactly as worth reporting as
+            // a beautiful one.
+            bool hasBeauty = Mathf.Abs(beauty) >= 0.01f;
+
+            if (value <= 0f && mass <= 0f && !forbidden && !hasBeauty)
                 return y;
 
             y = InspectPaneParts.Cap(view, y, "Worth",
@@ -518,6 +526,19 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (value > 0f)
                 y = InspectPaneParts.Fact(view, y, "Value",
                     (value * thing.stackCount).ToStringMoney(), palette.TextPrimary, palette);
+
+            // Beside Value rather than under Condition, because that is where a player already looks for it:
+            // vanilla files Beauty as BasicsNonPawn, the same family Market Value and Mass are in, so the stats
+            // window lists all three together.
+            //
+            // Not multiplied by stackCount, and the line above it is. That reads like an oversight and is not:
+            // market value is per item and a stack is worth the sum, while Beauty is a property of the thing as
+            // it sits on the map. BeautyUtility reads it straight off the thing, stack and all, so multiplying
+            // here would report a room contribution that never happens.
+            if (hasBeauty)
+                y = InspectPaneParts.Fact(view, y, "Beauty",
+                    (beauty > 0f ? "+" : string.Empty) + beauty.ToString("0.##"),
+                    beauty > 0f ? palette.Success : palette.Warning, palette);
 
             if (mass > 0f)
                 y = InspectPaneParts.Fact(view, y, "Mass", mass.ToString("0.##") + " kg", palette.TextSecondary,

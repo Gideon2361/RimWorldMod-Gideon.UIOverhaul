@@ -84,8 +84,23 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
         private const float SideMargin = 24f;
         private const float NewGroupWidth = 26f;
 
-        /// <summary>Height of a tile: the view, then the name, then the two meters.</summary>
-        private static float TileHeight => ViewHeight + 3f + NameHeight + 2f + MeterHeight * 2f + 2f;
+        /// <summary>
+        /// What the weapon row is set to. Read once per use rather than cached, because the options window writes
+        /// it while the bar is on screen and a cached copy would need invalidating from a second place.
+        /// </summary>
+        private static BarWeaponDisplay WeaponDisplay
+        {
+            get
+            {
+                UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;
+
+                return settings == null ? BarWeaponDisplay.Never : settings.barWeaponDisplay;
+            }
+        }
+
+        /// <summary>Height of a tile: the view, then the name, then the two meters, then the weapon row.</summary>
+        private static float TileHeight =>
+            ViewHeight + 3f + NameHeight + 2f + MeterHeight * 2f + 2f + BarWeapon.Reserve(WeaponDisplay);
 
         private static float OpenHeight => HeaderHeight + InnerPad * 2f + TileHeight;
 
@@ -597,10 +612,23 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             //
             // So it is drawn before the picture, and the picture goes into the inset, which leaves the one pixel
             // ring showing rather than being covered in turn.
-            UIElementPainter.OutlineRounded(view, Mouse.IsOver(view) ? block.Color : palette.Border,
-                palette.SurfaceSunken);
+            // Selection outranks hover, which outranks the resting border. Selection is the state the player set
+            // and hover is wherever the mouse happens to be, so letting hover paint over a selected tile would
+            // hide the answer to "which one did I click" exactly while they are looking for it.
+            bool selected = IsSelected(pawn);
 
-            Rect inner = view.ContractedBy(1f);
+            Color edge = selected ? palette.Accent : Mouse.IsOver(view) ? block.Color : palette.Border;
+
+            // Two pixels when selected rather than one. At one pixel the accent is a hairline that has to compete
+            // with every portrait behind it, and on a bright tile it simply disappears.
+            float edgeWidth = selected ? 2f : 1f;
+
+            UIElementPainter.OutlineRounded(view, edge, palette.SurfaceSunken, edgeWidth);
+
+            // Contracted by the border's own width, not a literal 1. OutlineRounded fills the whole rect and then
+            // fills the inset, so a picture drawn into a smaller inset than the border is thick would paint over
+            // the ring and leave a selected tile looking unselected.
+            Rect inner = view.ContractedBy(edgeWidth);
 
             // White before any texture: GUI.DrawTexture multiplies by GUI.color, and this runs inside vanilla's
             // OnGUI where the colour is whatever the last caller left. A tint left set is the difference between
@@ -635,7 +663,12 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
             Name(new Rect(view.x + 1f, view.yMax + 2f, view.width - 2f, NameHeight), pawn, palette);
 
-            Meters(new Rect(view.x, view.yMax + 3f + NameHeight, ViewSize, MeterHeight * 2f + 2f), pawn, palette);
+            float metersY = view.yMax + 3f + NameHeight;
+
+            Meters(new Rect(view.x, metersY, ViewSize, MeterHeight * 2f + 2f), pawn, palette);
+
+            BarWeapon.Draw(new Rect(view.x, metersY + MeterHeight * 2f + 2f + BarWeapon.RowGap, ViewSize,
+                BarWeapon.RowHeight), pawn, WeaponDisplay);
 
             Clicks(view, pawn, block);
         }
@@ -779,13 +812,34 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
             if (pawn.drafter != null && pawn.drafter.Drafted)
             {
-                Rect flag = new Rect(view.xMax - side - 2f, view.yMax - side - 2f, side, side);
+                // Its own size rather than the line height the map badge uses, and eighteen is a measured floor
+                // rather than a preference: below it the swords' crossguards merge into the blades and the glyph
+                // reads as a bare red X. See BarGlyphs.BuildSwords. The map badge stays on the line height
+                // because it is text, and text should match the row it sits in.
+                float draft = Mathf.Max(side, 18f);
 
-                Widgets.DrawBoxSolid(flag, GzpPalette.Warn);
+                Rect flag = new Rect(view.xMax - draft - 2f, view.yMax - draft - 2f, draft, draft);
 
-                GUI.color = Color.black;
+                // A dark wash rather than the warn colour the letter used to sit on. The glyph itself carries the
+                // meaning now and it is red, so a colored plate behind it would be two signals competing; the
+                // wash is only there so red stays legible over a bright portrait, which is the same job the map
+                // numeral's wash does a few lines up.
+                Widgets.DrawBoxSolid(flag, new Color(0f, 0f, 0f, 0.66f));
 
-                Widgets.Label(flag, " D");
+                if (BarGlyphs.Swords != null)
+                {
+                    GUI.color = GzpPalette.Bad;
+
+                    GUI.DrawTexture(flag.ContractedBy(1f), BarGlyphs.Swords);
+                }
+                else
+                {
+                    // The bake failed. The letter is still better than an empty plate, and this is the same way
+                    // the undead skull degrades to the word it stands for.
+                    GUI.color = GzpPalette.Bad;
+
+                    Widgets.Label(flag, " D");
+                }
             }
 
             Text.Font = font;
@@ -920,6 +974,24 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                 Selector selector = Find.Selector;
 
                 return selector != null && selector.NumSelected == 1 && selector.SingleSelectedThing == pawn;
+            }, false, null);
+        }
+
+        /// <summary>
+        /// Whether this pawn is in the selection at all.
+        ///
+        /// <b>Deliberately not <see cref="Selected"/>.</b> That one asks whether the pawn is the <i>only</i> thing
+        /// selected, because it gates the second click that moves the camera and repeating a jump on a
+        /// multi-selection would be wrong. A border is a different question: drag a box over four colonists and all
+        /// four are selected, so all four should be outlined.
+        /// </summary>
+        private static bool IsSelected(Pawn pawn)
+        {
+            return UIGuard.Try("Bar.InSelection", () =>
+            {
+                Selector selector = Find.Selector;
+
+                return selector != null && pawn != null && selector.IsSelected(pawn);
             }, false, null);
         }
 

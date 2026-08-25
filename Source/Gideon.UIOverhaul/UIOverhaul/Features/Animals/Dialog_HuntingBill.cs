@@ -114,6 +114,18 @@ namespace Gideon.UIOverhaul.Features.Animals
         {
             base.PostOpen();
 
+            Seed();
+        }
+
+        /// <summary>
+        /// Fills the shared boxes from the bill.
+        ///
+        /// Separate from <see cref="PostOpen"/> so a template load can reseed without going through it:
+        /// <c>Window.PostOpen</c> replays the window's appear sound, and a template landing in a window that is
+        /// already open is not the window appearing.
+        /// </summary>
+        private void Seed()
+        {
             if (bill == null)
                 return;
 
@@ -567,6 +579,19 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             if (UICheckboxControl.Draw(new Rect(rect.x, rect.y, 220f, 32f), ref suspended, palette, "Suspended"))
                 bill.suspended = suspended;
+
+            // Beside Done rather than at the top, because saving and loading a shape is something you do after
+            // setting one up, not before.
+            if (GzpPalette.GrayButton(new Rect(rect.xMax - 232f, rect.y, 116f, 32f), "Templates", true, true))
+                Find.WindowStack.Add(new Dialog_AnimalBillTemplates(false,
+                    name => AnimalBillTemplates.Capture(bill, name),
+                    template =>
+                    {
+                        AnimalBillTemplates.Apply(template, bill);
+
+                        // Reseeded, or the boxes would keep showing what the bill said a moment ago.
+                        Seed();
+                    }));
 
             if (GzpPalette.GrayButton(new Rect(rect.xMax - 110f, rect.y, 110f, 32f), "Done", true, true))
                 Close();

@@ -342,8 +342,16 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             bool was = receiving;
 
-            if (UICheckboxControl.Draw(new Rect(inner.x, inner.y, 170f, 24f), ref receiving, palette,
-                    "Receiving patients") && receiving != was)
+            // Measured rather than written down. A literal 170 left the label about 114 pixels after the switch
+            // and its gap, which is a little under what "Receiving patients" needs, so it clipped to
+            // "Receiving pati...". Same fault as the chips below carry a note about, and as a toolbar hit with
+            // "Include buried". The three numbers that decide the answer are private to the control, so WidthFor
+            // is the only thing that can get it right, and it keeps getting it right if the label is translated.
+            string receivingLabel = "Receiving patients";
+
+            Rect receivingRect = new Rect(inner.x, inner.y, UICheckboxControl.WidthFor(receivingLabel), 24f);
+
+            if (UICheckboxControl.Draw(receivingRect, ref receiving, palette, receivingLabel) && receiving != was)
                 HospitalVisitors.SetReceiving(map, receiving);
 
             Hours(new Rect(inner.x, inner.y + 26f, HoursWidth, 18f), map, palette);
