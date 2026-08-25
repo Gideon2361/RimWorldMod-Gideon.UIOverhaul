@@ -403,21 +403,47 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// <summary>
         /// Whether an element of this name can hold a reference to another record.
         ///
-        /// <b><c>li</c> is excluded, and that costs real coverage on purpose.</b> A list element holds anything at
-        /// all: mod package ids, quest signal names, plain strings. On the save this was built against, treating
-        /// <c>li</c> as a reference produced 431 that resolved against 70,988 that did not, every one of the latter
-        /// a false alarm. A dangling reference sitting inside a list therefore goes unrepaired, which is the safe
-        /// direction to be wrong in.
-        ///
-        /// <b>One family of <c>li</c> is recognised elsewhere, and deliberately not here.</b> A container's contents
-        /// list is unambiguously load ids, so <see cref="IsContentsReference"/> reads it to learn what a container
-        /// still holds. It is kept out of this test because knowing a reference exists and being willing to
-        /// overwrite it are different questions: writing <c>null</c> into a <c>ThingOwner</c> would leave the owner
-        /// holding nothing, which for a corpse is the very state this is trying to avoid.
+        /// <b><c>li</c> is excluded here and judged by <see cref="IsListReference"/> instead.</b> A list element
+        /// holds anything at all, so it needs the extra context that test has and this one does not. The split is
+        /// also a difference in what a repair may do: an element named here is pointed at nothing, while a list
+        /// entry is removed outright, and those are not interchangeable.
         /// </summary>
         internal static bool CanReference(string name)
         {
             return name != null && name != "id" && name != "loadID" && name != "Id" && name != "li";
+        }
+
+        /// <summary>
+        /// Whether this <c>li</c> holds a reference that can be judged, and dropped when it is broken.
+        ///
+        /// <b>This used to be refused outright, and the measurement that justified refusing it has expired.</b>
+        /// Treating every <c>li</c> as a reference once produced 431 that resolved against 70,988 that did not, and
+        /// the sensible answer at the time was to read none of them. What has changed since is
+        /// <see cref="Target"/>: it now demands a namespace this scan actually collects and, for a Thing, an id
+        /// shaped like a def name with its number attached. Re-measured against that on a 46 MB save, list entries
+        /// give 1,343 references that resolve against 11 that do not, and all 11 are genuinely broken.
+        ///
+        /// <b>A dictionary is written as two parallel lists, and that is the one place this must not reach.</b>
+        /// <c>keys</c> and <c>values</c> are matched by position, so removing an entry from one without the other
+        /// shifts every pair after it. Nine of those 11 broken entries are dead factions sitting in a
+        /// <c>keys</c> list, and repairing them would have been far worse than leaving them: RimWorld drops an
+        /// unresolved dictionary entry as a pair on its own, which is exactly the operation this cannot perform.
+        ///
+        /// <b>Anywhere else, a list is as valid one entry shorter.</b> A pawn that no longer exists leaves a
+        /// relationship record's reference set; a thing that no longer exists leaves a container. Both are states
+        /// the game reaches by itself the moment it fails to resolve the id, so writing them into the file only
+        /// saves it the failure.
+        /// </summary>
+        internal static bool IsListReference(string name, int depth, string[] ancestors)
+        {
+            if (name != "li" || ancestors == null || depth < 1 || depth - 1 >= ancestors.Length)
+                return false;
+
+            string list = ancestors[depth - 1];
+
+            // An unknown parent means the position in the document is not established, which is not a footing to
+            // remove anything from.
+            return list != null && list != "keys" && list != "values";
         }
 
         /// <summary>

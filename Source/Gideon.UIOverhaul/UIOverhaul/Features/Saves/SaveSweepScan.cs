@@ -408,7 +408,11 @@ namespace Gideon.UIOverhaul.Features.Saves
                             assigned.Add(named);
                     }
 
-                    if (!closing && SaveSweepXml.CanReference(name))
+                    // List entries are counted here alongside named elements. They were left out until the shape
+                    // test in Target made them safe to read; see SaveSweepXml.IsListReference. Leaving them out
+                    // had the window report that every reference in a save resolved while eleven of them did not.
+                    if (!closing && (SaveSweepXml.CanReference(name)
+                                     || SaveSweepXml.IsListReference(name, depth, ancestors)))
                     {
                         string aim = SaveSweepXml.Target(SaveSweepXml.Value(line));
 
