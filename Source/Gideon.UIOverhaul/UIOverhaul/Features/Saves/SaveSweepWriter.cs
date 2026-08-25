@@ -136,7 +136,7 @@ namespace Gideon.UIOverhaul.Features.Saves
     /// </summary>
     internal static class SaveSweepWriter
     {
-        /// <summary>Sections removed wholesale when the history option is on.</summary>
+        /// <summary>Sections emptied of their records, but kept, when the history option is on.</summary>
         private static readonly HashSet<string> HistorySections =
             new HashSet<string>(StringComparer.Ordinal) { "history", "playLog", "battleLog" };
 
@@ -390,21 +390,27 @@ namespace Gideon.UIOverhaul.Features.Saves
                                 }
                             }
 
-                            // Emptied rather than removed: the opening and closing tags are written and everything
-                            // between them is dropped, so the game still finds the section and finds it bare.
+                            // Emptied rather than removed: every element of the section is written and only its
+                            // records are dropped, so the game finds each field it reads and finds it bare.
                             if (top.Hollow && top.Lines.Count > 1)
                             {
-                                Forget(outcome, top);
+                                // Forgetting reads the whole section rather than only the records leaving it, so
+                                // that a nested id is still seen with its ancestors above it: a letter is only
+                                // recognisable as a letter from the archivables list it sits in.
+                                Forget(outcome, top.Lines);
 
-                                long kept = top.Lines[0].Length + top.Lines[top.Lines.Count - 1].Length
-                                                                + SaveSweepScan.NewlineBytes * 2;
+                                List<string> skeleton = Skeleton(top.Lines);
+
+                                long kept = 0;
+
+                                for (int i = 0; i < skeleton.Count; i++)
+                                    kept += skeleton[i].Length + SaveSweepScan.NewlineBytes;
 
                                 outcome.RecordsRemoved++;
                                 outcome.BytesRemoved += top.Bytes - kept;
                                 Tally(outcome, top.Reason, top.Bytes - kept);
 
-                                Emit(stack, writer, ref started,
-                                    new List<string> { top.Lines[0], top.Lines[top.Lines.Count - 1] });
+                                Emit(stack, writer, ref started, skeleton);
 
                                 continue;
                             }
@@ -420,7 +426,7 @@ namespace Gideon.UIOverhaul.Features.Saves
                                 outcome.BytesRemoved += top.Bytes;
                                 Tally(outcome, top.Reason, top.Bytes);
 
-                                Forget(outcome, top);
+                                Forget(outcome, top.Lines);
                             }
                             else
                             {
@@ -454,16 +460,25 @@ namespace Gideon.UIOverhaul.Features.Saves
 
                     line = Follow(stack, line, name, outcome);
 
-                    // A reference to something the file does not contain. Pointed at nothing rather than removed,
-                    // because the element itself is usually required and its absence would mean something else.
+                    bool dropLine = false;
+
+                    // A reference to something the file does not contain. A named element is pointed at nothing,
+                    // because the element itself is usually required and its absence would mean something else. A
+                    // list entry is removed instead, since a list is as valid one entry shorter and a null in it
+                    // is a hole the game then has to interpret.
                     if (options.RepairDangling && !closing && report.DanglingIds.Count > 0
-                        && SaveSweepXml.CanReference(name))
+                        && (SaveSweepXml.CanReference(name)
+                            || SaveSweepXml.IsListReference(name, depth, ancestors)))
                     {
                         string aim = SaveSweepXml.Target(SaveSweepXml.Value(line));
 
                         if (aim != null && report.DanglingIds.Contains(aim))
                         {
-                            line = WithValue(line, "null");
+                            if (name == "li")
+                                dropLine = true;
+                            else
+                                line = WithValue(line, "null");
+
                             outcome.Repaired++;
                         }
                     }
@@ -472,8 +487,6 @@ namespace Gideon.UIOverhaul.Features.Saves
                     // that actually left, so it needs no namespace table and no shape test: it catches a combat log
                     // entry, which no rule recognises, and a pawn named from inside a list, which every rule has to
                     // exclude. Both were left dangling by the version before this one.
-                    bool dropLine = false;
-
                     if (gone != null && !closing && name != null && gone.Count > 0)
                     {
                         string value = SaveSweepXml.Value(line);
@@ -756,7 +769,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// Deliberately loose about what counts as an id here: any value of an id-declaring element, whatever its
         /// shape. A value that nothing refers to costs one entry in a set and is never matched again.
         /// </summary>
-        private static void Forget(SaveSweepOutcome outcome, Frame frame)
+        private static void Forget(SaveSweepOutcome outcome, List<string> lines)
         {
             string[] ancestors = new string[SaveSweepXml.MaxDepth];
 
@@ -764,9 +777,9 @@ namespace Gideon.UIOverhaul.Features.Saves
             // arrives. They are siblings and the scribe writes them in this order.
             string[] ticks = new string[SaveSweepXml.MaxDepth];
 
-            for (int i = 0; i < frame.Lines.Count; i++)
+            for (int i = 0; i < lines.Count; i++)
             {
-                string line = frame.Lines[i];
+                string line = lines[i];
                 string name = SaveSweepXml.ElementName(line);
 
                 if (name == null || SaveSweepXml.IsClose(line))
@@ -787,6 +800,15 @@ namespace Gideon.UIOverhaul.Features.Saves
                         // holds that string, which is why removing a play log left every combat log reference
                         // pointing at something no rule could recognise.
                         outcome.RemovedIds.Add("LogEntry_" + ticks[depth] + "_" + value);
+                    }
+                    // A LETTER SPELLS ITS ID IN CAPITALS, and missing that is what left four broken references in
+                    // a swept save. Letter.ExposeData writes <ID>, which none of the three spellings below match,
+                    // and GetUniqueLoadID returns "Letter_" + ID. So removing the archive took every letter with
+                    // it while letterStack went on naming them. Read from the list rather than the element name,
+                    // because ID is also a world object's own field and that is a different namespace entirely.
+                    else if (name == "ID" && SaveSweepXml.Parent(depth, ancestors) == "archivables")
+                    {
+                        outcome.RemovedIds.Add("Letter_" + value);
                     }
                     else if (name == "id" || name == "loadID" || name == "Id")
                     {
@@ -810,6 +832,65 @@ namespace Gideon.UIOverhaul.Features.Saves
                 if (depth < SaveSweepXml.MaxDepth && SaveSweepXml.Opens(line))
                     ancestors[depth] = name;
             }
+        }
+
+        /// <summary>
+        /// The lines of a hollowed section that survive: every element, and none of its records.
+        ///
+        /// <b>KEEPING ONLY THE OUTER TAGS IS NOT ENOUGH, and that cost a save.</b> A missing element does not leave
+        /// a field at whatever its constructor gave it; the scribe writes null over it. <c>History</c> holds
+        /// <c>autoRecorderGroups</c> in a private field filled only by its constructor, so dropping that element
+        /// leaves it null, <c>AddOrRemoveHistoryRecorderGroups</c> throws on the first instruction of its
+        /// PostLoadInit, and <c>HistoryTick</c> then throws once a tick for the rest of the session. A field
+        /// initializer is no protection either: <c>archive</c> and <c>historyEventsManager</c> are both assigned
+        /// where they are declared and both come back null all the same, because <c>Scribe_Deep.Look</c> assigns
+        /// what it found and it found nothing.
+        ///
+        /// <b>So the unit dropped here is the record, never the element.</b> Every tag in the section is written
+        /// and every <c>li</c> subtree inside it is discarded, which leaves each collection present and empty. That
+        /// is a state the game already handles by design: <c>AddOrRemoveHistoryRecorderGroups</c> rebuilds every
+        /// group from its defs, <c>Archive</c> only asks that its two lists be non-null, and
+        /// <c>DefMap.ExposeData</c> pads <c>vals</c> back up to the def count on load.
+        ///
+        /// <b>It costs almost nothing in space, which is why there is no trade-off to weigh.</b> Measured on the
+        /// save this was found against: history keeps 24 lines of 28,132, the play log 4 of 1,524 and the battle
+        /// log 4 of 17,673. The weight of these sections is entirely in their records.
+        /// </summary>
+        private static List<string> Skeleton(List<string> lines)
+        {
+            List<string> kept = new List<string>();
+
+            int record = -1;
+
+            for (int i = 0; i < lines.Count; i++)
+            {
+                string line = lines[i];
+                int depth = SaveSweepXml.Depth(line);
+                string name = SaveSweepXml.ElementName(line);
+                bool closing = SaveSweepXml.IsClose(line);
+
+                // Inside a record: everything goes, until its own closing tag at the depth it opened at.
+                if (record >= 0)
+                {
+                    if (closing && depth == record && name == "li")
+                        record = -1;
+
+                    continue;
+                }
+
+                if (!closing && name == "li")
+                {
+                    // A one line record carries its own close tag and opens nothing.
+                    if (SaveSweepXml.Opens(line))
+                        record = depth;
+
+                    continue;
+                }
+
+                kept.Add(line);
+            }
+
+            return kept;
         }
 
         /// <summary>The namespace a record at this depth belongs to, using the shared table.</summary>
