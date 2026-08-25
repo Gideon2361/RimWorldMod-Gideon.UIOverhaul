@@ -2545,6 +2545,20 @@ namespace Gideon.UIOverhaul.Features.Options
                 !Salvage.AncientSalvage.Available);
 
             y += 8f;
+
+            GroupLabel(view, ref y, palette, "Alerts");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Only warn about idle colonists you can help",
+                settings.quietIdleAlert, value => settings.quietIdleAlert = value,
+                "Drops two kinds of pawn from the Colonists idle alert: someone else's pawn standing in your "
+                + "colony, and anyone with no work type open to them at all.\n\nThe alert is there to catch a "
+                + "colonist you could go and give a job to. Neither of these is that. A visiting trader's guard "
+                + "or a lodger you cannot command will idle for as long as they stay, and a pawn incapable of "
+                + "every kind of work will idle forever, so the alert lights up and nothing you do puts it "
+                + "out.\n\nRimWorld already does this for quest lodgers and for nobles whose title excuses them. "
+                + "This carries the same rule to everyone else it applies to.\n\nSlaves still count. A slave "
+                + "with nothing to do is the same problem as a colonist with nothing to do.");
+            y += 8f;
         }
 
         private void DrawAdditionalFeaturesSection(Rect view, ref float y, UIColorPaletteDef palette,
@@ -2616,6 +2630,15 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "mountain means hovering cell by cell.\n\nPlain stone is not shaded: on a mountain map that "
                 + "would be the same as shading nothing.");
 
+            WidgetToggle(view, ref y, palette, settings, Indent, "Ring the blast radius of explosives",
+                settings.showBlastRadius, value => settings.showBlastRadius = value,
+                "Draws the blast radius on the ground whenever you select something that can explode: an IED, a "
+                + "shell rack, a chemfuel pile, a fuelled generator, a boomalope.\n\nThe number is on the info "
+                + "card and nowhere on the map, which is where you decide how far from the wall to stack the "
+                + "chemfuel.\n\nThe ring is the real radius, not the one printed on the item: a stack of shells "
+                + "and a tank with fuel in it both blow up bigger than one of them would, and the ring grows to "
+                + "match.");
+
             y += 8f;
 
             GroupLabel(view, ref y, palette, "Trade");
@@ -2650,6 +2673,15 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "is not a way to give somebody Shooting 20.\n\nWith it off the button does not exist -- not a "
                 + "greyed one, an absent one. Nothing is patched and nothing is watching. Changes you made while "
                 + "it was on are already part of your colony and stay that way.");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Describe pawns you are offered",
+                settings.pawnDetailsOnOffers, value => settings.pawnDetailsOnOffers = value,
+                "Puts a panel of skills, traits and refused work beside the letters that offer you a person: a "
+                + "wanderer asking to join, a refugee at the door, a creepjoiner, a ransom demand, and the quest "
+                + "reward that asks you to pick one of three.\n\nVanilla gives you the prose of the letter and a "
+                + "row of names. Choosing between three strangers by name alone means accepting one, opening "
+                + "their Bio tab, and finding out.\n\nDisplay only. The buttons, the offer and what happens next "
+                + "are RimWorld's.");
 
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),

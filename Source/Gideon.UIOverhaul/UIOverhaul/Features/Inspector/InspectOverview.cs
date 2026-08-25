@@ -77,7 +77,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 secondY = Carrying(second, secondY, pawn, palette);
 
                 if (dead)
-                    secondY = Character(second, secondY, pawn, palette);
+                    secondY = Traits(second, secondY, pawn, palette);
             }
 
             float y = split ? Mathf.Max(leftY, secondY) : secondY;
@@ -187,13 +187,17 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
-        /// Traits and what they could not do, for a body.
+        /// Traits, as chips.
         ///
-        /// <b>On the overview only for the dead,</b> because for a living pawn it is one chip away on the Bio
-        /// body and the space is better spent on their needs. For a corpse there are no needs, and who this
+        /// <b>On the overview only for the dead,</b> because for a living colonist it is one chip away on the
+        /// Bio body and the space is better spent on their needs. For a corpse there are no needs, and who this
         /// person was is most of what is left to say about them.
+        ///
+        /// <b>Also drawn for a pawn somebody is offering you,</b> where the same reasoning arrives from the
+        /// other side: there is no Bio body to click through to, because they are not yours yet. Shared from
+        /// here rather than copied, so a change to how a trait reads happens in one place.
         /// </summary>
-        private static float Character(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        internal static float Traits(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
         {
             if (pawn.story == null || pawn.story.traits == null || pawn.story.traits.allTraits == null)
                 return y;
@@ -495,7 +499,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// leaves "can she do this at all" unanswered, which is the question being asked when somebody is about
         /// to hand out a job. Incapable reads as a dash rather than a zero, because those are different facts.
         /// </summary>
-        private static float Skills(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        internal static float Skills(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
         {
             if (pawn.skills == null || pawn.skills.skills == null || pawn.skills.skills.Count == 0)
                 return y;

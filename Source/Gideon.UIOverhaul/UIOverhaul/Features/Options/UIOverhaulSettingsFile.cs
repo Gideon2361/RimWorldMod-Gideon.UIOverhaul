@@ -369,6 +369,24 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showMineableOverlay = true;
 
         /// <summary>
+        /// Whether a selected thing that can explode is ringed at its blast radius.
+        ///
+        /// On by default: it draws nothing until something explosive is selected, and the thing it fixes is that
+        /// the blast radius of an IED, a shell rack or a chemfuel pile is stated on the info card as a number and
+        /// nowhere at all on the map, which is where the decision about where to put it is made.
+        /// </summary>
+        public bool showBlastRadius = true;
+
+        /// <summary>
+        /// Whether a pawn somebody is offering is described beside the letter that offers them.
+        ///
+        /// On by default. The letters this reaches ask the player to accept, refuse, ransom or pick between
+        /// people, and vanilla gives them the prose of the letter and a row of bare names to decide on. The
+        /// panel is display only: nothing about the offer, its buttons or its outcome changes.
+        /// </summary>
+        public bool pawnDetailsOnOffers = true;
+
+        /// <summary>
         /// How far an orbital trade beacon reaches, in tiles.
         ///
         /// <b>RimWorld's own 7.9 by default,</b> which is a beacon covering 15 by 15 with the corners clipped.
@@ -410,6 +428,20 @@ namespace Gideon.UIOverhaul.Features.Options
         /// other hundred and fifty-six finished in silence, which is a worse outcome than the popup.
         /// </summary>
         public bool quietResearchCompletion = true;
+
+        /// <summary>
+        /// Whether the Colonists idle alert drops pawns whose idleness nobody can act on.
+        ///
+        /// <b>On by default.</b> The alert exists to catch a colonist you could go and give a job to, and both
+        /// groups it drops here are idle in a way no order can change: somebody else's pawn standing in your
+        /// colony, and somebody with no work type open to them at all. Lit permanently by a case the player
+        /// cannot answer, the alert stops being read at all, and that costs them the times it was real.
+        ///
+        /// <b>RimWorld already makes this distinction and stops halfway,</b> which is why this is a lifted
+        /// refusal rather than a new rule: the alert skips quest lodgers, and skips a royal whose title carries
+        /// <c>suppressIdleAlert</c>. Everything here is another way of arriving at the same position.
+        /// </summary>
+        public bool quietIdleAlert = true;
 
         /// <summary>
         /// What the research canvas is cut into blocks along: "theme", "source" or "tech".
@@ -1342,6 +1374,15 @@ namespace Gideon.UIOverhaul.Features.Options
                         case "showMineableOverlay":
                             settings.showMineableOverlay = !value.EqualsIgnoreCase("false");
                             break;
+                        case "showBlastRadius":
+                            settings.showBlastRadius = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "pawnDetailsOnOffers":
+                            settings.pawnDetailsOnOffers = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "quietIdleAlert":
+                            settings.quietIdleAlert = !value.EqualsIgnoreCase("false");
+                            break;
 
                         case "tradeBeaconRadius":
                             // An unreadable value gives RimWorld's own radius rather than the smallest or the
@@ -1625,6 +1666,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("researchGrouping", researchGrouping ?? "theme");
                     writer.WriteElementString("showMineableOverlay",
                         showMineableOverlay ? "true" : "false");
+                    writer.WriteElementString("showBlastRadius", showBlastRadius ? "true" : "false");
+                    writer.WriteElementString("pawnDetailsOnOffers",
+                        pawnDetailsOnOffers ? "true" : "false");
+                    writer.WriteElementString("quietIdleAlert", quietIdleAlert ? "true" : "false");
                     writer.WriteElementString("tradeBeaconRadius",
                         tradeBeaconRadius.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("maxBillsPerBench",
