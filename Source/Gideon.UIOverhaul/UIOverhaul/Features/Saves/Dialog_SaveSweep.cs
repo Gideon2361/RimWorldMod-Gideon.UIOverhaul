@@ -217,6 +217,12 @@ namespace Gideon.UIOverhaul.Features.Saves
 
             Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 30f, TitleHeight), "Sweep \"" + name + "\"");
 
+            // Beside the title rather than in it, so a long save name does not push the word off the end.
+            float width = Text.CalcSize("Sweep \"" + name + "\"").x;
+
+            UITagControl.Draw(new Rect(inRect.x + width + 10f, inRect.y + 6f, 96f, TitleHeight - 12f),
+                "EXPERIMENTAL", palette.Warning, palette);
+
             Text.Font = GameFont.Tiny;
             GUI.color = palette.TextSecondary;
 
@@ -229,19 +235,48 @@ namespace Gideon.UIOverhaul.Features.Saves
             return inRect.y + TitleHeight + 24f;
         }
 
+        /// <summary>
+        /// The warning above the options, and the first thing in the window.
+        ///
+        /// <b>It used to reassure and now it warns, because the facts changed.</b> The old banner led with
+        /// "nothing here writes to this save", which is still true and was the wrong thing to say first: the sweep
+        /// has produced copies that would not load, reported 2026-08-26. A player deciding whether to use a tool
+        /// needs to know it is unfinished before they read what it can do for them.
+        ///
+        /// <b>The reassurance is kept, second.</b> It is the reason this is a risk worth offering at all -- the
+        /// original file is never opened for writing, so the worst outcome is a wasted copy. Dropping it would
+        /// make the tool sound more dangerous than it is.
+        /// </summary>
         private float Banner(Rect inRect, float y, UIColorPaletteDef palette)
         {
-            Rect rect = new Rect(inRect.x, y + 6f, inRect.width, 40f);
+            Rect rect = new Rect(inRect.x, y + 6f, inRect.width, 58f);
 
             UIElementPainter.FillRounded(rect, palette.PanelBackground);
-            UIElementPainter.FillRounded(new Rect(rect.x, rect.y, 3f, rect.height), palette.Accent);
+            UIElementPainter.FillRounded(new Rect(rect.x, rect.y, 3f, rect.height), palette.Warning);
 
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextSecondary;
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
 
-            Widgets.Label(new Rect(rect.x + 12f, rect.y + 5f, rect.width - 20f, rect.height - 8f),
-                "Nothing here writes to this save. A cleaned copy is written under a new name and the original "
-                + "stays exactly as it is. Load the copy and satisfy yourself it is sound before you rely on it.");
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                GUI.color = palette.Warning;
+
+                Widgets.Label(new Rect(rect.x + 12f, rect.y + 5f, rect.width - 20f, 16f),
+                    "EXPERIMENTAL -- this has produced saves that would not load.");
+
+                GUI.color = palette.TextSecondary;
+
+                Widgets.Label(new Rect(rect.x + 12f, rect.y + 22f, rect.width - 20f, rect.height - 26f),
+                    "Nothing here writes to this save. A cleaned copy is written under a new name and the "
+                    + "original stays exactly as it is. Load the copy and satisfy yourself it is sound before "
+                    + "you rely on it, and keep the original until you have.");
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
 
             return rect.yMax;
         }

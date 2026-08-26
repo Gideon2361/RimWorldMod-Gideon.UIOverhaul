@@ -236,8 +236,16 @@ namespace Gideon.UIOverhaul.Features.Saves
                 return SaveAction.Move;
 
             // Sits before Delete rather than after it, so the destructive one stays last in the row.
-            if (Small(sweep, "Sweep", palette, palette.TextPrimary))
+            //
+            // <b>Drawn in the warning colour and labelled experimental.</b> The sweep has produced saves that
+            // would not load, reported 2026-08-26, and until that is understood the button has to say so where
+            // somebody decides whether to press it rather than only inside the window it opens. It is not the
+            // danger colour, which this row reserves for Delete: the sweep never touches the original file, so
+            // the risk is a wasted copy rather than a lost colony.
+            if (Small(sweep, "Sweep", palette, palette.Warning))
                 return SaveAction.Sweep;
+
+            Experimental(sweep, palette);
 
             // Tinted rather than filled. A permanently red button in a row somebody reads every time they open
             // the window is alarm fatigue; the fill arrives once it is armed and means something.
@@ -245,6 +253,27 @@ namespace Gideon.UIOverhaul.Features.Saves
                 armed.Arm(savePath);
 
             return SaveAction.None;
+        }
+
+        /// <summary>
+        /// The mark that says the sweep is not finished work.
+        ///
+        /// <b>A corner flag rather than a word in the label,</b> because the button is one of four in a row sized
+        /// to the window and "Sweep (experimental)" would either be cut off or force the whole row narrower. The
+        /// tooltip carries the sentence; the flag is what makes somebody read it.
+        /// </summary>
+        private static void Experimental(Rect button, UIColorPaletteDef palette)
+        {
+            if (button.width < 40f)
+                return;
+
+            UIElementPainter.FillRounded(new Rect(button.x, button.y, button.width, 2f), palette.Warning);
+
+            TooltipHandler.TipRegion(button, (TipSignal)
+                ("Experimental. This has produced saves that would not load.\n\nThe sweep never writes to the "
+                 + "save you chose: it writes a cleaned copy under a new name and leaves the original alone. "
+                 + "Load the copy and satisfy yourself it is sound before you rely on it, and keep the original "
+                 + "until you have."));
         }
 
         private static SaveAction DrawArmed(Rect rect, string saveName, ArmedDelete armed,
