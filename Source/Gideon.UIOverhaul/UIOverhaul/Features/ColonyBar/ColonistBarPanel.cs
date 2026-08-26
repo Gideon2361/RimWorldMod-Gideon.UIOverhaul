@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
@@ -451,7 +452,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
             // that means something else elsewhere is worse than a label that means only this.
             Rect gear = new Rect(rect.xMax - 24f, rect.y + 2f, 20f, rect.height - 4f);
 
-            if (GzpPalette.GrayButton(gear, "..."))
+            if (UIActionButtonControl.Draw(gear, "..."))
             {
                 GroupActions.Open(block.Group, block.Members, null);
 
@@ -1047,7 +1048,7 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
 
             TooltipHandler.TipRegion(rect, (TipSignal) "New group");
 
-            if (!GzpPalette.GrayButton(rect, "+"))
+            if (!UIActionButtonControl.Draw(rect, "+"))
                 return;
 
             Find.WindowStack.Add(new Dialog_NameGroup("New group", string.Empty,

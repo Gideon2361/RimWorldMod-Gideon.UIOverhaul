@@ -156,41 +156,11 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 Widgets.DrawBoxSolid(new Rect(r.x, r.y, r.width * Mathf.Clamp01(fill), r.height), col);
         }
 
-        /// <summary>
-        /// Flat button. <paramref name="primary"/> gives it the accent treatment.
-        ///
-        /// Plays its own click, unlike <see cref="IconButton"/>: every caller wants the same plain
-        /// click, whereas the icon buttons pick their own sound to suit what they do -- a reorder
-        /// arrow ticks, a target step scrubs -- and a sound here would double up with theirs.
-        /// </summary>
-        public static bool GrayButton(Rect r, string label, bool enabled = true, bool primary = false)
-        {
-            bool hover = Mouse.IsOver(r) && enabled;
-
-            // Fill, then the palette's hover wash over it -- the same two steps the vanilla button
-            // patch takes, so a button here and a restyled vanilla one react identically. Brightening
-            // the fill by a fixed 1.25x, as this used to, gets darker instead of lighter on a light
-            // theme and cannot respond to a palette that wants stronger or subtler feedback.
-            Widgets.DrawBoxSolid(r, primary ? ButtonPrimaryFill : BGL);
-            if (hover)
-                Widgets.DrawBoxSolid(r, Palette.HoverOverlay);
-
-            Color previous = GUI.color;
-            GUI.color = enabled ? (primary ? Accent : Stat) : TextDim;
-            TextAnchor anchor = Text.Anchor;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(r, label);
-            Text.Anchor = anchor;
-            GUI.color = previous;
-
-            if (!enabled)
-                return false;
-            if (!Widgets.ButtonInvisible(r))
-                return false;
-
-            SoundDefOf.Click.PlayOneShotOnCamera();
-            return true;
-        }
+        // GrayButton lived here and is gone as of 2026-08-25. It drew a square flat fill, and the bills
+        // toolbar's rounded accent button drew something else, so the mod shipped two ideas of what a
+        // button is -- both of them visible in one screenshot. Everything now goes through
+        // UIActionButtonControl, whose four argument overload takes this method's exact parameter order so
+        // the twenty-nine call sites converted by name alone. Do not add another one here.
 
         /// <summary>
         /// Border for input fields. The palette carries a role for exactly this -- a dimmed accent for
@@ -226,12 +196,6 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             return GUI.TextField(rect.ContractedBy(5f, 2f), text, flatTextFieldStyle);
         }
-
-        /// <summary>
-        /// The fill <see cref="GrayButton"/> uses for a primary button. Exposed so borders elsewhere
-        /// can match it exactly rather than approximating.
-        /// </summary>
-        public static Color ButtonPrimaryFill => Palette.AccentMuted;
 
         private static GUIStyle cardLabelStyle;
         private static Font cardLabelFont;

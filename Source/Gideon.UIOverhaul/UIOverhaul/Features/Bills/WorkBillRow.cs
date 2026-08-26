@@ -192,7 +192,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             float lineY = rect.y + 32f;
             Rect mode = new Rect(contentX, lineY, 130f, 24f);
 
-            if (GzpPalette.GrayButton(mode, ModeLabel(bill)))
+            if (UIActionButtonControl.Draw(mode, ModeLabel(bill)))
                 Find.WindowStack.Add(new FloatMenu(ModeOptions(bill)));
 
             Color previous = GUI.color;

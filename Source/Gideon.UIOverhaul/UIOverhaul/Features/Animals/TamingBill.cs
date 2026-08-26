@@ -7,12 +7,22 @@ using Verse;
 namespace Gideon.UIOverhaul.Features.Animals
 {
     /// <summary>
-    /// How many of one species a taming bill wants, by sex.
+    /// How many of one species a taming bill wants: by sex, and as a total.
     ///
     /// <b>Two numbers rather than one, on Aaron's instruction of 2026-08-23.</b> A total headcount cannot express
     /// the thing people actually want from taming, which is a breeding pair: "six muffalo" is satisfied by six
     /// males, and a bill that satisfies itself that way has done nothing useful. Asking for males and females
     /// separately is the smallest shape that can say "two of each".
+    ///
+    /// <b>A third number for the total, added 2026-08-25, because some animals have no sex at all.</b>
+    /// <c>RaceProps.hasGenders</c> is false for wraiths and their like, so every one of them is
+    /// <c>Gender.None</c>: the two sexed numbers can never be satisfied and the bill would tame none of them
+    /// ever. It is also the plain answer for anybody who wants six of something and does not care what they are.
+    ///
+    /// <b>The three compose rather than compete.</b> The sexed numbers are minimums per sex and
+    /// <see cref="any"/> is a minimum on the herd, so two females, one male and six total means all three at
+    /// once. Nothing has to be switched between modes, and a species with no sexes simply leaves the first two
+    /// at zero.
     /// </summary>
     internal class TamingTarget : IExposable
     {
@@ -22,29 +32,54 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         internal int females;
 
+        /// <summary>Wanted in total, whatever sex they turn out to be. The only number a sexless species uses.</summary>
+        internal int any;
+
         internal TamingTarget()
         {
         }
 
-        internal TamingTarget(ThingDef species, int males, int females)
+        internal TamingTarget(ThingDef species, int males, int females, int any = 0)
         {
             this.species = species;
             this.males = males;
             this.females = females;
+            this.any = any;
         }
 
-        internal int Wanted(Gender gender)
+        /// <summary>
+        /// How many are wanted of one sex, or in total when <paramref name="gender"/> is null.
+        ///
+        /// <c>Gender.None</c> answers zero rather than falling through to the male count, which is what it used
+        /// to do. A sexless animal has no per-sex want; it is counted by <see cref="any"/> and nothing else.
+        /// </summary>
+        internal int Wanted(Gender? gender)
         {
-            return gender == Gender.Female ? females : males;
+            if (gender == null)
+                return any;
+
+            switch (gender.Value)
+            {
+                case Gender.Female: return females;
+                case Gender.Male: return males;
+                default: return 0;
+            }
         }
 
-        internal void Set(Gender gender, int count)
+        internal void Set(Gender? gender, int count)
         {
             count = Mathf.Clamp(count, 0, Ceiling);
 
-            if (gender == Gender.Female)
+            if (gender == null)
+            {
+                any = count;
+
+                return;
+            }
+
+            if (gender.Value == Gender.Female)
                 females = count;
-            else
+            else if (gender.Value == Gender.Male)
                 males = count;
         }
 
@@ -58,7 +93,7 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         internal bool Empty
         {
-            get { return males <= 0 && females <= 0; }
+            get { return males <= 0 && females <= 0 && any <= 0; }
         }
 
         public void ExposeData()
@@ -66,6 +101,7 @@ namespace Gideon.UIOverhaul.Features.Animals
             Scribe_Defs.Look(ref species, "species");
             Scribe_Values.Look(ref males, "males");
             Scribe_Values.Look(ref females, "females");
+            Scribe_Values.Look(ref any, "any");
         }
     }
 
@@ -169,7 +205,15 @@ namespace Gideon.UIOverhaul.Features.Animals
             return null;
         }
 
-        /// <summary>Adds a species with one of each, which is what somebody adding a species almost always means.</summary>
+        /// <summary>
+        /// Adds a species with one of each, which is what somebody adding a species almost always means.
+        ///
+        /// <b>A sexless species gets one of <see cref="TamingTarget.any"/> instead.</b> Seeding a male and a
+        /// female wraith asks for two animals that cannot exist, so the bill would want them forever and tame
+        /// nothing: <c>Held</c> counts by sex and every wraith is <c>Gender.None</c>. The old seeding was
+        /// harmless while adding a species meant typing a number into one of its boxes; it stopped being harmless
+        /// when a checkbox started calling this. Fixed 2026-08-25.
+        /// </summary>
         internal void Add(ThingDef species)
         {
             if (species == null || TargetFor(species) != null)
@@ -178,7 +222,11 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (targets == null)
                 targets = new List<TamingTarget>();
 
-            targets.Add(new TamingTarget(species, 1, 1));
+            bool sexed = species.race != null && species.race.hasGenders;
+
+            targets.Add(sexed
+                ? new TamingTarget(species, 1, 1)
+                : new TamingTarget(species, 0, 0, 1));
         }
 
         internal void Remove(ThingDef species)
@@ -214,6 +262,39 @@ namespace Gideon.UIOverhaul.Features.Animals
                     Pawn animal = animals[i];
 
                     if (animal != null && !animal.Dead && animal.def == species && animal.gender == gender)
+                        held++;
+                }
+
+                return held;
+            }, 0, null);
+        }
+
+        /// <summary>
+        /// How many tame animals of this species the colony has on this map, of any sex.
+        ///
+        /// Separate from the sexed count rather than a nullable parameter on it, so no call site can pass a sex
+        /// by accident and quietly mean "all of them". Counts <c>Gender.None</c> too, which is the entire point:
+        /// a sexless species has no other count.
+        /// </summary>
+        internal static int HeldAny(Map map, ThingDef species)
+        {
+            return UIGuard.Try("Animals.TameHeldAny", () =>
+            {
+                if (map == null || species == null)
+                    return 0;
+
+                List<Pawn> animals = map.mapPawns.SpawnedColonyAnimals;
+
+                if (animals == null)
+                    return 0;
+
+                int held = 0;
+
+                for (int i = 0; i < animals.Count; i++)
+                {
+                    Pawn animal = animals[i];
+
+                    if (animal != null && !animal.Dead && animal.def == species)
                         held++;
                 }
 

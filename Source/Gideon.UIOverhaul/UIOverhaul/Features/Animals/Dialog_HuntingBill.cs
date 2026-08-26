@@ -541,32 +541,17 @@ namespace Gideon.UIOverhaul.Features.Animals
             SoundDefOf.Click.PlayOneShotOnCamera();
         }
 
+        /// <summary>
+        /// This window's All and None, which are the mod's button and nothing local.
+        ///
+        /// <b>It was a hand drawn one and its twin in the taming dialog is not.</b> The two windows sit in the
+        /// same list and are meant to read as siblings, so a pair of buttons that looked alike but only one of
+        /// which clicked audibly or showed a pressed state was the kind of difference a player feels without
+        /// being able to name. Converted with the rest of the mod on 2026-08-25.
+        /// </summary>
         private bool Button(Rect rect, string label, UIColorPaletteDef palette)
         {
-            bool over = Mouse.IsOver(rect);
-
-            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(rect, label);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            return Widgets.ButtonInvisible(rect);
+            return UIActionButtonControl.Draw(rect, label, palette);
         }
 
         // ---------------------------------------------------------------------------------------
@@ -582,7 +567,7 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             // Beside Done rather than at the top, because saving and loading a shape is something you do after
             // setting one up, not before.
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - 232f, rect.y, 116f, 32f), "Templates", true, true))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - 232f, rect.y, 116f, 32f), "Templates", true, true))
                 Find.WindowStack.Add(new Dialog_AnimalBillTemplates(false,
                     name => AnimalBillTemplates.Capture(bill, name),
                     template =>
@@ -593,7 +578,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                         Seed();
                     }));
 
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - 110f, rect.y, 110f, 32f), "Done", true, true))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - 110f, rect.y, 110f, 32f), "Done", true, true))
                 Close();
         }
 

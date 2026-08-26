@@ -815,7 +815,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             Rect addRect = new Rect(r.xMax - Pad - 150f, r.y + 10f, 150f, 32f);
             bool canAdd = selected != null && !full;
-            if (!GzpPalette.GrayButton(addRect, "Add Bill", canAdd, true))
+            if (!UIActionButtonControl.Draw(addRect, "Add Bill", canAdd, true))
                 return;
 
             GrowBillUtility.AddBill(zone, selected, tutorTag);

@@ -130,7 +130,7 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             GUI.color = previous;
 
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - Pad - 110f, rect.y + 10f, 110f, 32f), "Cancel"))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - Pad - 110f, rect.y + 10f, 110f, 32f), "Cancel"))
                 Close();
         }
     }

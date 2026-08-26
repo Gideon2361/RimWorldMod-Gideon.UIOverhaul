@@ -18,8 +18,17 @@ namespace Gideon.UIOverhaul.Features.Architect
     /// The point is choosing between options, so the rows are the ones that actually differ between them.
     /// Which rows those are depends on what is being placed:
     ///
-    ///   building  -- hit points, work to build, flammability, market value
+    ///   building  -- hit points, work to build, flammability, beauty, market value
     ///   terrain   -- cleanliness, beauty, work to build, market value
+    ///
+    /// Beauty is on the building list because it is the stat that separates one material from another more than
+    /// any other: gold carries a +20 offset and a x4 factor, jade +10 and x2.5, uranium x0.5, and steel nothing
+    /// at all. Somebody choosing between a steel wall and a gold one is usually choosing on exactly this, which
+    /// made it the one obvious number missing from the cards.
+    ///
+    /// It stays absent for the materials that do not move it, and that is deliberate rather than a gap. Beauty
+    /// declares defaultBaseValue 0 and hideAtValue 0, so the game hides its own reading at zero -- the same
+    /// answer the zero test in Add already gives. A steel wall drops the row; a gold one shows it.
     ///
     /// Nothing about apparel here, because nothing in the architect places apparel. Armor and insulation are
     /// apparel-only stats -- ArmorRating_Sharp and its siblings are declared in Stats_Apparel.xml under
@@ -47,6 +56,7 @@ namespace Gideon.UIOverhaul.Features.Architect
                 Add(placing, stuff, StatDefOf.MaxHitPoints);
                 Add(placing, stuff, StatDefOf.WorkToBuild);
                 Add(placing, stuff, StatDefOf.Flammability);
+                Add(placing, stuff, StatDefOf.Beauty);
                 Add(placing, stuff, StatDefOf.MarketValue);
                 return Rows;
             }

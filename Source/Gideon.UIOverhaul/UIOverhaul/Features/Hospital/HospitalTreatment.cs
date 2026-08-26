@@ -307,6 +307,22 @@ namespace Gideon.UIOverhaul.Features.Hospital
                 if (hediff == null || !hediff.Visible)
                     continue;
 
+                // <b>A tend that can never lapse into needing another one is not a treatment.</b> A torn off
+                // tail keeps a live HediffComp_TendDuration for as long as its timer runs, so IsTended stays
+                // true and the pawn sat in this tab reading "Tended 68%" with nothing anybody could do about it
+                // and nothing that would ever change. Reported on a crow, 2026-08-25.
+                //
+                // Hediff_MissingPart overrides TendableNow to IsFreshNonSolidExtremity and its Tended() clears
+                // IsFresh, so a dressed stump answers false here and drops out. It also stops bleeding at the
+                // same moment, which is the whole reason it needed tending in the first place.
+                //
+                // <b>ignoreTimer, and that is load bearing.</b> The question is whether this is the kind of
+                // thing that gets tended at all, not whether it is due right now. Every currently tended wound
+                // answers false to the timed form, so asking that would empty this tab of exactly the pawns it
+                // exists to list.
+                if (!hediff.TendableNow(true))
+                    continue;
+
                 HediffComp_TendDuration comp = hediff.TryGetComp<HediffComp_TendDuration>();
 
                 if (comp == null || !comp.IsTended)

@@ -209,7 +209,7 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
 
             name.Draw(box, palette);
 
-            if (GzpPalette.GrayButton(new Rect(box.xMax + 8f, rect.y, 102f, 28f), "Save", true, true))
+            if (UIActionButtonControl.Draw(new Rect(box.xMax + 8f, rect.y, 102f, 28f), "Save", true, true))
                 SaveCurrent();
 
             if (note.NullOrEmpty())

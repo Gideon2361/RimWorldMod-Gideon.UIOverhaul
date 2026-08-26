@@ -139,6 +139,11 @@ namespace Gideon.UIOverhaul.Features.Animals
 
                 ordered += Fill(bill, target, Gender.Female, ref budget);
                 ordered += Fill(bill, target, Gender.Male, ref budget);
+
+                // The total last, and it needs no arithmetic to keep from double counting: the two passes above
+                // have already placed their designations and Coming reads those, so the shortfall this one sees
+                // is only what is still missing after them.
+                ordered += Fill(bill, target, null, ref budget);
             }
 
             if (ordered <= 0)
@@ -151,19 +156,27 @@ namespace Gideon.UIOverhaul.Features.Animals
         }
 
         /// <summary>
-        /// Orders up to the shortfall for one species and sex.
+        /// Orders up to the shortfall for one species, of one sex or of any sex.
         ///
         /// Females first at the call site above, because a herd that can grow needs them and a bill cut short by
-        /// its own outstanding cap should spend what it has on the half that matters.
+        /// its own outstanding cap should spend what it has on the half that matters. The sexless pass runs last
+        /// for the same reason: it will take whatever is nearest, so letting it go first could spend the whole
+        /// budget on males and leave a breeding pair unfilled.
+        ///
+        /// A null <paramref name="gender"/> means the total: it counts and tames animals of every sex, including
+        /// <c>Gender.None</c>, which is the only way a wraith is ever tamed.
         /// </summary>
-        private int Fill(TamingBill bill, TamingTarget target, Gender gender, ref int budget)
+        private int Fill(TamingBill bill, TamingTarget target, Gender? gender, ref int budget)
         {
             int wanted = target.Wanted(gender);
 
             if (wanted <= 0 || budget <= 0)
                 return 0;
 
-            int held = TamingBill.Held(map, target.species, gender);
+            int held = gender.HasValue
+                ? TamingBill.Held(map, target.species, gender.Value)
+                : TamingBill.HeldAny(map, target.species);
+
             int coming = Coming(target.species, gender);
             int shortfall = wanted - held - coming;
 
@@ -193,7 +206,7 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// handler when none is assigned. That is what makes assigning one mean something: a bill planned around
         /// a novice refuses more than a bill planned around the animal handler who does this for a living.
         /// </summary>
-        private List<Pawn> Candidates(TamingBill bill, ThingDef species, Gender gender)
+        private List<Pawn> Candidates(TamingBill bill, ThingDef species, Gender? gender)
         {
             List<Pawn> found = new List<Pawn>();
 
@@ -207,7 +220,10 @@ namespace Gideon.UIOverhaul.Features.Animals
             {
                 Pawn animal = wild[i];
 
-                if (animal == null || animal.def != species || animal.gender != gender)
+                if (animal == null || animal.def != species)
+                    continue;
+
+                if (gender.HasValue && animal.gender != gender.Value)
                     continue;
 
                 if (animal.Faction != null || animal.Dead)
@@ -268,14 +284,21 @@ namespace Gideon.UIOverhaul.Features.Animals
                 if (target == null || target.species == null)
                     continue;
 
-                count += Coming(target.species, Gender.Female) + Coming(target.species, Gender.Male);
+                // One sexless call rather than the two sexed ones it used to add together. Those two missed
+                // Gender.None entirely, so orders on sexless animals were invisible to the outstanding cap and
+                // the bill could keep spending budget it had already spent.
+                count += Coming(target.species, null);
             }
 
             return count;
         }
 
-        /// <summary>Outstanding tame orders on wild animals of this species and sex.</summary>
-        private int Coming(ThingDef species, Gender gender)
+        /// <summary>
+        /// Outstanding tame orders on wild animals of this species, of one sex or of any sex.
+        ///
+        /// A null sex counts every one of them, <c>Gender.None</c> included.
+        /// </summary>
+        private int Coming(ThingDef species, Gender? gender)
         {
             return UIGuard.Try("Animals.TameComing", () =>
             {
@@ -300,8 +323,13 @@ namespace Gideon.UIOverhaul.Features.Animals
 
                     Pawn animal = designation.target.Thing as Pawn;
 
-                    if (animal != null && animal.def == species && animal.gender == gender)
-                        count++;
+                    if (animal == null || animal.def != species)
+                        continue;
+
+                    if (gender.HasValue && animal.gender != gender.Value)
+                        continue;
+
+                    count++;
                 }
 
                 return count;

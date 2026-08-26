@@ -135,7 +135,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         {
             float lineY = rect.y + 32f;
             Rect modeRect = new Rect(contentX, lineY, 120f, 24f);
-            if (GzpPalette.GrayButton(modeRect, bill.RepeatModeLabel))
+            if (UIActionButtonControl.Draw(modeRect, bill.RepeatModeLabel))
                 Find.WindowStack.Add(new FloatMenu(bill.RepeatModeOptions()));
 
             Color previous = GUI.color;

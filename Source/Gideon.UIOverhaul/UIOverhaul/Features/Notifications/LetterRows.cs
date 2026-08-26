@@ -103,8 +103,11 @@ namespace Gideon.UIOverhaul.Features.Notifications
         ///
         /// Clamped rather than trusted. This is a hand-editable file, and a width of zero or of four thousand
         /// should give an odd looking stack rather than an unusable screen.
+        ///
+        /// <b>Read by the alert cards too, from 2026-08-25.</b> They stack in the same column, so one setting
+        /// governing both is what keeps that column a single width; see <c>AlertCards.MaxWidth</c>.
         /// </summary>
-        private static float Width
+        internal static float Width
         {
             get
             {
@@ -341,19 +344,32 @@ namespace Gideon.UIOverhaul.Features.Notifications
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
 
             try
             {
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.MiddleLeft;
 
+                // <b>Wrapping off, because a card is one line by construction.</b> Same guard the message cards
+                // carry, and letter rows were the other surface missing it. It matters more here than it looks:
+                // a label whose markup fails to parse is suddenly far wider than it measured, so it wrapped to a
+                // second line the card has no room for and the line was cut in half.
+                Text.WordWrap = false;
+
                 // Text at full strength against the card's own fade, so the last thing to disappear is the words.
                 GUI.color = new Color(palette.TextPrimary.r, palette.TextPrimary.g, palette.TextPrimary.b, alpha);
 
-                Widgets.LabelEllipses(text, LabelOf(letter));
+                // <b>Through UIRichText, because a letter label carries colour.</b> A faction is named in its own
+                // colour, a pawn in the tone for their state, and vanilla's LabelEllipses cannot survive either:
+                // it measures with the tags stripped and then shortens by characters of the raw string, so the
+                // cut lands inside <color=#00BEFFFF>, Unity gives up on the unbalanced tag and prints it as
+                // words. Reported 2026-08-25 on a Scandalous insult letter that showed its markup.
+                UIRichText.Label(text, LabelOf(letter));
             }
             finally
             {
+                Text.WordWrap = previousWrap;
                 GUI.color = previousColor;
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
@@ -436,7 +452,23 @@ namespace Gideon.UIOverhaul.Features.Notifications
                 Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.UpperLeft;
 
-                float height = Text.CalcHeight(text, PaneWidth - 20f) + 20f;
+                // <b>Wrapping asked for rather than inherited.</b> CalcHeight wraps according to Text.WordWrap,
+                // so measuring under whatever the previous drawer happened to leave gives a one-line pane for a
+                // paragraph of text -- and the row above this deliberately turns wrapping off. The measurement
+                // and the draw in PaneContents have to agree, and the only way they can is if both say so.
+                bool previousWrap = Text.WordWrap;
+                Text.WordWrap = true;
+
+                float height;
+
+                try
+                {
+                    height = Text.CalcHeight(text, PaneWidth - 20f) + 20f;
+                }
+                finally
+                {
+                    Text.WordWrap = previousWrap;
+                }
 
                 float x = dock == NotificationDock.TopLeft
                     ? row.xMax + 10f
@@ -469,7 +501,20 @@ namespace Gideon.UIOverhaul.Features.Notifications
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.UpperLeft;
 
-            Widgets.Label(local.ContractedBy(10f), text);
+            // Wrapping to match the height this pane was measured at; see DrawPane. The text is drawn whole and
+            // never shortened, which is why it needs nothing from UIRichText: colour tags render as colour on
+            // their own, and it is only cutting a string that breaks them.
+            bool previousWrap = Text.WordWrap;
+            Text.WordWrap = true;
+
+            try
+            {
+                Widgets.Label(local.ContractedBy(10f), text);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+            }
 
             GUI.color = previousColor;
         }

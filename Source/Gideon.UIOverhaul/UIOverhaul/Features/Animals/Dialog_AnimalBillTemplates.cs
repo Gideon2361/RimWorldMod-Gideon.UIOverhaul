@@ -150,7 +150,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                     Widgets.EndScrollView();
                 }
 
-                if (GzpPalette.GrayButton(new Rect(inRect.xMax - 110f, inRect.yMax - 32f, 110f, 32f), "Close",
+                if (UIActionButtonControl.Draw(new Rect(inRect.xMax - 110f, inRect.yMax - 32f, 110f, 32f), "Close",
                         true, true))
                     Close();
             }

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Inspector;
@@ -75,9 +76,71 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (EditorParts.Add(EditorParts.Column(buttons, 1, 3), y, "Add a condition", palette))
                 Offer(context);
 
-            y += EditorParts.ControlHeight + EditorParts.BlockGap;
+            // The third column, which the row was already laid out for and nothing had claimed.
+            if (EditorParts.Add(EditorParts.Column(buttons, 2, 3), y, "Sedate", palette, true,
+                    "Anesthetic at full strength, which puts them straight out.\n\nTops up the dose already "
+                    + "there rather than stacking a second one, so pressing it twice is the same as pressing it "
+                    + "once."))
+                Sedate(context);
+
+            y += EditorParts.ControlHeight + EditorParts.RowGap;
+
+            bool keep = EditorSedation.Kept(pawn);
+
+            if (UICheckboxControl.Draw(new Rect(view.x, y, view.width, 22f), ref keep, palette, "Keep sedated",
+                    "Puts the dose back every 250 ticks, so they stay under until this is switched off.\n\n"
+                    + "Needed because anesthetic is not a switch: it fades on its own and then removes itself "
+                    + "after a day or two, so holding somebody under means saying so more than once.\n\nThis "
+                    + "keeps working while the editor is closed and survives a save. It stops by itself if they "
+                    + "die."))
+                EditorSedation.SetKept(pawn, keep);
+
+            y += 24f + EditorParts.BlockGap;
 
             return y - view.y;
+        }
+
+        /// <summary>
+        /// Anesthetic at full strength, recorded so Revert puts the dose back where it was.
+        ///
+        /// <b>Undone to the previous severity rather than by removing the hediff,</b> because somebody who was
+        /// already under before the button was pressed should not be woken by undoing a top-up that changed
+        /// almost nothing. Only a dose that was not there at all is undone by taking it away.
+        ///
+        /// The application itself lives in <see cref="EditorSedation"/>, since the keep-sedated tick has to do
+        /// exactly the same thing without an editor open to record anything.
+        /// </summary>
+        private static void Sedate(EditorContext context)
+        {
+            Pawn pawn = context.Pawn;
+
+            UIGuard.Try("Editor.SedateButton", () =>
+            {
+                Hediff before = pawn.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.Anesthetic);
+
+                // Negative marks "there was none", which is a state no real severity can be confused with.
+                float previous = before != null ? before.Severity : -1f;
+
+                if (!EditorSedation.Sedate(pawn))
+                    return;
+
+                EditorParts.Redraw(pawn);
+
+                context.Changes.Record("health", () =>
+                {
+                    Hediff now = pawn.health.hediffSet.GetFirstHediffOfDef(HediffDefOf.Anesthetic);
+
+                    if (now == null)
+                        return;
+
+                    if (previous < 0f)
+                        pawn.health.RemoveHediff(now);
+                    else
+                        now.Severity = previous;
+
+                    EditorParts.Redraw(pawn);
+                });
+            }, "That pawn could not be sedated.");
         }
 
         private static string Summary(Pawn pawn)

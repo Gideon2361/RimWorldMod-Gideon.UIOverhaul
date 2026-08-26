@@ -127,13 +127,15 @@ namespace Gideon.UIOverhaul.Features.Architect
         private const string AllStuffLabel = "All stuff";
 
         private const float OptionsPaneWidth = 268f;
-        // Sized to fit exactly the four stat rows a building or a floor shows, which is the most either can
-        // produce. 78 with a 13px line was too tight on both counts: Tiny renders taller than 13px so rows
-        // crowded each other, and the card only had room for three of the four.
+        // Sized to fit exactly the five stat rows a building shows, which is the most any option can produce;
+        // a floor shows four. 78 with a 13px line was too tight even for four: Tiny renders taller than 13px
+        // so rows crowded each other, and the card only had room for three.
         //
-        // No headroom by design, but none is needed: the row sets are fixed in ArchitectStatBlock, so a fifth
-        // row cannot appear without a code change here as well.
-        private const float OptionCardHeight = 100f;
+        // <b>No headroom by design, and that is a live constraint rather than a note.</b> DrawOptionStats
+        // clamps to however many lines fit, so a row added to ArchitectStatBlock without raising this is not a
+        // squeezed card -- it is a row that silently never appears. Beauty joined the building list on
+        // 2026-08-25 and this went up by one OptionStatLineHeight with it.
+        private const float OptionCardHeight = 116f;
 
         /// <summary>
         /// A material card with its stats hidden: the icon, and the name beside it.

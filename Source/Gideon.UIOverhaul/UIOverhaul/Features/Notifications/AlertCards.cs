@@ -30,8 +30,21 @@ namespace Gideon.UIOverhaul.Features.Notifications
     {
         private const float MinWidth = 154f;
 
-        /// <summary>Widest a card may get. Past this, a label wraps rather than eating the map.</summary>
-        private const float MaxWidth = 260f;
+        /// <summary>
+        /// Widest a card may get: whatever width the letter rows are using.
+        ///
+        /// <b>Shared with the letters rather than a constant of its own, asked for 2026-08-25.</b> Alerts and
+        /// letters stack in the same column, so two separate ceilings gave the column a ragged edge and held the
+        /// alerts at 260 however much room the player had given the letters beside them. That is what left
+        /// "Raids arriving in 7 hours" short of space in a stack whose letters were wider than the alerts.
+        ///
+        /// Following the letters means the player's own width setting governs both and there is no second
+        /// setting to find. Cards still size themselves to their content up to this, so a short alert stays
+        /// narrow rather than every one of them eating the map.
+        ///
+        /// Floored at <see cref="MinWidth"/>, so letters set very narrow cannot collapse an alert card.
+        /// </summary>
+        private static float MaxWidth => Mathf.Max(MinWidth, LetterRows.Width);
 
         private const float CardGap = 2f;
 
@@ -273,13 +286,26 @@ namespace Gideon.UIOverhaul.Features.Notifications
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
 
             Text.Font = GameFont.Small;
             Text.Anchor = TextAnchor.MiddleLeft;
             GUI.color = palette.TextPrimary;
 
-            Widgets.Label(text, LabelOf(alert));
+            // <b>Wrapping off, because a card is one line by construction.</b> Reported 2026-08-25: "Raids
+            // arriving in 7 hours" is wider than the strip, so IMGUI laid it out over two lines and the card cut
+            // both of them in half. Vertically clipped text reads as a rendering fault rather than as a label
+            // that did not fit, which is the whole reason every other single-line label in this mod says this.
+            Text.WordWrap = false;
 
+            // Shortened here rather than left to clip, and through UIRichText because an alert label carries
+            // colour -- a count in the danger tone, a pawn named in theirs. Cutting such a string by raw
+            // characters lands inside the tag and prints the markup as words; this one cuts by visible
+            // characters and closes what it opened. The hazard badge has already taken its 18px off the lane
+            // above, so the width this measures against is the width actually available.
+            UIRichText.Label(text, LabelOf(alert));
+
+            Text.WordWrap = previousWrap;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
             GUI.color = previousColor;

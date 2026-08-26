@@ -48,6 +48,29 @@ namespace Gideon.UIOverhaul.Features.Inspector
             bool animal = pawn.RaceProps != null && pawn.RaceProps.Animal;
             bool dead = UIGuard.Try("Inspector.IsDead", () => pawn.Dead, false, null);
 
+            // <b>An anomaly entity reads as an animal and must not be treated as one.</b>
+            // <c>RaceProps.Animal</c> is <c>intelligence == Animal &amp;&amp; !IsMechanoid</c>, which a noctol
+            // satisfies, so an entity was being sent down the animal path: a training block for something that
+            // cannot be trained, a master and an allowed area for something with no player faction, and a
+            // butcher yield. Each block correctly found nothing to say and the three of them added up to a blank
+            // panel. Reported 2026-08-25; see <see cref="Anomaly.EntityBlock"/> for what goes there instead.
+            //
+            // <b><c>Pawn.IsEntity</c> alone was not enough, and that is why the first attempt at this changed
+            // nothing.</b> It ends in <c>Faction == Faction.OfEntities</c>, so a captured noctol, or one whose
+            // faction has been cleared, is not an entity by that test and went straight back down the animal
+            // path. <c>RaceProps.IsAnomalyEntity</c> is the durable half: it reads <c>FleshType</c>, which
+            // belongs to the kind of thing rather than to its current allegiance, so it holds whoever owns the
+            // creature. Vanilla draws the same distinction for the same reason, at
+            // <c>RaceProperties.SpecialDisplayStats</c>, where trainability is hidden for anything that is
+            // <c>IsAnomalyEntity</c> despite being animal intelligence.
+            //
+            // Both are kept: the flesh test catches noctols and fleshbeasts, and <c>IsEntity</c> still catches
+            // the humanlike-fleshed cases it was written for, shamblers and subhumans.
+            bool entity = UIGuard.Try("Inspector.IsEntity",
+                () => pawn.IsEntity || (pawn.RaceProps != null && pawn.RaceProps.IsAnomalyEntity), false, null);
+
+            bool beast = animal && !entity;
+
             // <b>A corpse gets the same panel with the blocks that still mean something.</b> Needs are frozen at
             // the moment of death and an allowed area is nobody's business now, so those two go; what is left --
             // skills, gear, wounds, traits -- is exactly what somebody looking at a body wants, and it is the
@@ -59,14 +82,20 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (!dead)
                 leftY = Needs(left, leftY, pawn, palette, NeedsShown);
 
-            leftY = animal && !dead
+            // An entity keeps the body block rather than the training one: its capacities and its wounds are
+            // real and are most of what somebody looking at a caged one wants.
+            leftY = beast && !dead
                 ? Training(left, leftY, pawn, palette)
                 : Body(left, leftY, pawn, palette);
 
             Rect second = split ? right : left;
             float secondY = split ? view.y : leftY + InspectPaneParts.BlockGap;
 
-            if (animal && !dead)
+            if (entity && !dead)
+            {
+                secondY = Anomaly.EntityBlock.Draw(second, secondY, pawn, palette);
+            }
+            else if (beast && !dead)
             {
                 secondY = AnimalAssignment(second, secondY, pawn, palette);
                 secondY = Yield(second, secondY, pawn, palette);
@@ -83,8 +112,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float y = split ? Mathf.Max(leftY, secondY) : secondY;
 
             // A corpse has no standing orders to show, and drawing the chips dead would only invite clicking
-            // them.
-            if (!animal && !dead)
+            // them. Nor has an entity: work types, an outfit and a drug policy are all meaningless on something
+            // that is not ours, and the chips would be inviting a click that does nothing.
+            if (!animal && !dead && !entity)
                 y = Assignment(view, y, pawn, palette);
 
             return y - view.y;

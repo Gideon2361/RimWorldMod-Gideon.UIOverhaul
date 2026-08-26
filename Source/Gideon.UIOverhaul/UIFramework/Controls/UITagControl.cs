@@ -40,6 +40,20 @@ namespace Gideon.UIFramework.Controls
         private const float MinHeight = 11f;
 
         /// <summary>
+        /// Air above and below the word, inside the badge, which is what sets how tall it comes out.
+        ///
+        /// <b>A badge is sized by its text, not by the rect it is handed.</b> Reported on 2026-08-25: the pawns
+        /// tab's condition cell passes the whole band, so HELP came out as a 34 pixel block of amber with a word
+        /// lost in the middle of it -- a column, not a chip. Every caller here passes a row rect, because that is
+        /// the natural thing to pass and because <see cref="DrawLeading"/> asks for one in order to return an x on
+        /// the same line. So the height cannot come from the argument.
+        ///
+        /// <see cref="VerticalInset"/> still applies as a floor, so a caller who does hand over a short rect gets
+        /// the badge inset inside it rather than overflowing.
+        /// </summary>
+        private const float TextPadding = 2f;
+
+        /// <summary>
         /// How wide <see cref="Draw"/> will come out for this text, so a caller can lay out around it.
         ///
         /// Measured at the ambient <c>Text.Font</c>, which is what Draw uses too. Callers that set a font for
@@ -65,8 +79,15 @@ namespace Gideon.UIFramework.Controls
 
             palette = palette ?? UIColorPaletteDef.Active;
 
-            Rect badge = new Rect(rect.x, rect.y + VerticalInset, rect.width,
-                Mathf.Max(MinHeight, rect.height - VerticalInset * 2f));
+            // Text.LineHeight rather than UIFonts, because the caller has already set the font this badge is
+            // about to be drawn in and that getter indexes by the current one -- so it already reflects the tiny
+            // to small substitution, which asking UIFonts a second time would only repeat.
+            float height = Mathf.Clamp(rect.height - VerticalInset * 2f, MinHeight,
+                Text.LineHeight + TextPadding * 2f);
+
+            // Centred in the row rather than pinned to its top. A chip hanging from the top edge of a tall cell
+            // reads as misaligned with the label beside it, which is centred in the same cell.
+            Rect badge = new Rect(rect.x, rect.y + Mathf.Round((rect.height - height) * 0.5f), rect.width, height);
 
             UIElementPainter.FillRounded(badge, color);
 

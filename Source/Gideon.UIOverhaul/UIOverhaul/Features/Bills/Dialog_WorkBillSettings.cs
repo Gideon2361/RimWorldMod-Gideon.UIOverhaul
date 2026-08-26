@@ -77,7 +77,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             Rect body = new Rect(inRect.x + EdgeInset, inRect.y + HeaderHeight, inRect.width - EdgeInset * 2f,
                 inRect.height - HeaderHeight - FooterHeight);
 
-            pane.Draw(body, bill, palette, true);
+            pane.Draw(body, bill, palette);
 
             Footer(new Rect(inRect.x, inRect.yMax - FooterHeight, inRect.width, FooterHeight));
 
@@ -112,7 +112,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             // which is what a window with no Cancel button means; the sentence was reassurance about behaviour
             // nobody had reason to doubt. Removed 2026-08-23 on Aaron's instruction.
 
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - Pad - 120f, rect.y + 10f, 120f, 32f), "Done", true, true))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - Pad - 120f, rect.y + 10f, 120f, 32f), "Done", true, true))
                 Close();
         }
     }

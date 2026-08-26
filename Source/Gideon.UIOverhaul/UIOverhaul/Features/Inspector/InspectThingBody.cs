@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Integrations;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -101,6 +102,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
             flow.Give(column, Fuel(column, y, thing, palette));
 
             column = flow.Take(out y);
+            flow.Give(column, Bioferrite(column, y, thing, palette));
+
+            column = flow.Take(out y);
+            flow.Give(column, Containment(column, y, thing, palette));
+
+            column = flow.Take(out y);
             flow.Give(column, Climate(column, y, thing, palette));
 
             column = flow.Take(out y);
@@ -117,6 +124,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             column = flow.Take(out y);
             flow.Give(column, Condition(column, y, thing, palette));
+
+            column = flow.Take(out y);
+            flow.Give(column, Maintenance(column, y, thing, palette));
 
             column = flow.Take(out y);
             flow.Give(column, Worth(column, y, thing, palette));
@@ -182,7 +192,25 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 InspectPaneParts.Level(factor, palette), palette);
         }
 
-        /// <summary>What this draws and what the grid has spare, which is the pair that decides whether to build.</summary>
+        /// <summary>
+        /// What this draws and what the grid has spare, which is the pair that decides whether to build.
+        ///
+        /// <b>What it needs is a different number from what it is drawing,</b> and the difference is the whole
+        /// reason vanilla writes "Power needed" instead of "Power draw". A building that is off, unpowered or
+        /// idling has a <c>PowerOutput</c> of zero or of its idle trickle, so a pane reporting only that says
+        /// "Draw 0 W" about a machine that will take 4,200 W the moment it is switched on -- which is precisely
+        /// the number somebody is looking for when they click a building that is not running. Reported on
+        /// 2026-08-25 against the bioferrite harvester, whose rated draw was only in the raw inspect string at the
+        /// bottom of the pane.
+        ///
+        /// So the rated figure is shown whenever it differs from the live one, and never when it does not: a
+        /// running machine drawing exactly what it is rated for gets one line, because a second line repeating it
+        /// would be noise on every powered building on the map.
+        ///
+        /// <c>Props.PowerConsumption</c> rather than the def's raw field, because that getter applies the
+        /// research upgrades -- a colony that has finished the relevant project genuinely needs less, and quoting
+        /// the unupgraded number would be wrong in the player's favour.
+        /// </summary>
         private static float Power(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
             CompPowerTrader trader = UIGuard.Try("Inspector.PowerComp",
@@ -194,11 +222,23 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float watts = UIGuard.Try("Inspector.PowerOutput", () => trader.PowerOutput, 0f, null);
             bool on = UIGuard.Try("Inspector.PowerOn", () => trader.PowerOn, false, null);
 
+            // Positive means consuming, which is the opposite sign to PowerOutput and the same sign a player
+            // reads on the wall. Zero for a generator, whose rated figure is its output and is already the live
+            // number above.
+            float rated = UIGuard.Try("Inspector.PowerRated",
+                () => trader.Props != null ? Mathf.Max(0f, trader.Props.PowerConsumption) : 0f, 0f, null);
+
             y = InspectPaneParts.Cap(view, y, "Power", on ? "on" : "off", palette);
 
             y = InspectPaneParts.Fact(view, y, watts < 0f ? "Draw" : "Output",
                 Mathf.Abs(Mathf.RoundToInt(watts)) + " W",
                 on ? palette.TextPrimary : palette.TextDisabled, palette);
+
+            if (rated > 0f && Mathf.Abs(rated - Mathf.Abs(watts)) >= 1f)
+            {
+                y = InspectPaneParts.Fact(view, y, on ? "Needs running" : "Needs",
+                    Mathf.RoundToInt(rated) + " W", palette.TextSecondary, palette);
+            }
 
             PowerNet net = UIGuard.Try("Inspector.PowerNetRead", () => trader.PowerNet, null, null);
 
@@ -216,6 +256,122 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 y = InspectPaneParts.Fact(view, y, "Stored", Mathf.RoundToInt(stored) + " Wd",
                     palette.TextSecondary, palette);
             }
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// Vanilla's own capacity for a bioferrite harvester.
+        ///
+        /// <b>Restated rather than read, because RimWorld keeps it as a private const.</b>
+        /// <c>Building_BioferriteHarvester.MaxCapacity</c> is 60 and there is no property over it, so the choice
+        /// is between this line and reflecting a compiler-visible field that a future version could rename with
+        /// nothing to warn us. A wrong number here would draw a bar of the wrong length; a wrong reflection would
+        /// throw on a draw path. The comparison is also written into the game's own inspect string as
+        /// <c>containedBioferrite:F2 / 60</c>, so it is a number the player can already see us against.
+        /// </summary>
+        private const float BioferriteCapacity = 60f;
+
+        /// <summary>
+        /// How full a bioferrite harvester is, and how fast it is filling.
+        ///
+        /// <b>A tank, so it gets a tank's treatment.</b> Vanilla states it as "Bioferrite contained: 41.28 / 60
+        /// (+8.40 per day)" in the raw inspect string, which is the same fact as fuel or charge written as prose
+        /// while those two get bars two inches above it. Asked for on 2026-08-25.
+        ///
+        /// <b>Thirty is the mark on the track, because thirty is when something happens.</b> That is
+        /// <c>ReadyForHauling</c> -- the floor of the contained amount reaching the mod's hauling threshold -- so
+        /// below it the harvester is filling and above it a colonist will come and empty it. A bar without that
+        /// mark would be a bar where every position looks alike.
+        ///
+        /// <b>The rate is not recomputed here.</b> Vanilla's <c>BioferritePerDay</c> is private, and duplicating
+        /// it would mean copying its walk over the linked platforms and its per-entity rate -- a second
+        /// implementation of a game rule, which is the thing this whole mod avoids. <c>IsWorking</c> is public and
+        /// answers the question that actually matters: filling, or stalled.
+        /// </summary>
+        private static float Bioferrite(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            Building_BioferriteHarvester harvester = thing as Building_BioferriteHarvester;
+
+            if (harvester == null)
+                return y;
+
+            float contained = UIGuard.Try("Inspector.Bioferrite",
+                () => Mathf.Clamp(harvester.containedBioferrite, 0f, BioferriteCapacity), 0f, null);
+
+            bool working = UIGuard.Try("Inspector.BioferriteWorking", harvester.IsWorking, false, null);
+            bool ready = UIGuard.Try("Inspector.BioferriteReady", () => harvester.ReadyForHauling, false, null);
+
+            float fraction = contained / BioferriteCapacity;
+
+            y = InspectPaneParts.Cap(view, y, "Bioferrite", working ? "harvesting" : "idle", palette);
+
+            y = InspectPaneParts.Need(view, y, "Contained",
+                Mathf.FloorToInt(contained) + " / " + Mathf.RoundToInt(BioferriteCapacity),
+                ready ? palette.Success : palette.TextSecondary, fraction,
+                ready ? palette.Success : palette.Accent,
+                new[] { 30f / BioferriteCapacity }, null, palette);
+
+            // Said only when it is not, because "idle" on the cap already covers the ordinary case and a machine
+            // that is running does not need to be told so twice.
+            if (!working)
+            {
+                y = InspectPaneParts.Fact(view, y, "Filling", "nothing on the platforms", palette.TextDisabled,
+                    palette);
+            }
+            else if (!harvester.unloadingEnabled)
+            {
+                y = InspectPaneParts.Fact(view, y, "Unloading", "switched off", palette.Warning, palette);
+            }
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// A holding platform's containment, and the state of whatever is chained to it.
+        ///
+        /// A one-line hand-off, because the reading belongs with the rest of the Anomaly code rather than in the
+        /// middle of a file about plants and batteries -- and because the entity's own pane draws the same facts
+        /// from the other side, and the two must not drift apart. See <see cref="Anomaly.EntityBlock.Platform"/>.
+        /// </summary>
+        private static float Containment(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            return Anomaly.EntityBlock.Platform(view, y, thing as Building_HoldingPlatform, palette);
+        }
+
+        /// <summary>
+        /// Fluffy Breakdowns' maintenance level, when that mod is running.
+        ///
+        /// <b>Red because it is a countdown, not a gauge.</b> Aaron asked for a red bar on 2026-08-25 and the
+        /// reading is right: unlike fuel or charge, nothing about this bar being full is an achievement, and every
+        /// direction it moves on its own is downwards. The mark sits at the mod's own maintenance threshold, which
+        /// is the point below which a colonist will be sent to fix it, so a full-looking bar with the mark just
+        /// underneath reads as "about to become somebody's job" rather than as "fine".
+        ///
+        /// <b>Placed after Condition on purpose.</b> That block already carries health and breakdown state, and
+        /// maintenance is the thing that decides the second of those -- so it belongs beside it rather than up
+        /// with the tanks, even though it is drawn like one.
+        ///
+        /// Absent entirely without the mod, which is what an integration means here. See
+        /// <see cref="FluffyBreakdownsIntegration"/>.
+        /// </summary>
+        private static float Maintenance(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            float? durability = FluffyBreakdownsIntegration.Durability(thing);
+
+            if (!durability.HasValue)
+                return y;
+
+            float level = Mathf.Clamp01(durability.Value);
+            float threshold = Mathf.Clamp01(FluffyBreakdownsIntegration.Threshold);
+
+            bool wanting = level < threshold;
+
+            y = InspectPaneParts.Cap(view, y, "Maintenance", wanting ? "due" : null, palette);
+
+            y = InspectPaneParts.Need(view, y, "Components", InspectPaneParts.Percent(level),
+                wanting ? palette.Danger : palette.TextSecondary, level, palette.Danger,
+                new[] { threshold }, null, palette);
 
             return y + InspectPaneParts.BlockGap;
         }

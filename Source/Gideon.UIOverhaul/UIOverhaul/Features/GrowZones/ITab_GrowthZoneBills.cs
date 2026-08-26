@@ -65,7 +65,7 @@ namespace Gideon.UIOverhaul.Features.GrowZones
 
             Rect addRect = new Rect(inner.x, inner.y, 110f, 30f);
             bool full = zone.BillStack.Count >= BillStack.MaxCount;
-            if (GzpPalette.GrayButton(addRect, "AddBill".Translate(), !full, true))
+            if (UIActionButtonControl.Draw(addRect, "AddBill".Translate(), !full, true))
                 Find.WindowStack.Add(new Dialog_AddGrowBill(zone, tutorTag));
             if (full)
                 TooltipHandler.TipRegion(addRect, (TipSignal) $"This zone already has the maximum of {BillStack.MaxCount} bills.");

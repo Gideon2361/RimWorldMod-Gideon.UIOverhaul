@@ -151,11 +151,33 @@ namespace Gideon.UIOverhaul.Features.Options
             Mathf.Min(RequiredWidth, UI.screenWidth - 20f),
             Mathf.Min(RequiredHeight, UI.screenHeight - 20f));
 
-        /// <summary>Writes the open mod's settings out, the way closing vanilla's dialog would.</summary>
+        /// <summary>
+        /// Writes the open mod's settings out, and RimWorld's own prefs with them, the way closing vanilla's
+        /// dialog would.
+        ///
+        /// <b><c>Prefs.Save()</c> is the half that was missing, and it cost every preference this window sets.</b>
+        /// Reported on 2026-08-25 as an autosave interval that would not survive a restart, and the interval was
+        /// only the one somebody noticed. Every <c>Prefs</c> property has a setter that calls <c>Apply()</c> and
+        /// nothing else: the value takes effect immediately and lives in memory, and the file on disk is written
+        /// by exactly one thing, which is whoever closes the window. Vanilla's <c>Dialog_Options.PreClose</c> does
+        /// this on the line after <c>base.PreClose()</c>; we replaced that window and did not replace the line.
+        ///
+        /// Nothing else in the game would have covered for it. There is no save on quit and no periodic flush --
+        /// <c>Prefs.Save</c> has four callers in the whole assembly, and the other three are the dev palette, the
+        /// resolution helper and the main menu's language button, each saving after its own change. So a player
+        /// who set an interval, played for six hours and quit lost it, with nothing to see but the old number.
+        ///
+        /// Ordered after the mod settings, so a mod page that writes prefs of its own in <c>Write()</c> is
+        /// included rather than missing this pass by one line.
+        /// </summary>
         public override void PreClose()
         {
             base.PreClose();
             LeaveModSettings();
+
+            UIGuard.Try("Options.SavePrefs", Prefs.Save,
+                "RimWorld's own preferences were not written to disk, so anything changed on the Game page will "
+                + "be back to its previous value next time the game starts.");
         }
 
         protected override float Margin => 0f;
@@ -1916,9 +1938,18 @@ namespace Gideon.UIOverhaul.Features.Options
                     Find.WindowStack.Add(new FloatMenu(options));
                 });
 
-            // The same eight steps vanilla offers, in days. A free slider would let somebody ask for an autosave
-            // every four seconds.
-            float[] intervals = { 0.05f, 0.075f, 0.1f, 0.125f, 0.25f, 0.5f, 1f, 2f };
+            // <b>Vanilla's own ten steps, in days, and the same split between them.</b> This was a list of eight
+            // that stopped at two days and offered the sub-half-day steps to everybody. Both halves of that were
+            // wrong: RimWorld goes on to three, seven and fourteen, so somebody who wanted a weekly autosave could
+            // not ask for one in the window that replaced the one where they could -- and it keeps everything
+            // under half a day behind dev mode, because those are debug intervals and an autosave every 72 in-game
+            // minutes hitches a large colony over and over for nothing.
+            //
+            // A fixed list rather than a slider, still: a free number would let somebody ask for an autosave every
+            // four seconds.
+            float[] intervals = Prefs.DevMode
+                ? new[] { 0.05f, 0.075f, 0.1f, 0.125f, 0.25f, 0.5f, 1f, 3f, 7f, 14f }
+                : new[] { 0.5f, 1f, 3f, 7f, 14f };
 
             ChoiceRow(view, ref y, palette, "Autosave interval", AutosaveLabel(Prefs.AutosaveIntervalDays),
                 () =>
@@ -1929,13 +1960,44 @@ namespace Gideon.UIOverhaul.Features.Options
                     {
                         float captured = days;
 
-                        options.Add(new FloatMenuOption(AutosaveLabel(captured),
+                        options.Add(new FloatMenuOption(
+                            AutosaveLabel(captured) + (captured < 0.5f ? " (debug)" : string.Empty),
                             UIGuard.Wrap("Options.SetAutosave",
                                 () => Prefs.AutosaveIntervalDays = captured)));
                     }
 
                     Find.WindowStack.Add(new FloatMenu(options));
                 });
+
+            // <b>How many autosaves are kept, which vanilla offers and this window did not.</b> The two settings
+            // are one decision -- half a day with five kept is two and a half days of history, and neither number
+            // means anything without the other -- so leaving this out left the row above impossible to reason
+            // about. Vanilla's own range, 1 to 25.
+            Prefs.AutosavesCount = CountRow(view, ref y, palette, "Autosaves kept", Prefs.AutosavesCount, 1, 25);
+
+            // <b>Permadeath with a long interval is the one combination worth saying something about.</b> Vanilla
+            // prints this in red under the same row and it is not a formality: in permadeath the autosave is the
+            // save, so a fortnight between them is a fortnight of play riding on nothing going wrong. Said rather
+            // than enforced, matching vanilla -- somebody who chose permadeath is allowed to choose this too.
+            if (playing && Current.Game != null && Current.Game.Info != null && Current.Game.Info.permadeathMode
+                && Prefs.AutosaveIntervalDays > 1f)
+            {
+                Color previousWarning = GUI.color;
+                GameFont previousWarningFont = Text.Font;
+
+                Text.Font = GameFont.Tiny;
+                GUI.color = palette.Danger;
+
+                string warning = "MaxPermadeathAutosaveIntervalInfo".Translate(1f);
+                float warningHeight = Text.CalcHeight(warning, view.width - Indent);
+
+                Widgets.Label(new Rect(Indent, y, view.width - Indent, warningHeight), warning);
+
+                Text.Font = previousWarningFont;
+                GUI.color = previousWarning;
+
+                y += warningHeight + 4f;
+            }
 
             bool background = Prefs.RunInBackground;
 
@@ -2055,18 +2117,6 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "there it is the difference between somebody who can go outside and somebody who cannot, and "
                 + "the character editor's own preview obeys its own switch, since looking under the hat is what "
                 + "that window is for.");
-
-            // Keybindings and the developer options are not reimplemented here, so the window that has them
-            // stays one click away. Opened through the bypass, since this mod otherwise replaces it.
-            if (SmallButton(new Rect(Indent, y, 230f, RowHeight), "Keybindings and dev options", palette))
-            {
-                UIGuard.Try("Options.OpenVanillaOptions", Patch_WindowStack_Add_Options.OpenVanilla,
-                    "RimWorld's own options window could not be opened.");
-
-                SoundDefOf.Click.PlayOneShotOnCamera();
-            }
-
-            y += RowHeight + 6f;
 
             ChoiceRow(view, ref y, palette, "Temperature",
                 UIGuard.Try("Options.ReadTemperatureMode", () => Prefs.TemperatureMode.ToStringHuman(), "?",
@@ -2197,6 +2247,42 @@ namespace Gideon.UIOverhaul.Features.Options
             y += RowHeight + 2f;
 
             return result;
+        }
+
+        /// <summary>
+        /// A labeled row carrying a whole number on a slider, built to match <see cref="VolumeRow"/>.
+        ///
+        /// Same label column, same slider lane and same right-aligned readout, because a settings page only reads
+        /// as one page if two rows doing the same kind of thing are laid out the same way. What differs is that
+        /// the value is an integer and the readout is not a percentage.
+        /// </summary>
+        private int CountRow(Rect view, ref float y, UIColorPaletteDef palette, string label, int value,
+            int minimum, int maximum)
+        {
+            Rect row = new Rect(Indent, y, view.width - Indent, RowHeight);
+
+            Color previous = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(row.x, row.y, LabelColumn, row.height), label);
+
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = palette.TextPrimary;
+            Widgets.Label(new Rect(row.xMax - 60f, row.y, 56f, row.height), value.ToString());
+
+            Text.Anchor = previousAnchor;
+            GUI.color = previous;
+
+            float result = Widgets.HorizontalSlider(
+                new Rect(row.x + LabelColumn, row.y + (row.height - 22f) * 0.5f,
+                    Mathf.Max(60f, row.width - LabelColumn - 70f), 22f),
+                value, minimum, maximum, false, null, null, null, 1f);
+
+            y += RowHeight + 2f;
+
+            return Mathf.RoundToInt(result);
         }
 
         /// <summary>A labeled row whose value is a button opening a menu of choices.</summary>
@@ -2642,6 +2728,55 @@ namespace Gideon.UIOverhaul.Features.Options
             y += 8f;
 
             GroupLabel(view, ref y, palette, "Trade");
+
+            // <b>One switch per replaced window, not one for the set.</b> The compatibility risk is per window: a
+            // mod adding a column to the trade dialog has nothing to do with the caravan packer, and somebody who
+            // has to switch one off should not lose the other three with it.
+            //
+            // These are escape hatches rather than fallbacks. This mod's rule is that a feature failing mid-draw
+            // must not quietly hand off to vanilla, because that hides the defect; a choice made here, with the
+            // consequence written down, is a different thing.
+            WidgetToggle(view, ref y, palette, settings, Indent, "Use our trade window",
+                settings.customTradeWindow, value => settings.customTradeWindow = value,
+                "Replaces RimWorld's trade dialog with ours: buying and selling as separate views instead of one "
+                + "flat interleaved list, a category rail with live counts, prices that say their level in a "
+                + "word and their favour in a colour, a count you can type into, what you will still be holding "
+                + "afterwards, and the deal itself standing beside the table where you can read all of it before "
+                + "accepting.\n\nEvery price, limit, refusal and the trade itself stay RimWorld's. Nothing here "
+                + "reimplements a trade rule.\n\nSwitch it off if you run mods that add to the vanilla trade "
+                + "dialog. They patch that window, so they will never see ours, and a column or button they add "
+                + "will simply stop appearing.");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Use our caravan packing window",
+                settings.customCaravanWindow, value => settings.customCaravanWindow = value,
+                "Replaces the form-caravan and split-caravan dialogs with one window. Same shape as the trade "
+                + "screen, with mass and days in place of silver: the manifest stands beside the table with the "
+                + "travel projection built in, each row is judged against this particular route rather than "
+                + "reporting a raw stat, and the line that put you over capacity says so on itself.\n\nMass, "
+                + "speed, food and visibility all come from RimWorld's own calculators.\n\nSwitch it off if you "
+                + "run mods that add to either vanilla caravan dialog.");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Use our comms directory",
+                settings.customCommsWindow, value => settings.customCommsWindow = value,
+                "Replaces the comms console's float menu with a window of cards. Vanilla answers \"who can I "
+                + "call\" with a list of bare text lines; every target already has to supply a name, a detail "
+                + "line and a faction, so a card can show who they are, how they feel about you, what an orbital "
+                + "trader is carrying and how long they are staying.\n\nTargets you cannot call stay visible and "
+                + "dimmed with the reason, instead of the whole menu being replaced by one disabled line during "
+                + "a solar flare.\n\nEvery call is the target's own, unchanged. Targets added by other mods draw "
+                + "the same card as vanilla's.");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Show what a trade beacon reaches",
+                settings.beaconReadout, value => settings.beaconReadout = value,
+                "Adds a button to a selected orbital trade beacon that opens a readout of its reach: the cells "
+                + "it covers, the stacks it can actually sell and what they are worth, what is inside the ring "
+                + "but behind a wall, and how close the beacon is to the region limit the cell walk stops "
+                + "at.\n\nThat limit is the one worth watching. Past it the ring is drawn at the size you asked "
+                + "for and sells nothing extra, so a beacon with a wide radius can quietly be lying to "
+                + "you.\n\nNothing is replaced by this one. RimWorld draws nothing at all for a built beacon, so "
+                + "switching it off costs the readout and nothing else.");
+
+            y += 4f;
 
             DrawBeaconRadius(view, ref y, palette, settings);
 
@@ -3535,10 +3670,49 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(0f, y, view.width, 40f),
-                "Tools for working on mods rather than playing with them. Nothing here changes anything about "
-                + "your game; they open a window and show you something.");
+                "Tools for working on mods rather than playing with them. The switches here change what the "
+                + "game exposes to you; the buttons open a window and show you something.");
             y += 44f;
             GUI.color = palette.TextPrimary;
+
+            GroupLabel(view, ref y, palette, "Developer mode");
+
+            // <b>Vanilla hides this row outright once dev mode has been permanently disabled,</b> and hiding it
+            // is the entire point of that file: it exists so the switch cannot be found again. Drawing the row
+            // anyway would hand back precisely what that file was created to take away, so the same test guards
+            // ours. Still drawn while dev mode is on, which is vanilla's own way back out once the file exists.
+            if (!DevModePermanentlyDisabledUtility.Disabled || Prefs.DevMode)
+            {
+                bool devMode = Prefs.DevMode;
+
+                // DevelopmentMode is RimWorld's own key, so this row is already translated everywhere the game
+                // is. Assigned without saving Prefs by hand, which is what the rest of this window does and what
+                // the setter expects: it clears god mode and verbose logging on its way down, then calls Apply.
+                if (UICheckboxControl.Draw(new Rect(Indent, y, view.width - Indent, RowHeight), ref devMode,
+                        palette, "DevelopmentMode".Translate(),
+                        "The game's own developer tools: the debug toolbar across the top, the inspector, and "
+                        + "the actions the developer palette below collects.\n\nTurning it off also clears god "
+                        + "mode and verbose logging. That is RimWorld's behavior rather than ours, and it is why "
+                        + "this belongs beside the palette instead of under Graphics."))
+                    UIGuard.Try("Options.SetDevMode", () => Prefs.DevMode = devMode, null);
+
+                y += RowHeight + 2f;
+            }
+
+            // Keybindings and the developer options are not reimplemented here, so the window that has them
+            // stays one click away. Opened through the bypass, since this mod otherwise replaces it.
+            //
+            // Here rather than under Graphics, where it started. Nobody hunting for dev mode reads a heading
+            // about resolution and UI scale, and Hoki had to go looking. Moved on Aaron's suggestion 2026-08-25.
+            if (SmallButton(new Rect(Indent, y, 230f, RowHeight), "Keybindings and dev options", palette))
+            {
+                UIGuard.Try("Options.OpenVanillaOptions", Patch_WindowStack_Add_Options.OpenVanilla,
+                    "RimWorld's own options window could not be opened.");
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            y += RowHeight + 6f;
 
             GroupLabel(view, ref y, palette, "Developer palette");
 

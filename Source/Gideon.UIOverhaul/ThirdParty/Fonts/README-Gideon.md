@@ -1,8 +1,13 @@
 # Typefaces
 
-Six fonts from Google Fonts, all under the SIL Open Font License 1.1, plus the tool that turns them into
+Seven faces from Google Fonts, all under the SIL Open Font License 1.1, plus the tool that turns them into
 something Unity can actually draw. Two are for the floor labels; three are the scripts the research tab writes
-undiscovered Anomaly projects in; one is here and unused.
+undiscovered Anomaly projects in; one is a display face kept as a candidate; one is the interface face.
+
+**Barlow Condensed is the odd one out and the reason the baker grew.** The other six are baked over a fixed set
+of code points -- printable ASCII and Latin-1 for the Latin faces, one script block each for the masks. This one
+is interface text, so it is baked over everything the face actually covers, in four weights. Asked for on
+2026-08-25: "I really dislike the stock RimWorld font."
 
 | Folder | Face | Shipped weight | Used for | License |
 |---|---|---|---|---|
@@ -12,6 +17,7 @@ undiscovered Anomaly projects in; one is here and unused.
 | `NotoSansMendeKikakui/` | Noto Sans Mende Kikakui | Regular | research mask | OFL 1.1 |
 | `NotoSansSiddham/` | Noto Sans Siddham | Regular | research mask | OFL 1.1 |
 | `SlacksideOne/` | Slackside One | Regular | nothing yet | OFL 1.1 |
+| `BarlowCondensed/` | Barlow Condensed | Regular, SemiBold, Bold, Italic | trade window | OFL 1.1 |
 
 **Slackside One has no script block.** It is a Latin display face, so it cannot mask anything, and it is kept
 here as a candidate third floor label face rather than as a research option.

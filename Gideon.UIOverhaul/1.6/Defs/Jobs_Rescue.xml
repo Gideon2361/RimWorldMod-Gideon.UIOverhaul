@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    Rescue for somebody who is badly hurt but still walking.
+
+    Vanilla refuses this twice, and both refusals are keyed to Downed.
+    HealthAIUtility.WantsToBeRescued returns false for a pawn who is not downed, which is what
+    removes FloatMenuOptionProvider_RescuePawn's option; and JobDriver_TakeToBed fails the job
+    outright, with a FailOn that reads "job def is Rescue or Capture, and the takee is not downed".
+
+    That second check is why this def exists instead of a patch. It tests the job def by identity,
+    so a job that is neither Rescue nor Capture walks past it untouched. Everything else in
+    JobDriver_TakeToBed is already general: the prisoner branches read job.def.makeTargetPrisoner,
+    which is false here, and TakeeRescued is true for any humanlike who is not being arrested, so
+    the pawn is tucked into the bed as a patient exactly as a rescue would leave them. The driver
+    is therefore reused as it ships, and no part of it is patched or reimplemented.
+
+    Fields copied from vanilla's own Rescue def, since that is the behaviour being extended rather
+    than replaced. The report string is the one deliberate difference: this is not a rescue in
+    vanilla's sense and saying "rescuing" in the pawn's job bar would claim it was.
+
+    Referenced from C# as OrdersDefOf.Gideon_RescueImpaired.
+  -->
+  <JobDef>
+    <defName>Gideon_RescueImpaired</defName>
+    <driverClass>JobDriver_TakeToBed</driverClass>
+    <reportString>carrying TargetA to bed.</reportString>
+    <casualInterruptible>false</casualInterruptible>
+    <carryThingAfterJob>true</carryThingAfterJob>
+    <dropThingBeforeJob>false</dropThingBeforeJob>
+  </JobDef>
+
+</Defs>

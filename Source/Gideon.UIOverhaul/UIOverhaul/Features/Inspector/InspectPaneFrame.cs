@@ -124,7 +124,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
             Thing thing = Find.Selector.SingleSelectedThing;
             Pawn pawn = InspectBodies.PawnOf(thing);
 
-            bool contents = pane.ShouldShowPaneContents;
+            bool contents = pane.ShouldShowPaneContents || Identified(thing);
 
             InspectBodyKind kind = contents ? InspectBodies.KindOf(thing) : InspectBodyKind.None;
 
@@ -185,6 +185,47 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
+        /// Whether an entity's body may be drawn even though its def hides inspect data.
+        ///
+        /// <b>This is the real reason an anomaly entity's panel was empty, and it was never the entity blocks.</b>
+        /// Anomaly's entity defs declare <c>hideInspect</c> -- the noctol among them -- and vanilla's
+        /// <c>ShouldShowPaneContents</c> answers false for anything that does. So <c>contents</c> was false,
+        /// <c>KindOf</c> returned <c>None</c>, <c>roomForBody</c> went false with it, and the pane drew a header
+        /// and stopped. No body ran at all, which is why two rounds of changes inside the bodies changed nothing.
+        ///
+        /// <b>Hiding it is right for something nobody has identified, and pointless once they have.</b> A noctol
+        /// in the codex, or one strapped to a platform in your own base, has its Bio, Health and Entity tabs
+        /// sitting in the strip full of the same information. Suppressing only the overview withheld nothing; it
+        /// just left one tab blank.
+        ///
+        /// Two ways to be identified, and both are the game's own tests. <c>EntityCodex.Discovered</c> is
+        /// literally "we know what this is", and being held on a holding platform means the colony caught it and
+        /// built the thing to keep it in.
+        ///
+        /// Nothing else is widened. A single selection is already implied, since this is only ever asked about
+        /// <c>SingleSelectedThing</c>; an unidentified entity stays hidden exactly as vanilla intends; and
+        /// <c>onlyShowInspectString</c> is a different flag that <see cref="InspectBodies.KindOf"/> still obeys.
+        /// </summary>
+        private static bool Identified(Thing thing)
+        {
+            return UIGuard.Try("Inspector.EntityIdentified", () =>
+            {
+                if (thing == null || thing.def == null || !thing.def.hideInspect)
+                    return false;
+
+                if (!(thing is Pawn))
+                    return false;
+
+                if (thing.ParentHolder is Building_HoldingPlatform)
+                    return true;
+
+                EntityCodex codex = Find.EntityCodex;
+
+                return codex != null && codex.Discovered(thing.def);
+            }, false, null);
+        }
+
+        /// <summary>
         /// The header: who this is, what they are doing, how they are, and every button vanilla put up here.
         ///
         /// <b>The buttons come first and the label is sized around what they took,</b> which is vanilla's own
@@ -232,6 +273,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
             // Asked for 2026-08-23: an icon here rather than a button on the Bio panel, because the Bio panel
             // does not exist on a corpse and a dead pawn is exactly the one you most want the editor for.
             lineEndWidth += Editor.EditorButton.Draw(rect, lineEndWidth, thing, pawn, palette);
+
+            // Left of the editor's icon, for a colony animal vanilla will not offer to rename. Which is very
+            // nearly every animal in the game; see AnimalRenameButton for the condition that does it.
+            lineEndWidth += Animals.AnimalRenameButton.Draw(rect, lineEndWidth, pawn);
 
             float nameX = 0f;
 

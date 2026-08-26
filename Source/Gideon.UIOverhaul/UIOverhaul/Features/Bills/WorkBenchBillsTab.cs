@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
 using Gideon.UIOverhaul.Features.Inspector;
@@ -123,7 +124,7 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Rect add = new Rect(inner.x, inner.y, 110f, 30f);
 
-            if (GzpPalette.GrayButton(add, "Add Bill", !full, true))
+            if (UIActionButtonControl.Draw(add, "Add Bill", !full, true))
                 Find.WindowStack.Add(new Dialog_AddWorkBill(bench, null));
 
             if (full)
@@ -139,7 +140,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             Rect save = new Rect(add.xMax + 8f, inner.y, 130f, 30f);
             bool anything = stack != null && stack.Count > 0;
 
-            if (GzpPalette.GrayButton(save, "Save bench", anything) && bench.Map != null)
+            if (UIActionButtonControl.Draw(save, "Save bench", anything) && bench.Map != null)
                 Find.WindowStack.Add(new Dialog_SaveBenchTemplate(bench));
 
             if (!anything)

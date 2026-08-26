@@ -111,6 +111,15 @@ namespace Gideon.UIOverhaul.Features.Research
         private static readonly HashSet<ResearchNode> highlighted = new HashSet<ResearchNode>();
 
         private static Vector2 canvasScroll;
+
+        /// <summary>
+        /// The canvas viewport as it was last drawn, so a link can work out where to scroll to.
+        ///
+        /// Recorded rather than passed, because the thing that needs it -- following a link out of the detail
+        /// panel -- happens in a different part of the frame from the thing that knows it. Zero until the canvas
+        /// has drawn once, which is handled where it is read.
+        /// </summary>
+        private static Rect lastCanvas;
         private static Vector2 detailScroll;
         private static Vector2 queueScroll;
 
@@ -492,6 +501,8 @@ namespace Gideon.UIOverhaul.Features.Research
         private static void Canvas(Rect outRect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(outRect, palette.SurfaceSunken);
+
+            lastCanvas = outRect;
 
             float scale = overview ? OverviewScale : 1f;
             Vector2 size = ResearchGraph.Size * scale;
@@ -1096,14 +1107,71 @@ namespace Gideon.UIOverhaul.Features.Research
                 : new Rect(rect.x * scale, rect.y * scale, rect.width * scale, rect.height * scale);
         }
 
-        private static void Select(ResearchNode node)
+        /// <summary>
+        /// Selects a project and, when asked, scrolls the canvas until it is on screen.
+        /// </summary>
+        /// <param name="reveal">
+        /// <b>False for a click on the graph and true for a link out of the detail panel,</b> which is the whole
+        /// distinction. A node the player has just clicked is by definition already in front of them, and moving
+        /// the canvas under a click would be a small earthquake for no reason. A project reached by name from the
+        /// Requires or Leads to list is very often nowhere near the view, and selecting it without going there
+        /// would highlight something the player cannot see.
+        /// </param>
+        private static void Select(ResearchNode node, bool reveal = false)
         {
             selected = node;
             detailScroll = Vector2.zero;
 
             Highlight(node);
 
+            if (reveal)
+                Reveal(node);
+
             SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// Scrolls the canvas so a node sits in the middle of it.
+        ///
+        /// Clamped at zero because a node near the top left corner would otherwise ask for a negative scroll,
+        /// which Unity accepts and then draws as blank space above the graph. Does nothing until the canvas has
+        /// drawn at least once and so has a size worth centring against.
+        /// </summary>
+        private static void Reveal(ResearchNode node)
+        {
+            UIGuard.Try("Research.Reveal", () =>
+            {
+                if (node == null || lastCanvas.width <= 0f || lastCanvas.height <= 0f)
+                    return;
+
+                float scale = overview ? OverviewScale : 1f;
+
+                Rect placed = Scaled(node.Rect, scale);
+
+                canvasScroll = new Vector2(
+                    Mathf.Max(0f, placed.center.x - lastCanvas.width * 0.5f),
+                    Mathf.Max(0f, placed.center.y - lastCanvas.height * 0.5f));
+            }, null);
+        }
+
+        /// <summary>
+        /// A row in the detail panel that goes somewhere when clicked.
+        ///
+        /// <b>Reads as a row until the pointer is on it,</b> rather than being permanently underlined or
+        /// coloured. These lists are read far more often than they are clicked -- the usual question is "what
+        /// does this unlock", answered by reading -- so styling every line as a link all the time would put
+        /// twenty pieces of emphasis on a panel to advertise an action nobody was looking for.
+        /// </summary>
+        private static bool Link(Rect row, string text, Color color, UIColorPaletteDef palette)
+        {
+            bool over = Mouse.IsOver(row);
+
+            if (over)
+                Widgets.DrawHighlight(row);
+
+            TabParts.RowLabel(row, text, over ? palette.Accent : color, GameFont.Tiny);
+
+            return over && Widgets.ButtonInvisible(row);
         }
 
         /// <summary>
@@ -1539,10 +1607,25 @@ namespace Gideon.UIOverhaul.Features.Research
                 Rect row = new Rect(body.x + 4f, y, body.width - 4f, 18f);
 
                 if (masked)
+                {
+                    // Masked rows stay inert. A link out of a row whose text is deliberately scrambled would
+                    // hand the player the answer the mask exists to withhold.
                     ResearchMask.Draw(row, ResearchMask.Key(project, "unlock", i), palette.Mood);
+                }
                 else
-                    TabParts.RowLabel(row, unlocked[i].LabelCap.ToString(), palette.TextSecondary,
-                        GameFont.Tiny);
+                {
+                    Def unlock = unlocked[i];
+
+                    if (Link(row, unlock.LabelCap.ToString(), palette.TextSecondary, palette))
+                    {
+                        // Dialog_InfoCard takes a bare Def, which is what UnlockedDefs holds: a research project
+                        // unlocks buildings, terrain, recipes and plants alike, and the card knows what to make
+                        // of each.
+                        UIGuard.Try("Research.UnlockCard",
+                            () => Find.WindowStack.Add(new Dialog_InfoCard(unlock)),
+                            "That item's info card did not open.");
+                    }
+                }
 
                 y += 18f;
             }
@@ -1572,10 +1655,16 @@ namespace Gideon.UIOverhaul.Features.Research
                 Rect row = new Rect(body.x + 4f, y, body.width - 4f, 18f);
 
                 if (masked)
+                {
                     ResearchMask.Draw(row, ResearchMask.Key(selected.Project, "leads", i), palette.Mood);
+                }
                 else
-                    TabParts.RowLabel(row, ResearchFacts.Name(children[i].Project), palette.TextSecondary,
-                        GameFont.Tiny);
+                {
+                    ResearchNode child = children[i];
+
+                    if (Link(row, ResearchFacts.Name(child.Project), palette.TextSecondary, palette))
+                        Select(child, true);
+                }
 
                 y += 18f;
             }
@@ -1629,9 +1718,23 @@ namespace Gideon.UIOverhaul.Features.Research
                         GUI.color = previous;
                     }
 
-                    TabParts.RowLabel(new Rect(row.x + 14f, row.y, row.width - 14f, row.height),
-                        ResearchFacts.Name(list[i]), done ? palette.TextSecondary : palette.TextPrimary,
-                        GameFont.Tiny);
+                    ResearchProjectDef needed = list[i];
+
+                    // The tick keeps its own space at the left, so the link starts where the label always did
+                    // and a finished prerequisite and an unfinished one line up with each other.
+                    if (Link(new Rect(row.x + 14f, row.y, row.width - 14f, row.height),
+                            ResearchFacts.Name(needed), done ? palette.TextSecondary : palette.TextPrimary,
+                            palette))
+                    {
+                        ResearchNode node = UIGuard.Try("Research.PrerequisiteNode",
+                            () => ResearchGraph.NodeFor(needed), null, null);
+
+                        // A prerequisite with no node is one the graph did not lay out -- a hidden prerequisite
+                        // from a mod, most often. Nothing to go to, so the click does nothing rather than
+                        // selecting null and blanking the panel.
+                        if (node != null)
+                            Select(node, true);
+                    }
                 }
 
                 y += 18f;

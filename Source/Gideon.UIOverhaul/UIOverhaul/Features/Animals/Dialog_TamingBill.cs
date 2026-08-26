@@ -18,11 +18,19 @@ namespace Gideon.UIOverhaul.Features.Animals
     /// opened one should not have to learn the other. Same two columns, same headings, same footer, same rule that
     /// every control writes straight to the bill and closing is just closing.
     ///
-    /// <b>The species list has no add or remove.</b> Every candidate is always listed with two number boxes, and a
-    /// species is wanted exactly when one of them is above zero. A separate "add species" step would be a mode to
-    /// enter and leave for something the numbers already say, and it is the numbers a player comes here to change.
-    /// The bill's target list is created and dropped underneath to match, so the saved data stays as small as it
-    /// was.
+    /// <b>Choosing a species and saying how many are two questions, and they were being asked in one place.</b>
+    /// Every candidate on the map used to carry three number boxes, so a colony with twenty species on it drew
+    /// sixty boxes -- fifty-seven of them zero -- and the boxes ate so much of the column that the species were
+    /// listed as "Chi...", "Dea..." and "Muf...". Reported on 2026-08-25 with a screenshot of exactly that.
+    ///
+    /// <b>So the right column is now a tick list, the same one the hunting bill has,</b> and the numbers moved to
+    /// the left column beside the rest of the order's properties. The right answers "which animals", where the
+    /// list is long and every row is one word; the left answers "how many", where the list is however many species
+    /// you actually ticked and each row can afford to spell itself out.
+    ///
+    /// <b>A ticked species with every number at zero stays ticked.</b> The checkbox owns whether a species is in
+    /// the bill now, so the numbers no longer drop the target when they reach zero -- doing that would have made a
+    /// species untick itself while somebody was clearing a box to retype it.
     ///
     /// <b>Two boxes per species rather than one headcount,</b> which is the whole point of the model: six muffalo
     /// is satisfied by six males, and a bill that satisfies itself that way has done nothing anybody wanted. See
@@ -60,6 +68,7 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         private Vector2 speciesScroll;
         private Vector2 tamerScroll;
+        private Vector2 wantScroll;
 
         internal Dialog_TamingBill(TamingBill bill, Map map)
         {
@@ -145,11 +154,13 @@ namespace Gideon.UIOverhaul.Features.Animals
                 Rect body = new Rect(inRect.x, inRect.y + 38f, inRect.width,
                     Mathf.Max(0f, inRect.height - 38f - FooterHeight));
 
-                float left = Mathf.Round((body.width - ColumnGap) * 0.46f);
+                // An even split now that the numbers live on the left. It used to lean right, because the right
+                // column carried three number boxes per row and the left carried none.
+                float left = Mathf.Round((body.width - ColumnGap) * 0.5f);
 
                 Order(new Rect(body.x, body.y, left, body.height), palette);
 
-                Wants(new Rect(body.x + left + ColumnGap, body.y, body.width - left - ColumnGap, body.height),
+                Species(new Rect(body.x + left + ColumnGap, body.y, body.width - left - ColumnGap, body.height),
                     palette);
 
                 Footer(new Rect(inRect.x, inRect.yMax - FooterHeight + 4f, inRect.width, FooterHeight - 4f),
@@ -217,7 +228,125 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             y += 30f;
 
+            // <b>The two scrolling sections below split what is left rather than taking it in order.</b> How many
+            // grows with the species ticked and Planned for grows with the colony's handlers, so whichever were
+            // drawn first would push the other off the bottom of the column. How many asks for what it needs and
+            // is capped at half, and never at less than one handler row's worth left over.
+            float spare = Mathf.Max(0f, rect.yMax - y);
+            float given = Mathf.Min(HowManyHeight(), Mathf.Max(0f, spare * 0.5f));
+
+            given = Mathf.Min(given, Mathf.Max(0f, spare - 120f));
+
+            if (given > 20f)
+            {
+                HowMany(new Rect(rect.x, y, rect.width, given), palette);
+
+                y += given + 8f;
+            }
+
             Tamer(new Rect(rect.x, y, rect.width, Mathf.Max(80f, rect.yMax - y)), palette);
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Left column: how many of each
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>One line for the name and held count, one for the boxes.</summary>
+        private const float WantRowHeight = 52f;
+
+        /// <summary>How tall the how-many section would like to be, so the column can decide what it gets.</summary>
+        private float HowManyHeight()
+        {
+            return UIFonts.LineHeightOf(GameFont.Tiny) + 8f + Wanted().Count * WantRowHeight + 4f;
+        }
+
+        /// <summary>
+        /// The numbers, for the species that are ticked and no others.
+        ///
+        /// <b>Two lines per species rather than one.</b> The column is half a 720 pixel window, which is not
+        /// enough for a name and three labeled boxes side by side -- that arrangement is what truncated the names
+        /// in the first place. The name and what the colony holds go on top, the boxes underneath, and each box
+        /// gets a word saying which sex it is instead of relying on a caption three rows further up.
+        /// </summary>
+        private void HowMany(Rect rect, UIColorPaletteDef palette)
+        {
+            List<TamingTarget> wanted = Wanted();
+
+            float y = Heading(rect, rect.y, "HOW MANY", palette);
+
+            Rect list = new Rect(rect.x, y, rect.width, Mathf.Max(0f, rect.yMax - y));
+
+            if (wanted.Count == 0)
+            {
+                Note(list, list.y, "Tick a species on the right and its numbers appear here.", palette);
+
+                return;
+            }
+
+            Rect view = new Rect(0f, 0f, list.width - 18f, wanted.Count * WantRowHeight + 4f);
+
+            Widgets.BeginScrollView(list, ref wantScroll, view);
+
+            for (int i = 0; i < wanted.Count; i++)
+                WantRow(new Rect(0f, i * WantRowHeight, view.width, WantRowHeight - 4f), wanted[i], palette);
+
+            Widgets.EndScrollView();
+        }
+
+        /// <summary>One ticked species: what it is called, what the colony holds, and what it should hold.</summary>
+        private void WantRow(Rect rect, TamingTarget target, UIColorPaletteDef palette)
+        {
+            ThingDef def = target?.species;
+
+            if (def == null)
+                return;
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.WordWrap = false;
+                Text.Font = GameFont.Small;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextPrimary;
+
+                Widgets.LabelEllipses(new Rect(rect.x, rect.y, Mathf.Max(40f, rect.width - HeldWidth - 4f), 22f),
+                    def.LabelCap);
+
+                int held = TamingBill.HeldAny(map, def);
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = held > 0 ? palette.TextSecondary : palette.TextDisabled;
+
+                Widgets.Label(new Rect(rect.xMax - HeldWidth, rect.y, HeldWidth, 22f), "have " + held);
+            }
+            finally
+            {
+                Text.WordWrap = true;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+
+            float boxes = rect.y + 24f;
+
+            // Sexless species get the total and nothing else, which is the only number they have. See the note on
+            // TamingTarget: every wraith is Gender.None, so a box asking for males is a question with no answer.
+            if (def.race != null && def.race.hasGenders)
+            {
+                float cell = Mathf.Floor(rect.width / 3f);
+
+                Lane(new Rect(rect.x, boxes, cell, 26f), def, Verse.Gender.Male, "males", palette);
+                Lane(new Rect(rect.x + cell, boxes, cell, 26f), def, Verse.Gender.Female, "females", palette);
+                Lane(new Rect(rect.x + cell * 2f, boxes, rect.width - cell * 2f, 26f), def, null, "any", palette);
+
+                return;
+            }
+
+            Lane(new Rect(rect.x, boxes, Mathf.Min(rect.width, 140f), 26f), def, null, "any", palette);
         }
 
         /// <summary>
@@ -311,18 +440,28 @@ namespace Gideon.UIOverhaul.Features.Animals
         // Right column: what it wants
         // ---------------------------------------------------------------------------------------
 
-        private void Wants(Rect rect, UIColorPaletteDef palette)
+        private void Species(Rect rect, UIColorPaletteDef palette)
         {
             int chosen = Chosen();
 
             float y = Heading(rect, rect.y,
-                chosen == 0 ? "WANTED: NOTHING YET" : "WANTED: " + chosen + " SPECIES", palette);
+                chosen == 0 ? "SPECIES: NOTHING YET" : "SPECIES: " + chosen + " CHOSEN", palette);
 
-            SpeciesSearch.Draw(new Rect(rect.x, y, rect.width, 26f), palette);
+            Rect tools = new Rect(rect.x, y, rect.width, 26f);
+            const float Buttons = 128f;
 
-            y += 30f;
+            SpeciesSearch.Draw(new Rect(tools.x, tools.y, Mathf.Max(60f, tools.width - Buttons - 6f), 26f),
+                palette);
 
-            y = Columns(rect, y, palette);
+            // All ticks what the search is showing rather than every animal on the planet, so "All" after typing
+            // "muffalo" means the muffalo. The hunting dialog's pair works the same way.
+            if (UIActionButtonControl.Draw(new Rect(tools.xMax - Buttons, tools.y, 60f, 26f), "All"))
+                All(true);
+
+            if (UIActionButtonControl.Draw(new Rect(tools.xMax - 62f, tools.y, 62f, 26f), "None"))
+                All(false);
+
+            y = tools.yMax + 6f;
 
             List<ThingDef> candidates = Candidates();
 
@@ -331,21 +470,103 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             Widgets.BeginScrollView(list, ref speciesScroll, view);
 
-            float at = 0f;
-
             for (int i = 0; i < candidates.Count; i++)
-            {
-                Row(new Rect(0f, at, view.width, 24f), candidates[i], palette);
-
-                at += RowHeight;
-            }
+                Row(new Rect(0f, i * RowHeight, view.width, 24f), candidates[i], palette);
 
             Widgets.EndScrollView();
         }
 
-        /// <summary>The two lane captions, so the pair of boxes on every row does not have to label itself.</summary>
-        private float Columns(Rect rect, float y, UIColorPaletteDef palette)
+        /// <summary>
+        /// Ticks or clears every species the search is currently showing.
+        ///
+        /// Clearing everything is also how a bill gets back to wanting nothing, which the heading then says.
+        /// </summary>
+        private void All(bool on)
         {
+            List<ThingDef> candidates = Candidates();
+
+            // Copied, because Candidates hands back a shared scratch list that Set does not touch but a future
+            // reader would have no way of knowing that from here.
+            List<ThingDef> copy = new List<ThingDef>(candidates);
+
+            for (int i = 0; i < copy.Count; i++)
+                Set(copy[i], on);
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// Puts a species in the bill or takes it out.
+        ///
+        /// Taking one out drops its boxes as well. They are keyed on the species and live longer than the window,
+        /// so a species ticked again later would come back holding whatever number was last typed into it rather
+        /// than the one that <see cref="TamingBill.Add"/> seeds.
+        /// </summary>
+        private void Set(ThingDef def, bool on)
+        {
+            if (def == null)
+                return;
+
+            if (on)
+            {
+                bill.Add(def);
+
+                return;
+            }
+
+            bill.Remove(def);
+
+            Boxes.Remove(def.defName + Suffix(null));
+            Boxes.Remove(def.defName + Suffix(Verse.Gender.Male));
+            Boxes.Remove(def.defName + Suffix(Verse.Gender.Female));
+        }
+
+        /// <summary>How many wild ones of a species are on this map, which is what says whether a bill can act.</summary>
+        private int Wild(ThingDef def)
+        {
+            return UIGuard.Try("Animals.TameWild", () =>
+            {
+                if (map == null || def == null)
+                    return 0;
+
+                IReadOnlyList<Pawn> pawns = map.mapPawns.AllPawnsSpawned;
+
+                if (pawns == null)
+                    return 0;
+
+                int count = 0;
+
+                for (int i = 0; i < pawns.Count; i++)
+                {
+                    Pawn pawn = pawns[i];
+
+                    if (pawn != null && !pawn.Dead && pawn.def == def && pawn.Faction == null)
+                        count++;
+                }
+
+                return count;
+            }, 0, null);
+        }
+
+        /// <summary>
+        /// One species in the tick list: whether the bill wants it, and how many are out there to want.
+        ///
+        /// <b>Wild ones rather than tame ones.</b> This column answers "which animals", and the number that bears
+        /// on that is how many are on the map to be caught -- a species with none here is a bill that will sit
+        /// idle. What the colony already holds bears on "how many", so it is shown there instead.
+        /// </summary>
+        private void Row(Rect rect, ThingDef def, UIColorPaletteDef palette)
+        {
+            bool on = bill.TargetFor(def) != null;
+
+            if (UICheckboxControl.Draw(new Rect(rect.x, rect.y, rect.width - HeldWidth - 4f, rect.height),
+                    ref on, palette, def.LabelCap))
+            {
+                Set(def, on);
+            }
+
+            int wild = Wild(def);
+
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
@@ -353,63 +574,32 @@ namespace Gideon.UIOverhaul.Features.Animals
             try
             {
                 Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextDisabled;
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = wild > 0 ? palette.TextSecondary : palette.TextDisabled;
 
-                float lane = BoxWidth + HeldWidth;
-                float inner = rect.width - 18f;
+                // Wrapping off: "none here" is wider than this lane at Tiny, and a label that wraps inside a
+                // fixed height row overlaps the row beneath it. The hunting dialog carries the same note.
+                Text.WordWrap = false;
 
-                Widgets.Label(new Rect(rect.x + inner - lane * 2f, y, lane, 18f), "males");
-                Widgets.Label(new Rect(rect.x + inner - lane, y, lane, 18f), "females");
+                Widgets.Label(new Rect(rect.xMax - HeldWidth, rect.y, HeldWidth, rect.height),
+                    wild > 0 ? wild + " wild" : "none");
             }
             finally
             {
+                Text.WordWrap = true;
                 GUI.color = previousColor;
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
             }
-
-            return y + 20f;
         }
 
         /// <summary>
-        /// One species: its name, and how many of each sex are wanted against how many are held.
+        /// One number box with the word for what it counts beside it.
         ///
-        /// The target is created the first time a number goes above zero and dropped when both return to it, so
-        /// the list a player scrolls has no bearing on the size of what gets saved.
+        /// The word sits on the box rather than in a caption row above the list, because the list is short, its
+        /// rows are two lines tall, and a caption three species up is not a label.
         /// </summary>
-        private void Row(Rect rect, ThingDef def, UIColorPaletteDef palette)
-        {
-            float lane = BoxWidth + HeldWidth;
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-
-                TamingTarget target = bill.TargetFor(def);
-
-                GUI.color = target == null || target.Empty ? palette.TextSecondary : palette.TextPrimary;
-
-                Widgets.LabelEllipses(new Rect(rect.x, rect.y, Mathf.Max(40f, rect.width - lane * 2f - 4f),
-                    rect.height), def.LabelCap);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            Gender(new Rect(rect.xMax - lane * 2f, rect.y, lane, rect.height), def, Verse.Gender.Male, palette);
-            Gender(new Rect(rect.xMax - lane, rect.y, lane, rect.height), def, Verse.Gender.Female, palette);
-        }
-
-        private void Gender(Rect rect, ThingDef def, Gender gender, UIColorPaletteDef palette)
+        private void Lane(Rect rect, ThingDef def, Gender? gender, string caption, UIColorPaletteDef palette)
         {
             UITextBoxControl box = BoxFor(def, gender);
 
@@ -425,18 +615,12 @@ namespace Gideon.UIOverhaul.Features.Animals
                 if (box.Draw(new Rect(rect.x, rect.y, BoxWidth, rect.height), palette))
                     Write(def, gender, box);
 
-                int held = TamingBill.Held(map, def, gender);
-
                 Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = held > 0 ? palette.TextSecondary : palette.TextDisabled;
-
-                // Wrapping off: "have 12" is wider than this lane at Tiny, and a label that wraps inside a fixed
-                // height row overlaps the row beneath it. The hunting dialog's species count carries the same
-                // note for the same reason.
+                GUI.color = palette.TextDisabled;
                 Text.WordWrap = false;
 
-                Widgets.Label(new Rect(rect.x + BoxWidth + 4f, rect.y, HeldWidth - 6f, rect.height),
-                    "have " + held);
+                Widgets.Label(new Rect(rect.x + BoxWidth + 4f, rect.y, Mathf.Max(0f, rect.width - BoxWidth - 6f),
+                    rect.height), caption);
             }
             finally
             {
@@ -447,10 +631,10 @@ namespace Gideon.UIOverhaul.Features.Animals
             }
         }
 
-        /// <summary>The box for one species and sex, seeded from the bill the first time it is asked for.</summary>
-        private UITextBoxControl BoxFor(ThingDef def, Gender gender)
+        /// <summary>The box for one species and lane, seeded from the bill the first time it is asked for.</summary>
+        private UITextBoxControl BoxFor(ThingDef def, Gender? gender)
         {
-            string key = def.defName + (gender == Verse.Gender.Female ? "/f" : "/m");
+            string key = def.defName + Suffix(gender);
 
             UITextBoxControl box;
 
@@ -479,7 +663,21 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// Anything unparseable reads as zero rather than being refused: a half typed number is a number on its
         /// way somewhere, and rejecting it would fight the person typing it.
         /// </summary>
-        private void Write(ThingDef def, Gender gender, UITextBoxControl box)
+        /// <summary>
+        /// Which of a species' three boxes this is.
+        ///
+        /// The two sexed suffixes are unchanged so the boxes a player has already typed into keep their state
+        /// across a redraw; the total is new and takes a third.
+        /// </summary>
+        private static string Suffix(Gender? gender)
+        {
+            if (gender == null)
+                return "/a";
+
+            return gender.Value == Verse.Gender.Female ? "/f" : "/m";
+        }
+
+        private void Write(ThingDef def, Gender? gender, UITextBoxControl box)
         {
             int value;
 
@@ -507,28 +705,41 @@ namespace Gideon.UIOverhaul.Features.Animals
                 // nobody typed.
                 target.males = 0;
                 target.females = 0;
+                target.any = 0;
             }
 
+            // <b>Not dropped when it reaches zero any more.</b> The checkbox on the right owns whether a species
+            // is in the bill; clearing a box to retype it would otherwise untick the species and take the box
+            // away mid-keystroke. A target sitting at zero asks for nothing, which is exactly what it says.
             target.Set(gender, value);
-
-            if (target.Empty)
-                bill.Remove(def);
         }
 
-        private int Chosen()
+        /// <summary>The species this bill has ticked, in the order the list shows them.</summary>
+        private List<TamingTarget> Wanted()
         {
-            if (bill.targets == null)
-                return 0;
+            Chose.Clear();
 
-            int count = 0;
+            if (bill.targets == null)
+                return Chose;
 
             for (int i = 0; i < bill.targets.Count; i++)
             {
-                if (bill.targets[i] != null && bill.targets[i].species != null && !bill.targets[i].Empty)
-                    count++;
+                TamingTarget target = bill.targets[i];
+
+                if (target != null && target.species != null)
+                    Chose.Add(target);
             }
 
-            return count;
+            Chose.SortBy(target => target.species.label);
+
+            return Chose;
+        }
+
+        private static readonly List<TamingTarget> Chose = new List<TamingTarget>();
+
+        private int Chosen()
+        {
+            return Wanted().Count;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -544,7 +755,7 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             // Beside Done rather than at the top, because saving and loading a shape is something you do after
             // setting one up, not before.
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - 232f, rect.y, 116f, 32f), "Templates", true, true))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - 232f, rect.y, 116f, 32f), "Templates", true, true))
                 Find.WindowStack.Add(new Dialog_AnimalBillTemplates(true,
                     name => AnimalBillTemplates.Capture(bill, name),
                     template =>
@@ -555,7 +766,7 @@ namespace Gideon.UIOverhaul.Features.Animals
                         Seed();
                     }));
 
-            if (GzpPalette.GrayButton(new Rect(rect.xMax - 110f, rect.y, 110f, 32f), "Done", true, true))
+            if (UIActionButtonControl.Draw(new Rect(rect.xMax - 110f, rect.y, 110f, 32f), "Done", true, true))
                 Close();
         }
 

@@ -380,39 +380,19 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// because a bills window reaching into a save feature for a button would be a worse dependency than a small
     /// helper of its own.
     /// </summary>
+    /// <summary>
+    /// The bills screens' name for the mod's action button.
+    ///
+    /// <b>The drawing moved to <see cref="UIActionButtonControl"/> and this is the call sites' shorthand.</b> The
+    /// look started here and the trade footer had grown its own gray boxes beside it, which put two ideas of what
+    /// a button is into one screenshot. Kept as a wrapper rather than replaced at forty call sites, and because
+    /// "primary" is the only thing a bills button ever varies.
+    /// </summary>
     internal static class BillButtons
     {
         internal static bool Button(Rect rect, string label, UIColorPaletteDef palette, bool primary = false)
         {
-            bool over = Mouse.IsOver(rect);
-
-            if (primary)
-            {
-                UIElementPainter.FillRounded(rect, palette.Accent);
-
-                if (over)
-                    UIElementPainter.FillRounded(rect, palette.HoverOverlay);
-            }
-            else
-            {
-                UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-            }
-
-            GameFont font = Text.Font;
-            TextAnchor anchor = Text.Anchor;
-            Color color = GUI.color;
-
-            Text.Font = GameFont.Small;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = primary ? palette.WindowBackground : palette.TextPrimary;
-
-            Widgets.Label(rect, label);
-
-            GUI.color = color;
-            Text.Anchor = anchor;
-            Text.Font = font;
-
-            return Widgets.ButtonInvisible(rect);
+            return UIActionButtonControl.Draw(rect, label, palette, primary);
         }
     }
 }

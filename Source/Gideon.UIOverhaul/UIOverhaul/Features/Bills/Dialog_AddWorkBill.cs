@@ -223,7 +223,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                     break;
 
                 case Step.Setup:
-                    settings.Draw(body, draft, palette, false);
+                    settings.Draw(body, draft, palette);
 
                     break;
 
@@ -984,7 +984,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             switch (step)
             {
                 case Step.Bench:
-                    if (GzpPalette.GrayButton(new Rect(right.x + 40f, right.y, 110f, right.height), "Cancel"))
+                    if (UIActionButtonControl.Draw(new Rect(right.x + 40f, right.y, 110f, right.height), "Cancel"))
                         Close();
 
                     return;
@@ -992,19 +992,19 @@ namespace Gideon.UIOverhaul.Features.Bills
                 case Step.Recipe:
                     // Back only where the bench was chosen here. From the bench tab there is nowhere behind this.
                     if (askedForBench
-                        && GzpPalette.GrayButton(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
+                        && UIActionButtonControl.Draw(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
                         Back(Step.Bench);
 
-                    if (GzpPalette.GrayButton(right, "Next: set up", selected != null && !full, true))
+                    if (UIActionButtonControl.Draw(right, "Next: set up", selected != null && !full, true))
                         Configure();
 
                     return;
 
                 default:
-                    if (GzpPalette.GrayButton(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
+                    if (UIActionButtonControl.Draw(new Rect(right.x - 118f, right.y, 110f, right.height), "Back"))
                         Back(Step.Recipe);
 
-                    if (GzpPalette.GrayButton(right, "Add Bill", draft != null && !full, true))
+                    if (UIActionButtonControl.Draw(right, "Add Bill", draft != null && !full, true))
                         Finish();
 
                     return;

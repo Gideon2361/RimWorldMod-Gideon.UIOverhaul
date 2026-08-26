@@ -56,9 +56,11 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// </summary>
         internal const float Width = 240f;
 
-        private const float Pad = 6f;
-        private const float RowGap = 4f;
-        private const float BlockGap = 4f;
+        // Internal rather than private because the world map's corner is laid out by the same numbers. Two
+        // copies of "how much air goes round a block" is how the two corners end up looking like different mods.
+        internal const float Pad = 6f;
+        internal const float RowGap = 4f;
+        internal const float BlockGap = 4f;
 
         /// <summary>Height of the merged weather and temperature row.</summary>
         private const float VitalsHeight = 24f;
@@ -69,28 +71,28 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// Shorter than vanilla's <c>DateReadout.Height</c>, which is 48 or 74 because it stacks all three lines.
         /// Putting the hour alongside rather than above buys a row back.
         /// </summary>
-        private const float DateHeight = 40f;
+        internal const float DateHeight = 40f;
 
         /// <summary>Height of one game condition card.</summary>
-        private const float ConditionHeight = 24f;
+        internal const float ConditionHeight = 24f;
 
         /// <summary>Size of the weather, temperature and condition glyphs.</summary>
         private const float IconSize = 16f;
 
         /// <summary>Vanilla's height for each of the counter and clock readouts.</summary>
-        private const float ReadoutHeight = 26f;
+        internal const float ReadoutHeight = 26f;
 
         /// <summary>Vanilla's own height for the memory block, which is seven lines rather than one.</summary>
         private const float MemoryHeight = 104f;
 
         /// <summary>The gap vanilla leaves between the top of this column and the letter stack.</summary>
-        private const float LetterGap = 10f;
+        internal const float LetterGap = 10f;
 
         /// <summary>
         /// Far enough off screen that nothing lands on a visible pixel at any resolution or UI scale.
         /// Shared with the hide patches, which use the same trick for the same reason.
         /// </summary>
-        private const float OffScreen = Patch_GlobalControlsUtility_DoTimespeedControls.OffScreen;
+        internal const float OffScreen = Patch_GlobalControlsUtility_DoTimespeedControls.OffScreen;
 
         /// <summary>
         /// Vanilla's own row object, kept between frames as vanilla keeps its own.
@@ -100,6 +102,18 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// to find out how tall the row came out after mods have added to it.
         /// </summary>
         private static readonly WidgetRow toggleRow = new WidgetRow();
+
+        /// <summary>
+        /// The world map's own row object and measured height.
+        ///
+        /// <b>Separate from the map's rather than shared, because they are different rows.</b>
+        /// <c>DoPlaySettingsGlobalControls</c> takes a <c>worldView</c> flag and draws a different set of toggles
+        /// for each -- and mods add to one, the other or both. Sharing the measured height would make the corner
+        /// jump by whatever the difference is on the first frame after switching views.
+        /// </summary>
+        private static readonly WidgetRow worldToggleRow = new WidgetRow();
+
+        private static float measuredWorldToggleHeight = TimeControls.TimeButSize.y;
 
         /// <summary>
         /// How tall the toggle row was last time it drew, for reserving its space before it draws.
@@ -157,7 +171,7 @@ namespace Gideon.UIOverhaul.Features.Panel
             // button bar is laid out from MainButtonDef.ButtonHeight too, so the two cannot drift apart.
             float y = UI.screenHeight - MainButtonDef.ButtonHeight - 4f;
 
-            y = DrawToggleRow(y, settings);
+            y = DrawToggleRow(y, settings, false);
             y -= BlockGap;
 
             y = DrawMainBlock(x, y, map, palette, settings);
@@ -202,8 +216,11 @@ namespace Gideon.UIOverhaul.Features.Panel
                       && Find.WindowStack.IsOpen(typeof(MainTabWindow_GlobalControls)), false, null);
         }
 
-        private static float DrawToggleRow(float y, UIOverhaulSettingsFile settings)
+        internal static float DrawToggleRow(float y, UIOverhaulSettingsFile settings, bool worldView)
         {
+            WidgetRow row = worldView ? worldToggleRow : toggleRow;
+            float measured = worldView ? measuredWorldToggleHeight : measuredToggleHeight;
+
             // Hidden while the tab is open, whatever the setting says, because the tab now draws in this very
             // corner: its Right anchor puts it on top of the button bar, under these widgets, which is the space
             // this row occupies. Two copies of the same toggles overlapping is worse than either alone, and the
@@ -218,8 +235,8 @@ namespace Gideon.UIOverhaul.Features.Panel
             {
                 UIGuard.Try("Panel.PlaySettingShortcuts", () =>
                     {
-                        toggleRow.Init(OffScreen, OffScreen, UIDirection.RightThenDown);
-                        Find.PlaySettings.DoPlaySettingsGlobalControls(toggleRow, false);
+                        row.Init(OffScreen, OffScreen, UIDirection.RightThenDown);
+                        Find.PlaySettings.DoPlaySettingsGlobalControls(row, worldView);
                     },
                     "The beauty, room stats and map search keyboard shortcuts do not work while the corner's "
                     + "toggle row is hidden.");
@@ -227,23 +244,27 @@ namespace Gideon.UIOverhaul.Features.Panel
                 return y;
             }
 
-            float top = y - measuredToggleHeight;
+            float top = y - measured;
 
             UIGuard.Try("Panel.PlaySettingsRow", () =>
                 {
                     // LeftThenUp from the right edge, as vanilla lays it out, so a row long enough to wrap grows
                     // upward into the space above rather than off the side of the screen.
-                    toggleRow.Init(UI.screenWidth, y - TimeControls.TimeButSize.y, UIDirection.LeftThenUp,
+                    row.Init(UI.screenWidth, y - TimeControls.TimeButSize.y, UIDirection.LeftThenUp,
                         Width - Pad);
 
-                    Find.PlaySettings.DoPlaySettingsGlobalControls(toggleRow, false);
+                    Find.PlaySettings.DoPlaySettingsGlobalControls(row, worldView);
                 },
                 "The corner's toggle row is missing. The same toggles are in the Global Controls tab.");
 
             // Read after the draw, since it is the drawing that moves the cursor. With LeftThenUp, FinalY is the
             // top of the last row reached.
-            measuredToggleHeight = Mathf.Max(TimeControls.TimeButSize.y,
-                y - toggleRow.FinalY);
+            measured = Mathf.Max(TimeControls.TimeButSize.y, y - row.FinalY);
+
+            if (worldView)
+                measuredWorldToggleHeight = measured;
+            else
+                measuredToggleHeight = measured;
 
             return top;
         }
@@ -315,7 +336,8 @@ namespace Gideon.UIOverhaul.Features.Panel
 
                 Rect date = new Rect(block.x + Pad, cursor, block.width - Pad * 2f, dateHeight);
 
-                UIGuard.Try("Panel.DateReadout", () => DrawDate(date, map, palette),
+                UIGuard.Try("Panel.DateReadout",
+                    () => DrawDate(date, Find.WorldGrid.LongLatOf(map.Tile), palette),
                     "The date is missing from the corner.");
 
                 cursor -= RowGap;
@@ -438,9 +460,17 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// formats a string every call, and it is worth having -- but the rest of this panel already calls into
         /// vanilla readouts that do the same, and one formatted string per frame is not what makes a corner slow.
         /// </summary>
-        private static void DrawDate(Rect rect, Map map, UIColorPaletteDef palette)
+        /// <summary>
+        /// Draws the date for a place on the planet.
+        /// </summary>
+        /// <param name="longLat">
+        /// Where the reading is taken. Passed in rather than derived from a map because the world view has no
+        /// single map to read: <c>DateReadout</c> takes its longitude from the selected tile, then from the first
+        /// selected object, and only then from the current map -- so selecting somewhere on the far side of the
+        /// planet genuinely changes the hour on screen. See <c>WorldControlsPanel.LongLat</c>.
+        /// </param>
+        internal static void DrawDate(Rect rect, Vector2 longLat, UIColorPaletteDef palette)
         {
-            Vector2 longLat = Find.WorldGrid.LongLatOf(map.Tile);
             int ticks = Find.TickManager.TicksAbs;
 
             string dateString = GenDate.DateReadoutStringAt(ticks, longLat);
@@ -557,7 +587,7 @@ namespace Gideon.UIOverhaul.Features.Panel
         ///
         /// The tooltip is the condition's own <c>TooltipString</c>, which is what vanilla shows too.
         /// </summary>
-        private static void DrawCondition(Rect rect, GameCondition condition, UIColorPaletteDef palette)
+        internal static void DrawCondition(Rect rect, GameCondition condition, UIColorPaletteDef palette)
         {
             PaintBlock(rect, palette);
 
@@ -692,7 +722,14 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// vanilla gating them behind the developer view settings, and replacing the method that did the gating
         /// removed the need for it -- see the note in the patch that used to do it.
         /// </summary>
-        private static float DrawReadouts(float x, float y, Map map, UIColorPaletteDef palette,
+        /// <summary>
+        /// The counters, the clock and the raid countdown.
+        ///
+        /// <b>Shared with the world corner unchanged,</b> which it can be because none of it is about the map:
+        /// the counters are global, the clock is the wall clock, and the countdown is looked up from
+        /// <c>Find.CurrentMap</c> inside rather than from the argument.
+        /// </summary>
+        internal static float DrawReadouts(float x, float y, Map map, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings)
         {
             bool performance = settings != null && settings.showPerformanceWidget;
@@ -777,7 +814,7 @@ namespace Gideon.UIOverhaul.Features.Panel
         /// The border is not decoration. <c>HudBackground</c> is deliberately see-through, and over bright terrain
         /// a fill alone has no edge to say where the panel stops -- see the role's notes.
         /// </summary>
-        private static void PaintBlock(Rect rect, UIColorPaletteDef palette)
+        internal static void PaintBlock(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.HudBackground);
 

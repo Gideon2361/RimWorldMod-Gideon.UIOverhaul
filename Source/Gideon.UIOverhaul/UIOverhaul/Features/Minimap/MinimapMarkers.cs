@@ -22,12 +22,17 @@ namespace Gideon.UIOverhaul.Features.Minimap
         internal MinimapMarkerKind Kind;
 
         /// <summary>
-        /// Whether this animal hunts.
+        /// Whether this animal is a hunter the colony does not own.
         ///
         /// <b>A flag beside the kind rather than a kind of its own,</b> because the two answer different questions
         /// and a predator can be either. A warg on the far ridge is wildlife; the same warg in a manhunter pack is
         /// a hostile, and trading the red away for a paw colour would lose the more urgent of the two facts. So the
         /// kind keeps deciding the colour and this decides the shape.
+        ///
+        /// <b>Ours are excluded, asked for 2026-08-25.</b> The paw is a warning, and a tame panther is not
+        /// something to be warned about -- a colony that tames predators had a minimap full of paws that said
+        /// nothing. So this is not "does it hunt" but "does it hunt and is it not ours", which is why it reads
+        /// <see cref="Ours"/> rather than <c>RaceProps.predator</c> alone.
         /// </summary>
         internal bool Predator;
     }
@@ -123,7 +128,9 @@ namespace Gideon.UIOverhaul.Features.Minimap
                 if (fog != null && fog.IsFogged(cell))
                     continue;
 
-                MinimapMarkerKind kind = KindOf(pawn, player);
+                bool ours = Ours(pawn, player);
+
+                MinimapMarkerKind kind = KindOf(pawn, player, ours);
 
                 if (kind == MinimapMarkerKind.Hostile)
                     hostileCount++;
@@ -133,7 +140,11 @@ namespace Gideon.UIOverhaul.Features.Minimap
                     X = cell.x,
                     Z = cell.z,
                     Kind = kind,
-                    Predator = pawn.RaceProps != null && pawn.RaceProps.predator
+
+                    // An enemy's war animal keeps its paw. That is the manhunter case this flag was built for,
+                    // and a trained wolf arriving with a raid is exactly the thing the shape is meant to call
+                    // out. Only our own tamed predators fall back to an ordinary blip.
+                    Predator = pawn.RaceProps != null && pawn.RaceProps.predator && !ours
                 });
             }
         }
@@ -145,18 +156,10 @@ namespace Gideon.UIOverhaul.Features.Minimap
         /// and a manhunter pack drawn in the same colour as a passing squirrel is the one case where getting
         /// this wrong costs somebody a colony.
         /// </summary>
-        private static MinimapMarkerKind KindOf(Pawn pawn, Faction player)
+        private static MinimapMarkerKind KindOf(Pawn pawn, Faction player, bool ours)
         {
             if (player != null && pawn.HostileTo(player))
                 return MinimapMarkerKind.Hostile;
-
-            // A tamed animal counts as ours, from 2026-08-23 on Aaron's instruction. Orange means wildlife --
-            // something the colony does not own and mostly does not care about the position of -- and a muffalo
-            // the player paid for and can order about is not that. The faction is the whole test: taming is what
-            // sets it, and it is what every other part of the game reads to answer the same question.
-            bool ours = pawn.IsColonist || pawn.IsColonyMech
-                        || (pawn.RaceProps != null && pawn.RaceProps.Animal && player != null
-                            && pawn.Faction == player);
 
             // Downed applies to them too rather than only to colonists. A cow bleeding out reads the same as a
             // colonist bleeding out, which is what the colour is for, and leaving tamed animals blue while downed
@@ -171,6 +174,25 @@ namespace Gideon.UIOverhaul.Features.Minimap
             // Drawn as colonists rather than given a colour of their own, because at one pixel a fifth colour
             // is a legend nobody reads rather than information anybody uses.
             return MinimapMarkerKind.Colonist;
+        }
+
+        /// <summary>
+        /// Whether this pawn belongs to the colony.
+        ///
+        /// <b>Lifted out of <see cref="KindOf"/> so the shape test can ask the question the colour test asks,</b>
+        /// rather than the two drifting apart. It was already the rule for the colour: a tamed animal counts as
+        /// ours, from 2026-08-23 on Aaron's instruction, because orange means wildlife -- something the colony
+        /// does not own and mostly does not care about the position of -- and a muffalo the player paid for and
+        /// can order about is not that.
+        ///
+        /// The faction is the whole test for an animal: taming is what sets it, and it is what every other part
+        /// of the game reads to answer the same question.
+        /// </summary>
+        private static bool Ours(Pawn pawn, Faction player)
+        {
+            return pawn.IsColonist || pawn.IsColonyMech
+                   || (pawn.RaceProps != null && pawn.RaceProps.Animal && player != null
+                       && pawn.Faction == player);
         }
 
         /// <summary>Drops the cache, for a game ending or a map being left.</summary>

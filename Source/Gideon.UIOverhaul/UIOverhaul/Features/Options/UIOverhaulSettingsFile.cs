@@ -400,6 +400,50 @@ namespace Gideon.UIOverhaul.Features.Options
         public float tradeBeaconRadius = 7.9f;
 
         /// <summary>
+        /// Whether trading uses our window instead of <c>Dialog_Trade</c>.
+        ///
+        /// <b>On by default, and the reason it exists is compatibility rather than taste.</b> A mod that patches
+        /// the vanilla trade dialog -- adding a column, a button, a filter -- will never see ours, so it silently
+        /// stops working, and some of those failures are quiet rather than loud. Somebody running heavy trade
+        /// mods switches this off and keeps theirs. It shipped with the window rather than after the first bug
+        /// report, because building an escape hatch is cheaper than retrofitting one.
+        ///
+        /// <b>Not a runtime fallback.</b> This mod's rule is that a feature failing mid-draw must not quietly
+        /// hand off to vanilla, because that hides the defect. This is a choice made in the settings window with
+        /// the consequences written down, which is a different thing.
+        /// </summary>
+        public bool customTradeWindow = true;
+
+        /// <summary>
+        /// Whether forming and splitting a caravan uses our window instead of vanilla's two.
+        ///
+        /// Separate from the trade window on purpose: the compatibility risk is per window, and a mod that adds a
+        /// column to the trade dialog has nothing to do with the caravan packer. See
+        /// <c>customTradeWindow</c> for the reasoning behind having the setting at all.
+        /// </summary>
+        public bool customCaravanWindow = true;
+
+        /// <summary>
+        /// Whether the comms console opens our directory instead of RimWorld's float menu of bare text lines.
+        ///
+        /// <b>The one of the four with a fallback that changes behaviour rather than only appearance.</b> Vanilla
+        /// answers "who can I call" with one <c>FloatMenuOption</c> per target; ours draws a card per target from
+        /// the same <c>ICommunicable</c> interface. A mod that adds an option to that float menu by patching
+        /// <c>Building_CommsConsole.GetFloatMenuOptions</c> still appears in ours, because ours reads the same
+        /// options -- but one that patches the menu after the fact would not.
+        /// </summary>
+        public bool customCommsWindow = true;
+
+        /// <summary>
+        /// Whether a selected trade beacon offers a readout of what its reach is actually worth.
+        ///
+        /// <b>Nothing is replaced by this one,</b> which is why it is the safest of the four: vanilla draws
+        /// nothing at all for a built beacon, so this is a gizmo and a window that did not exist rather than a
+        /// substitute for one that did. Off costs the readout and nothing else.
+        /// </summary>
+        public bool beaconReadout = true;
+
+        /// <summary>
         /// Whether a crop that catches blight is marked for cutting automatically.
         ///
         /// <b>On by default, which is the opposite of the livestock setting below and for a reason.</b> That one
@@ -1384,6 +1428,19 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.quietIdleAlert = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "customTradeWindow":
+                            settings.customTradeWindow = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "customCaravanWindow":
+                            settings.customCaravanWindow = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "customCommsWindow":
+                            settings.customCommsWindow = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "beaconReadout":
+                            settings.beaconReadout = !value.EqualsIgnoreCase("false");
+                            break;
+
                         case "tradeBeaconRadius":
                             // An unreadable value gives RimWorld's own radius rather than the smallest or the
                             // largest, which is the answer that changes nothing for somebody whose file was
@@ -1672,6 +1729,13 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("quietIdleAlert", quietIdleAlert ? "true" : "false");
                     writer.WriteElementString("tradeBeaconRadius",
                         tradeBeaconRadius.ToString(CultureInfo.InvariantCulture));
+                    writer.WriteElementString("customTradeWindow",
+                        customTradeWindow ? "true" : "false");
+                    writer.WriteElementString("customCaravanWindow",
+                        customCaravanWindow ? "true" : "false");
+                    writer.WriteElementString("customCommsWindow",
+                        customCommsWindow ? "true" : "false");
+                    writer.WriteElementString("beaconReadout", beaconReadout ? "true" : "false");
                     writer.WriteElementString("maxBillsPerBench",
                         maxBillsPerBench.ToString(CultureInfo.InvariantCulture));
                     writer.WriteElementString("favoriteRecipes", favoriteRecipes ?? string.Empty);

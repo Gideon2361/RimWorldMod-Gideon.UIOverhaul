@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
@@ -78,13 +79,13 @@ namespace Gideon.UIOverhaul.Features.Bills
             float third = Mathf.Floor((rect.width - 8f) / 3f);
             Rect row = new Rect(rect.x, rect.y, third, SegmentHeight);
 
-            if (GzpPalette.GrayButton(row, "Drop here", true, mode == BillStoreModeDefOf.DropOnFloor)
+            if (UIActionButtonControl.Draw(row, "Drop here", true, mode == BillStoreModeDefOf.DropOnFloor)
                 && mode != BillStoreModeDefOf.DropOnFloor)
                 bill.SetStoreMode(BillStoreModeDefOf.DropOnFloor);
 
             row.x += third + 4f;
 
-            if (GzpPalette.GrayButton(row, "Best stockpile", true, mode == BillStoreModeDefOf.BestStockpile)
+            if (UIActionButtonControl.Draw(row, "Best stockpile", true, mode == BillStoreModeDefOf.BestStockpile)
                 && mode != BillStoreModeDefOf.BestStockpile)
                 bill.SetStoreMode(BillStoreModeDefOf.BestStockpile);
 
@@ -96,7 +97,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             bool any = groups.Count > 0;
             bool specific = mode == BillStoreModeDefOf.SpecificStockpile;
 
-            if (GzpPalette.GrayButton(row, "Take to...", any, specific) && !specific)
+            if (UIActionButtonControl.Draw(row, "Take to...", any, specific) && !specific)
                 bill.SetStoreMode(BillStoreModeDefOf.SpecificStockpile, Chosen(bill, groups));
 
             if (!any)

@@ -40,7 +40,17 @@ internal static class BakeAtlas
     /// <summary>Transparent margin around each glyph, so bilinear sampling cannot bleed a neighbor in.</summary>
     private const int Padding = 2;
 
-    private const int Columns = 16;
+    /// <summary>
+    /// The fewest and most columns the packer will consider. See <c>Pack</c>.
+    ///
+    /// This was a fixed 16, which suited a face baked at 95 glyphs and wastes most of a texture at 900: sixteen
+    /// columns of a 900 glyph face is a tower 57 rows tall, and rounding that up to a power of two throws away
+    /// nearly half the pixels. The bounds are wide because the best answer genuinely varies -- a script block of
+    /// 22 letters and a Latin face with Cyrillic want very different shapes.
+    /// </summary>
+    private const int MinColumns = 4;
+
+    private const int MaxColumns = 128;
 
     /// <summary>
     /// Glyphs baked when no ranges are given: printable ASCII plus the Latin-1 letters.
@@ -85,12 +95,199 @@ internal static class BakeAtlas
         }
     }
 
+    /// <summary>
+    /// Every code point the face's character map claims, read out of the TTF directly.
+    ///
+    /// <b>Why not just probe a wide range.</b> The measuring pass already drops a code point the face does not
+    /// cover, so feeding it 0x20-0xFFFF would produce the right answer -- after rasterizing sixty five thousand
+    /// glyphs, almost all of them nothing. Reading the cmap turns that into a list of about a thousand before any
+    /// drawing happens.
+    ///
+    /// <b>Ranges, not resolved glyph ids.</b> This returns the code points a subtable's segments span, which is a
+    /// superset: a segment can map some of its codes to glyph zero. That is fine and is why it is done this way
+    /// -- resolving ids properly means walking idDelta and idRangeOffset arrays and getting the modular
+    /// arithmetic exactly right, and the reward would be skipping a handful of glyphs the ink test already
+    /// skips. A superset costs a few wasted measurements; a subtle bug in id resolution costs missing letters.
+    ///
+    /// Formats 4 and 12 only. Those are what every font shipped this decade uses for Unicode, and a face with
+    /// neither falls back to the default set with a warning rather than baking nothing.
+    /// </summary>
+    private static List<int> Coverage(string ttf)
+    {
+        List<int> codes = new List<int>();
+
+        byte[] data = File.ReadAllBytes(ttf);
+
+        int numTables = U16(data, 4);
+        int cmap = -1;
+
+        for (int i = 0; i < numTables; i++)
+        {
+            int record = 12 + i * 16;
+
+            if (data[record] == 'c' && data[record + 1] == 'm' && data[record + 2] == 'a'
+                && data[record + 3] == 'p')
+            {
+                cmap = (int) U32(data, record + 8);
+
+                break;
+            }
+        }
+
+        if (cmap < 0)
+            return codes;
+
+        int subtables = U16(data, cmap + 2);
+
+        int best = -1;
+        int bestScore = -1;
+
+        for (int i = 0; i < subtables; i++)
+        {
+            int record = cmap + 4 + i * 8;
+
+            int platform = U16(data, record);
+            int encoding = U16(data, record + 2);
+            int offset = cmap + (int) U32(data, record + 4);
+
+            // Windows UCS-4 first, then Windows BMP, then anything Unicode. The first reaches past U+FFFF, which
+            // the other two cannot.
+            int score = platform == 3 && encoding == 10 ? 3
+                : platform == 3 && encoding == 1 ? 2
+                : platform == 0 ? 1 : 0;
+
+            if (score <= bestScore)
+                continue;
+
+            bestScore = score;
+            best = offset;
+        }
+
+        if (best < 0)
+            return codes;
+
+        int format = U16(data, best);
+
+        if (format == 4)
+        {
+            int segments = U16(data, best + 6) / 2;
+
+            int endCodes = best + 14;
+            int startCodes = endCodes + segments * 2 + 2;
+
+            for (int s = 0; s < segments; s++)
+            {
+                int first = U16(data, startCodes + s * 2);
+                int last = U16(data, endCodes + s * 2);
+
+                // The final segment is the required 0xFFFF terminator and covers nothing.
+                if (first > last || last == 0xFFFF)
+                    continue;
+
+                for (int code = first; code <= last; code++)
+                    codes.Add(code);
+            }
+        }
+        else if (format == 12)
+        {
+            int groups = (int) U32(data, best + 12);
+
+            for (int gi = 0; gi < groups; gi++)
+            {
+                int record = best + 16 + gi * 12;
+
+                long first = U32(data, record);
+                long last = U32(data, record + 4);
+
+                if (first > last || last > 0x10FFFF)
+                    continue;
+
+                for (long code = first; code <= last; code++)
+                    codes.Add((int) code);
+            }
+        }
+
+        return codes;
+    }
+
+    private static int U16(byte[] data, int at)
+    {
+        return (data[at] << 8) | data[at + 1];
+    }
+
+    private static long U32(byte[] data, int at)
+    {
+        return ((long) data[at] << 24) | ((long) data[at + 1] << 16) | ((long) data[at + 2] << 8) | data[at + 3];
+    }
+
+    /// <summary>
+    /// The column count that wastes the least texture, given how many glyphs there are and how big a cell is.
+    ///
+    /// Both dimensions round up to a power of two, so the cost is a step function and the best answer is not the
+    /// square one -- it is whichever shape lands just under two thresholds at once. Tried exhaustively because
+    /// there are at most a hundred and twenty candidates and this runs once per font per bake.
+    /// </summary>
+    private static int Pack(int count, int cellWidth, int cellHeight, out int width, out int height)
+    {
+        int bestColumns = MinColumns;
+        long bestArea = long.MaxValue;
+        long bestSquareness = long.MaxValue;
+
+        width = 0;
+        height = 0;
+
+        for (int columns = MinColumns; columns <= MaxColumns; columns++)
+        {
+            if (columns > count && columns > MinColumns)
+                break;
+
+            int rows = (count + columns - 1) / columns;
+
+            int candidateWidth = Pot(cellWidth * columns);
+            int candidateHeight = Pot(cellHeight * rows);
+
+            // Unity refuses a texture over 16384 on any axis, and plenty of hardware stops at 8192. Anything
+            // taller or wider than that is not a candidate however little it wastes.
+            if (candidateWidth > 8192 || candidateHeight > 8192)
+                continue;
+
+            long area = (long) candidateWidth * candidateHeight;
+
+            // <b>Squarer wins a tie, and ties are common.</b> Both dimensions round to powers of two, so many
+            // column counts land on exactly the same area -- 523 glyphs packs into 512x8192 and 2048x2048 for
+            // the same four million pixels. The strip is the worse of the two: 8192 is the ceiling on plenty of
+            // hardware, and a very long thin texture is the shape drivers handle least well.
+            long squareness = Math.Abs((long) candidateWidth - candidateHeight);
+
+            if (area > bestArea || (area == bestArea && squareness >= bestSquareness))
+                continue;
+
+            bestArea = area;
+            bestSquareness = squareness;
+            bestColumns = columns;
+            width = candidateWidth;
+            height = candidateHeight;
+        }
+
+        if (width != 0)
+            return bestColumns;
+
+        // Nothing fit. Give back the squarest attempt so the caller fails with a real size in the message rather
+        // than a zero.
+        bestColumns = (int) Math.Ceiling(Math.Sqrt(count));
+        width = Pot(cellWidth * bestColumns);
+        height = Pot(cellHeight * ((count + bestColumns - 1) / bestColumns));
+
+        return bestColumns;
+    }
+
     private static int Main(string[] args)
     {
         if (args.Length < 3)
         {
-            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name> [hexRanges]");
+            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name> [hexRanges|all]");
             Console.WriteLine("  hexRanges: 10840-10855,1E800-1E8C4   (default: ASCII plus Latin-1)");
+            Console.WriteLine("  all:       every code point the font's cmap covers");
 
             return 2;
         }
@@ -108,14 +305,39 @@ internal static class BakeAtlas
             collection.AddFontFile(ttf);
 
             FontFamily family = collection.Families[0];
-            FontStyle style = family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular : FontStyle.Bold;
+
+            // <b>Italic before bold in the fallback chain, which matters for a one-face file.</b> Each weight
+            // ships as its own TTF, so the family in this collection holds exactly one face -- and for
+            // BarlowCondensed-Italic that face is italic, not regular. GDI+ then refuses Regular, and falling
+            // straight to Bold asked it to synthesise a bold italic from an italic: a smeared, wrong-width face
+            // that would have baked without complaining.
+            FontStyle style = family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular
+                : family.IsStyleAvailable(FontStyle.Italic) ? FontStyle.Italic
+                : family.IsStyleAvailable(FontStyle.Bold) ? FontStyle.Bold
+                : FontStyle.Regular;
 
             float emHeight = family.GetEmHeight(style);
             float ascent = family.GetCellAscent(style) / emHeight * EmSize;
             float descent = family.GetCellDescent(style) / emHeight * EmSize;
             float lineSpacing = family.GetLineSpacing(style) / emHeight * EmSize;
 
-            List<int> wanted = new List<int>(args.Length > 3 ? Ranges(args[3]) : DefaultGlyphs());
+            List<int> wanted;
+
+            if (args.Length > 3 && args[3].Trim().Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                wanted = Coverage(ttf);
+
+                if (wanted.Count == 0)
+                {
+                    Console.WriteLine("{0}: no usable cmap, falling back to ASCII plus Latin-1.", name);
+
+                    wanted = new List<int>(DefaultGlyphs());
+                }
+            }
+            else
+            {
+                wanted = new List<int>(args.Length > 3 ? Ranges(args[3]) : DefaultGlyphs());
+            }
 
             // Measured first so the atlas is sized to what is actually there rather than to a guess, and so a
             // code point the face does not cover can be dropped before it takes up a cell.
@@ -178,9 +400,10 @@ internal static class BakeAtlas
                 cellHeight = Math.Max(cellHeight, (int) Math.Ceiling(r.Height) + Padding * 2);
             }
 
-            int rows = (chars.Count + Columns - 1) / Columns;
-            int width = Pot(cellWidth * Columns);
-            int height = Pot(cellHeight * rows);
+            int width;
+            int height;
+
+            int columns = Pack(chars.Count, cellWidth, cellHeight, out width, out height);
 
             StringBuilder metrics = new StringBuilder();
 
@@ -201,8 +424,8 @@ internal static class BakeAtlas
                     int code = chars[i];
                     RectangleF bounds = ink[i];
 
-                    int cellX = i % Columns * cellWidth;
-                    int cellY = i / Columns * cellHeight;
+                    int cellX = i % columns * cellWidth;
+                    int cellY = i / columns * cellHeight;
 
                     int w = (int) Math.Ceiling(bounds.Width);
                     int h = (int) Math.Ceiling(bounds.Height);
@@ -243,8 +466,9 @@ internal static class BakeAtlas
 
             File.WriteAllText(Path.Combine(outDir, name + ".txt"), metrics.ToString(), new UTF8Encoding(false));
 
-            Console.WriteLine("{0,-28} {1} glyphs  atlas {2}x{3}  cell {4}x{5}  ascent {6:F1}  line {7:F1}",
-                name, chars.Count, width, height, cellWidth, cellHeight, ascent, lineSpacing);
+            Console.WriteLine(
+                "{0,-30} {1,5} glyphs  atlas {2}x{3}  {4} cols  cell {5}x{6}  ascent {7:F1}  line {8:F1}",
+                name, chars.Count, width, height, columns, cellWidth, cellHeight, ascent, lineSpacing);
         }
 
         return 0;

@@ -97,12 +97,12 @@ namespace Gideon.UIOverhaul.Features.ColonyBar
                 Rect ok = new Rect(inRect.xMax - 110f, inRect.yMax - 34f, 110f, 32f);
                 Rect cancel = new Rect(ok.x - 118f, ok.y, 110f, 32f);
 
-                if (GzpPalette.GrayButton(cancel, "Cancel"))
+                if (UIActionButtonControl.Draw(cancel, "Cancel"))
                     Close();
 
                 // A blank name is refused rather than accepted and defaulted: a group called "Group 3" that the
                 // player did not type reads as a bug, and the button being dead says why without a message.
-                if (GzpPalette.GrayButton(ok, "Save", !Field.Text.NullOrEmpty(), true))
+                if (UIActionButtonControl.Draw(ok, "Save", !Field.Text.NullOrEmpty(), true))
                 {
                     accepted?.Invoke(Field.Text.Trim());
 
