@@ -116,14 +116,11 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                 if (Name.IsEmpty)
                 {
-                    UIElementPainter.OutlineRounded(save, palette.Border, palette.ControlBackgroundFaded);
-
-                    Text.Anchor = TextAnchor.MiddleCenter;
-                    GUI.color = palette.TextDisabled;
-
-                    Widgets.Label(save, "Save");
-
-                    Text.Anchor = TextAnchor.UpperLeft;
+                    // Drawn by the control as a refusing primary, which is what it is: the button this window
+                    // exists to press, saying it will not go yet. It used to be drawn by hand here, and set no
+                    // font at all -- so its label took whatever size the last thing drawn had left behind.
+                    UIActionButtonControl.Draw(save, "Save", palette, true, false, GameFont.Small,
+                        "Give the template a name first.");
 
                     return;
                 }

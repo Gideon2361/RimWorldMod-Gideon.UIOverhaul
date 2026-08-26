@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Globalization;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Inspector;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -233,12 +235,20 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// box for it means every intermediate keystroke is a valid age: typing 40 over 8 passes through 4, and a
         /// four year old colonist has a different body type and a different life stage.
         /// </summary>
+        /// <summary>
+        /// An age, typed.
+        ///
+        /// <b>It was a slider, and an age is the wrong thing to drag.</b> A player setting one knows the number
+        /// they want; a 0 to 120 track two hundred pixels wide asks them to hunt for it, and every neighbouring
+        /// year is one pixel away. Changed on 2026-08-26.
+        ///
+        /// <b>No upper stop at 120 any more either.</b> The slider needed one to have a scale; a box does not, and
+        /// a thousand-year-old archotech-touched pawn is a thing this editor exists to be able to make.
+        /// </summary>
         private static void Years(Rect cell, string caption, UIColorPaletteDef palette, EditorContext context,
             int current, System.Action<int> apply)
         {
-            float value = EditorParts.Slider(cell, caption, current, 0f, 120f, palette, current + " years");
-
-            int years = Mathf.RoundToInt(value);
+            int years = EditorParts.Number(cell, caption, current, 0, 99999, palette, "years");
 
             if (years != current)
                 apply(years);
@@ -753,39 +763,111 @@ namespace Gideon.UIOverhaul.Features.Editor
             return y + EditorParts.BlockGap - view.y;
         }
 
+        /// <summary>Which skill is being dragged, by def name, or null. One at a time by definition.</summary>
+        private static string draggingSkill;
+
+        /// <summary>How far above and below the track a click still counts. See the needs panel's own note.</summary>
+        private const float SkillGrab = 7f;
+
+        /// <summary>
+        /// One skill, drawn as the mod's own bar and dragged like the needs beside it.
+        ///
+        /// <b>It was RimWorld's slider until 2026-08-25,</b> which put a blue vanilla track with a square handle
+        /// in the middle of a panel whose every other row is one of our bars -- the needs panel two tabs over
+        /// draws the same shape and looks nothing like it. Now it goes through <c>InspectPaneParts.Need</c>, the
+        /// same call the inspect pane and the needs editor make, and hangs a drag on the track it gets back.
+        ///
+        /// <b>The bar is coloured by level rather than by need.</b> A skill has no good or bad end -- 0 is not a
+        /// problem the way an empty food bar is -- so it takes the accent and stays that colour the whole way
+        /// across, and a disabled skill goes dim instead.
+        ///
+        /// <b>Experience within the level is kept.</b> <c>SkillRecord.Level</c> writes only the level integer and
+        /// leaves <c>xpSinceLastLevel</c> alone, so nudging a 6 to a 7 does not silently cost a day of learning.
+        /// </summary>
         private static float Skill(Rect view, float y, SkillRecord record, EditorContext context,
             UIColorPaletteDef palette)
         {
-            float height = EditorParts.CaptionHeight + 20f;
-
-            Rect row = new Rect(view.x, y, view.width, height);
-
-            Rect passion = new Rect(row.xMax - 28f, row.y + 2f, 24f, 20f);
-            Rect lane = new Rect(row.x, row.y, Mathf.Max(60f, row.width - 34f), height);
-
             bool disabled = UIGuard.Try("Editor.SkillDisabled", () => record.TotallyDisabled, false, null);
 
-            string readout = record.Level.ToString();
+            Rect lane = new Rect(view.x, view.y, Mathf.Max(60f, view.width - 34f), view.height);
 
-            if (disabled)
-                readout += "  disabled";
+            float fraction = Mathf.Clamp01(record.Level / 20f);
 
-            float value = EditorParts.Slider(lane, record.def.skillLabel.CapitalizeFirst(), record.Level, 0f,
-                20f, palette, readout);
+            Color fill = disabled ? palette.TextDisabled : palette.Accent;
 
-            int level = Mathf.RoundToInt(value);
+            Rect track;
 
-            if (level != record.Level)
-                context.Changes.Set(record.def.skillLabel, () => record.Level, v => record.Level = v, level);
+            float next = InspectPaneParts.Need(lane, y, record.def.skillLabel.CapitalizeFirst(),
+                disabled ? "disabled" : record.Level.ToString(),
+                disabled ? palette.TextDisabled : palette.TextPrimary, fraction, fill, null, null, palette,
+                out track);
 
-            PassionMark(passion, record, context, palette);
+            Drag(track, record, context);
+
+            PassionMark(new Rect(view.xMax - 28f, track.y - 14f, 24f, 20f), record, context, palette);
 
             if (disabled)
                 TooltipHandler.TipRegion(lane, (TipSignal) ("A backstory, trait or gene disables this skill. The "
                                                             + "level can still be set, and it will apply the "
                                                             + "moment whatever disabled it is removed."));
 
-            return row.yMax + 2f;
+            return next;
+        }
+
+        /// <summary>
+        /// Turns the drawn track into something you can set by pointing at it.
+        ///
+        /// The needs panel's rule, for the same reasons written there: RimWorld's slider draws its own art
+        /// unconditionally and would cover the row we just drew, and its return value is this frame's answer
+        /// rather than a change to record once with an undo entry.
+        ///
+        /// <b>Snapped to whole levels,</b> which a need is not. There is no such thing as 6.4 Cooking, and a
+        /// track that let you point at one would be lying about what it set.
+        /// </summary>
+        private static void Drag(Rect track, SkillRecord record, EditorContext context)
+        {
+            UIGuard.Try("Editor.SkillDrag", () =>
+            {
+                string key = record.def != null ? record.def.defName : null;
+
+                if (key == null)
+                    return;
+
+                Rect grab = new Rect(track.x, track.y - SkillGrab, track.width, track.height + SkillGrab * 2f);
+
+                Event input = Event.current;
+                bool over = Mouse.IsOver(grab);
+
+                if (input.type == EventType.MouseDown && input.button == 0 && over)
+                {
+                    draggingSkill = key;
+                    input.Use();
+                }
+                else if (input.type == EventType.MouseUp && input.button == 0 && draggingSkill == key)
+                {
+                    draggingSkill = null;
+                    input.Use();
+                }
+
+                if (draggingSkill != key)
+                {
+                    if (over && draggingSkill == null)
+                        EditorParts.Knob(track, record.Level / 20f, context.Palette);
+
+                    return;
+                }
+
+                int wanted = Mathf.Clamp(
+                    Mathf.RoundToInt((input.mousePosition.x - track.x) / Mathf.Max(1f, track.width) * 20f), 0, 20);
+
+                EditorParts.Knob(track, wanted / 20f, context.Palette);
+
+                if (wanted != record.Level)
+                {
+                    context.Changes.Set(record.def.skillLabel, () => record.Level, v => record.Level = v,
+                        wanted);
+                }
+            }, null);
         }
 
         /// <summary>
@@ -810,37 +892,23 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (over)
                 UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
 
-            if (icon != null)
-            {
-                Color previous = GUI.color;
+            Color previous = GUI.color;
 
-                GUI.color = current == Passion.Major ? palette.Warning : palette.AccentMuted;
+            // <b>No passion is an unlit flame, not a dash.</b> A hyphen in a column of flames reads as a missing
+            // value rather than as the third state of one control, and it gives no hint that clicking it does
+            // anything. RimWorld ships no empty-passion texture, so this is the minor flame at a fraction of its
+            // strength, which is what "there could be a passion here" looks like. Reported on 2026-08-25.
+            GUI.color = current == Passion.Major
+                ? palette.Warning
+                : current == Passion.Minor
+                    ? palette.AccentMuted
+                    : new Color(palette.TextDisabled.r, palette.TextDisabled.g, palette.TextDisabled.b,
+                        palette.TextDisabled.a * 0.5f);
 
-                GUI.DrawTexture(new Rect(rect.center.x - 8f, rect.center.y - 8f, 16f, 16f), icon);
+            GUI.DrawTexture(new Rect(rect.center.x - 8f, rect.center.y - 8f, 16f, 16f),
+                icon ?? SkillUI.PassionMinorIcon);
 
-                GUI.color = previous;
-            }
-            else
-            {
-                GameFont previousFont = Text.Font;
-                TextAnchor previousAnchor = Text.Anchor;
-                Color previousColor = GUI.color;
-
-                try
-                {
-                    Text.Font = GameFont.Tiny;
-                    Text.Anchor = TextAnchor.MiddleCenter;
-                    GUI.color = palette.TextDisabled;
-
-                    Widgets.Label(rect, "-");
-                }
-                finally
-                {
-                    GUI.color = previousColor;
-                    Text.Anchor = previousAnchor;
-                    Text.Font = previousFont;
-                }
-            }
+            GUI.color = previous;
 
             TooltipHandler.TipRegion(rect, (TipSignal) "Click to step through no passion, minor and burning.");
 

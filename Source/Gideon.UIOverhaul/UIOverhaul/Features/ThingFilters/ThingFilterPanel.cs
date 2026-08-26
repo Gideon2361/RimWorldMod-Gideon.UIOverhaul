@@ -277,30 +277,8 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
 
         private static bool Button(Rect rect, string label, UIColorPaletteDef palette)
         {
-            bool over = Mouse.IsOver(rect);
-
-            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(rect, label);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            return Widgets.ButtonInvisible(rect);
+            return UIActionButtonControl.Draw(rect, label, palette, false, true,
+                GameFont.Tiny);
         }
 
         /// <summary>

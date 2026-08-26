@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Shared;
@@ -205,7 +207,7 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             bool over = enabled && Mouse.IsOver(control);
 
-            UIElementPainter.OutlineRounded(control, over ? palette.BorderFocused : palette.Border,
+            UIElementPainter.OutlineRounded(control, over ? palette.Accent : palette.Border,
                 !enabled ? palette.PanelBackground : over ? palette.SurfaceRaised : palette.SurfaceSunken);
 
             GameFont previousFont = Text.Font;
@@ -316,6 +318,181 @@ namespace Gideon.UIOverhaul.Features.Editor
             }
 
             return chosen;
+        }
+
+        /// <summary>
+        /// One swatch showing the colour that is set, which opens a picker when clicked.
+        ///
+        /// <b>A button rather than a row of swatches, once the row stopped fitting.</b> Six colours fit a cell
+        /// this wide and RimWorld offers many more than six; a row that shows the first six of forty is worse
+        /// than a row of none, because it looks like the whole choice. Returns whether it was clicked.
+        /// </summary>
+        internal static bool ColorButton(Rect cell, string caption, Color current, UIColorPaletteDef palette)
+        {
+            Rect control = Field(cell, caption, palette);
+
+            float side = Mathf.Max(10f, Mathf.Min(control.height, 22f));
+
+            Rect swatch = new Rect(control.x, control.y + (control.height - side) * 0.5f, side, side);
+
+            bool over = Mouse.IsOver(control);
+
+            // Ringed in the text colour rather than the accent, for the reason on Swatches: a ring has to stay
+            // legible against whatever colour it is drawn around, and an accent ring vanishes on an accent swatch.
+            UIElementPainter.OutlineRounded(swatch, over ? palette.TextPrimary : palette.Border, current,
+                over ? 2f : 1f);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = over ? palette.TextPrimary : palette.TextSecondary;
+
+                Widgets.Label(new Rect(swatch.xMax + 8f, control.y, control.width - side - 8f, control.height),
+                    "Change...");
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+
+            return Widgets.ButtonInvisible(control);
+        }
+
+        /// <summary>
+        /// The grab handle: a square on the track at the value, in the palette's accent.
+        ///
+        /// <b>Shared since the skills panel started dragging too.</b> It lived on the needs panel while that was
+        /// the only place a bar could be grabbed; a second panel doing the same thing with its own square would
+        /// be two handles that had to be kept the same size by hand.
+        /// </summary>
+        internal static void Knob(Rect track, float fraction, UIColorPaletteDef palette)
+        {
+            const float size = 9f;
+
+            float x = track.x + Mathf.Round(track.width * Mathf.Clamp01(fraction));
+
+            Widgets.DrawBoxSolid(
+                new Rect(x - size * 0.5f, track.center.y - size * 0.5f, size, size), palette.Accent);
+        }
+
+        /// <summary>
+        /// A number you type, for the editor.
+        ///
+        /// <b>Typed rather than dragged, where the number is exact.</b> A slider is right for a need, where what
+        /// matters is roughly how full it is; it is wrong for an age, where a player knows they want 47 and
+        /// dragging a 120 year track to it means pixel-hunting. Asked for on 2026-08-26.
+        ///
+        /// <b>The floor is applied when typing finishes, not while it happens.</b> Otherwise the first keystroke
+        /// of "18" becomes the minimum and there is nowhere to put the 8. The ceiling is applied throughout, since
+        /// there is no half-typed number that needs to exceed it.
+        ///
+        /// <b>Boxes are pooled per caption.</b> The editor draws one pawn at a time, so a box belongs to a place
+        /// on screen rather than to a pawn; keyed on the caption it survives a re-layout under a caret and refills
+        /// itself when the pawn changes. The same reasoning as the taming dialog's boxes.
+        /// </summary>
+        internal static int Number(Rect cell, string caption, int current, int low, int high,
+            UIColorPaletteDef palette, string suffix = null)
+        {
+            Rect control = Field(cell, caption, palette);
+
+            UITextBoxControl box = NumberBox(caption, current);
+
+            float width = Mathf.Min(control.width, 96f);
+
+            int result = current;
+
+            if (box.Draw(new Rect(control.x, control.y, width, control.height), palette))
+            {
+                int typed;
+
+                if (int.TryParse(box.Text, out typed))
+                    result = Mathf.Clamp(typed, 0, high);
+                else if (box.IsEmpty)
+                    result = current;
+            }
+
+            bool held = box.Focused;
+
+            if (!held && numberFocus == caption)
+            {
+                result = Mathf.Clamp(result, low, high);
+
+                box.Text = result.ToString(CultureInfo.InvariantCulture);
+
+                numberFocus = null;
+            }
+            else if (held)
+            {
+                numberFocus = caption;
+            }
+
+            if (!suffix.NullOrEmpty())
+            {
+                GameFont previousFont = Text.Font;
+                TextAnchor previousAnchor = Text.Anchor;
+                Color previousColor = GUI.color;
+
+                try
+                {
+                    Text.Font = GameFont.Tiny;
+                    Text.Anchor = TextAnchor.MiddleLeft;
+                    GUI.color = palette.TextDisabled;
+
+                    Widgets.Label(new Rect(control.x + width + 6f, control.y,
+                        Mathf.Max(0f, control.width - width - 6f), control.height), suffix);
+                }
+                finally
+                {
+                    GUI.color = previousColor;
+                    Text.Anchor = previousAnchor;
+                    Text.Font = previousFont;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>Which numeric box holds focus, so its floor can be applied the moment focus leaves.</summary>
+        private static string numberFocus;
+
+        private static readonly Dictionary<string, UITextBoxControl> NumberBoxes =
+            new Dictionary<string, UITextBoxControl>();
+
+        /// <summary>The box for one caption, refilled whenever the value moved without it being typed into.</summary>
+        private static UITextBoxControl NumberBox(string caption, int current)
+        {
+            string key = caption ?? string.Empty;
+
+            UITextBoxControl box;
+
+            if (!NumberBoxes.TryGetValue(key, out box))
+            {
+                box = new UITextBoxControl
+                {
+                    MaxLength = 5,
+                    ShowClearButton = false
+                };
+
+                NumberBoxes[key] = box;
+            }
+
+            int shown;
+
+            if (!box.Focused && (box.IsEmpty
+                                 || !int.TryParse(box.Text, out shown)
+                                 || shown != current))
+            {
+                box.Text = current.ToString(CultureInfo.InvariantCulture);
+            }
+
+            return box;
         }
 
         /// <summary>Whether two colours are the same to the precision a swatch can show.</summary>
@@ -544,8 +721,62 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (def == null)
                 return absent;
 
-            return UIGuard.Try<string>("Editor.DefLabel",
-                () => def.LabelCap.NullOrEmpty() ? def.defName : def.LabelCap.ToString(), def.defName, null);
+            return UIGuard.Try<string>("Editor.DefLabel", () => Read(def), def.defName, null);
+        }
+
+        /// <summary>A def's label, or its defName when it has nothing better.</summary>
+        private static string Read(Def def)
+        {
+            ThoughtDef thought = def as ThoughtDef;
+
+            if (thought != null)
+                return ThoughtLabel(thought);
+
+            TaggedString label = def.LabelCap;
+
+            return label.NullOrEmpty() ? def.defName : label.ToString();
+        }
+
+        /// <summary>
+        /// A thought's label, read ourselves rather than through <c>ThoughtDef.LabelCap</c>.
+        ///
+        /// <b>That property is unsafe to ask for and vanilla never asks.</b> It looks at the def's own label and
+        /// then at <c>stages[0]</c> and nothing further -- so a thought whose first stage is a blank placeholder,
+        /// which is how every withdrawal and most highs are written, makes it <c>Log.Error</c> and fall back to the
+        /// defName. Worse, a <c>stages</c> list whose first entry is null makes it throw, since it reads
+        /// <c>stages[0].label</c> without checking. RimWorld never trips either one because it labels a thought
+        /// from the stage the pawn is actually in; the editor asks about every thought in the game, so it trips
+        /// both. Sixty log errors and two exceptions per opening of the thoughts panel, reported 2026-08-25.
+        ///
+        /// <b>So this scans the stages instead of trusting the first one,</b> skipping nulls, and takes the first
+        /// label it finds. On a withdrawal thought that is the first real stage rather than the placeholder, which
+        /// is also a better name than the defName vanilla would have given up and returned.
+        /// </summary>
+        private static string ThoughtLabel(ThoughtDef def)
+        {
+            if (!def.label.NullOrEmpty())
+                return def.label.CapitalizeFirst();
+
+            List<ThoughtStage> stages = def.stages;
+
+            if (stages != null)
+            {
+                for (int i = 0; i < stages.Count; i++)
+                {
+                    ThoughtStage stage = stages[i];
+
+                    if (stage == null)
+                        continue;
+
+                    if (!stage.label.NullOrEmpty())
+                        return stage.label.CapitalizeFirst();
+
+                    if (!stage.labelSocial.NullOrEmpty())
+                        return stage.labelSocial.CapitalizeFirst();
+                }
+            }
+
+            return def.defName;
         }
 
         /// <summary>A def's description for a hover, or null when it has none worth showing.</summary>

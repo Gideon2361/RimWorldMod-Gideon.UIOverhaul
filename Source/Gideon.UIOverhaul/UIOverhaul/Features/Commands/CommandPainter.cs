@@ -133,7 +133,12 @@ namespace Gideon.UIOverhaul.Features.Commands
             else if (over)
             {
                 fill = palette.SurfaceRaised;
-                edge = palette.BorderFocused;
+
+                // The accent, not BorderFocused. That role is the palette's dimmed accent for text field borders
+                // -- right for a box you type in, too quiet for a button, and a shade off what every other button
+                // in the mod does on hover. These are the buttons a player touches most, so of everything the
+                // sweep of 2026-08-25 corrected, this is the one that was costing the most.
+                edge = palette.Accent;
             }
             else if (on)
             {

@@ -568,7 +568,7 @@ namespace Gideon.UIOverhaul.Features.Editor
                 if (draggingNeed != key)
                 {
                     if (over && draggingNeed == null)
-                        Knob(track, need.CurLevel / Mathf.Max(0.0001f, max), context.Palette);
+                        EditorParts.Knob(track, need.CurLevel / Mathf.Max(0.0001f, max), context.Palette);
 
                     return;
                 }
@@ -576,24 +576,13 @@ namespace Gideon.UIOverhaul.Features.Editor
                 float wanted = Mathf.Clamp01((input.mousePosition.x - track.x)
                                              / Mathf.Max(1f, track.width)) * max;
 
-                Knob(track, wanted / Mathf.Max(0.0001f, max), context.Palette);
+                EditorParts.Knob(track, wanted / Mathf.Max(0.0001f, max), context.Palette);
 
                 // Recorded rather than assigned, so Revert all puts the need back and the footer counts it.
                 // Idempotent on a repeat: the change tracker keeps one entry per need whatever the mouse does.
                 if (Mathf.Abs(wanted - need.CurLevel) > 0.001f)
                     context.Changes.Set(need.def.label, () => need.CurLevel, v => need.CurLevel = v, wanted);
             }, null);
-        }
-
-        /// <summary>The grab handle: a square on the track at the value, in the palette's accent.</summary>
-        private static void Knob(Rect track, float fraction, UIColorPaletteDef palette)
-        {
-            const float size = 9f;
-
-            float x = track.x + Mathf.Round(track.width * Mathf.Clamp01(fraction));
-
-            Widgets.DrawBoxSolid(
-                new Rect(x - size * 0.5f, track.center.y - size * 0.5f, size, size), palette.Accent);
         }
 
         // ---------------------------------------------------------------------------------------

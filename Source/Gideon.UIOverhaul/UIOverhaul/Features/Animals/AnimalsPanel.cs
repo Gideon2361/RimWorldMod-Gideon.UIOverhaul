@@ -368,23 +368,16 @@ namespace Gideon.UIOverhaul.Features.Animals
                         break;
 
                     bool on = scope == which;
-                    bool over = Mouse.IsOver(button);
 
-                    if (on)
-                        UIElementPainter.FillRounded(button, palette.Accent);
-                    else
-                        UIElementPainter.OutlineRounded(button, palette.Border,
-                            over ? palette.SurfaceRaised : palette.PanelBackground);
-
-                    GUI.color = on ? palette.WindowBackground : palette.TextPrimary;
-
-                    Widgets.Label(button, label);
-
-                    if (Widgets.ButtonInvisible(button))
+                    // The mod's button with the chosen one toggled, rather than filled at full accent. A filled
+                    // button is the one thing a window exists to do, and a scope switch is not that -- it decides
+                    // what the list below shows. The control plays the click, so the one that was here is gone
+                    // rather than doubled.
+                    if (UIActionButtonControl.Draw(button, label, palette, false, true, GameFont.Small, null, on)
+                        && !on)
                     {
                         scope = which;
                         Grid.Scroll = Vector2.zero;
-                        SoundDefOf.Click.PlayOneShotOnCamera();
                     }
 
                     x += width + 4f;
@@ -1673,33 +1666,11 @@ namespace Gideon.UIOverhaul.Features.Animals
             if (group.Kind == AnimalKind.Colony)
             {
                 Rect button = new Rect(band.x + 4f, band.center.y - 11f, Mathf.Max(0f, band.width - 8f), 22f);
-                bool over = Mouse.IsOver(button);
-
-                UIElementPainter.PaintButton(button, palette, over, over && Input.GetMouseButton(0));
-
-                GameFont previousFont = Text.Font;
-                TextAnchor previousAnchor = Text.Anchor;
-                Color previousColor = GUI.color;
-
-                try
-                {
-                    Text.Font = GameFont.Tiny;
-                    Text.Anchor = TextAnchor.MiddleCenter;
-                    GUI.color = palette.TextPrimary;
-
-                    Widgets.Label(button, "Settings");
-                }
-                finally
-                {
-                    GUI.color = previousColor;
-                    Text.Anchor = previousAnchor;
-                    Text.Font = previousFont;
-                }
 
                 // Opens the pane on this species rather than a menu. The settings moved into the pane on
                 // 2026-08-22, so this button now goes where they went: a menu here and a settings block there
                 // would have been two ways to set one species, which is the thing the move was for.
-                if (Widgets.ButtonInvisible(button))
+                if (UIActionButtonControl.Draw(button, "Settings", palette, false, true, GameFont.Tiny))
                     ShowSpeciesSettings(group);
 
                 return;
@@ -2304,35 +2275,10 @@ namespace Gideon.UIOverhaul.Features.Animals
 
         private static float BillButton(Rect rect, string label, UIColorPaletteDef palette, Action act)
         {
-            bool over = Mouse.IsOver(rect);
-
-            UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(rect, label);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (Widgets.ButtonInvisible(rect))
-            {
+            // The control plays the click itself, so the one this used to play here is gone rather than
+            // doubled up.
+            if (UIActionButtonControl.Draw(rect, label, palette, false, true, GameFont.Tiny))
                 UIGuard.Try("Animals.BillButton", act, "The bill was not changed.");
-
-                SoundDefOf.Click.PlayOneShotOnCamera();
-            }
 
             return rect.x;
         }

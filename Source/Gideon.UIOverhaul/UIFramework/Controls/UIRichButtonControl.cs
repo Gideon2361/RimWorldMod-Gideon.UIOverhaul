@@ -247,7 +247,7 @@ namespace Gideon.UIFramework.Controls
                 if (HasBorder)
                 {
                     Color previous = GUI.color;
-                    GUI.color = over ? palette.BorderFocused : palette.Border;
+                    GUI.color = over ? palette.Accent : palette.Border;
                     Widgets.DrawBox(rect, 1);
                     GUI.color = previous;
                 }

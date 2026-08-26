@@ -1,4 +1,5 @@
 using System;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Options;
@@ -48,45 +49,28 @@ namespace Gideon.UIOverhaul.Features.Saves
         internal const float FooterHeight = 52f;
 
         /// <summary>
-        /// A button.
+        /// A button, and the mod's own one since 2026-08-25.
         ///
-        /// <b>Primary is filled at full accent, always.</b> An earlier version filled it with
+        /// <b>Primary is filled at full accent, always.</b> An earlier version here filled it with
         /// <c>AccentMuted</c> and only reached the accent on hover, which made the one button the window is
         /// built around look like the disabled one until the cursor touched it. Muted accent is a resting
-        /// surface, not a call to action.
+        /// surface, not a call to action. The control it now calls keeps that rule.
         /// </summary>
         internal static bool Button(Rect rect, string label, UIColorPaletteDef palette, bool primary = false)
         {
-            bool over = Mouse.IsOver(rect);
-
-            if (primary)
-            {
-                UIElementPainter.FillRounded(rect, palette.Accent);
-
-                if (over)
-                    UIElementPainter.FillRounded(rect, palette.HoverOverlay);
-            }
-            else
-            {
-                UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-            }
-
-            Write(rect, label, primary ? palette.WindowBackground : palette.TextPrimary, GameFont.Small);
-
-            return Widgets.ButtonInvisible(rect);
+            return UIActionButtonControl.Draw(rect, label, palette, primary, true, GameFont.Small);
         }
 
         /// <summary>
-        /// A button that cannot be pressed, in the palette's vocabulary for one.
+        /// A button that cannot be pressed.
         ///
-        /// Restores the anchor and color to what it found rather than to a guess: <c>Text.StartOfOnGUI</c>
-        /// checks that state each frame and complains once when it was left changed.
+        /// <b>The control's disabled state now, not a second drawing of one.</b> This one filled with
+        /// <c>ControlBackgroundFaded</c> and the bills window's filled with the panel background, so a refusing
+        /// button looked like two different things depending on which window was refusing. Unified 2026-08-25.
         /// </summary>
         internal static void Disabled(Rect rect, string label, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.ControlBackgroundFaded);
-
-            Write(rect, label, palette.TextDisabled, GameFont.Small);
+            UIActionButtonControl.Draw(rect, label, palette, false, false, GameFont.Small);
         }
 
         /// <summary>
@@ -99,7 +83,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         {
             bool over = Mouse.IsOver(rect);
 
-            UIElementPainter.OutlineRounded(rect, over ? palette.BorderFocused : palette.Border,
+            UIElementPainter.OutlineRounded(rect, over ? palette.Accent : palette.Border,
                 palette.PanelBackground);
 
             GameFont previousFont = Text.Font;
@@ -306,7 +290,7 @@ namespace Gideon.UIOverhaul.Features.Saves
         {
             bool over = Mouse.IsOver(rect);
 
-            UIElementPainter.OutlineRounded(rect, over ? palette.BorderFocused : palette.Border,
+            UIElementPainter.OutlineRounded(rect, over ? palette.Accent : palette.Border,
                 palette.PanelBackground);
 
             if (over)

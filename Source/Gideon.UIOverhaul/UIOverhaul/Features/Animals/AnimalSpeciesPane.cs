@@ -757,30 +757,8 @@ namespace Gideon.UIOverhaul.Features.Animals
         private static float Button(Rect view, float y, string label, UIColorPaletteDef palette, Action clicked)
         {
             Rect button = new Rect(view.x, y, view.width, 28f);
-            bool over = Mouse.IsOver(button);
 
-            UIElementPainter.PaintButton(button, palette, over, over && Input.GetMouseButton(0));
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(button, label);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (Widgets.ButtonInvisible(button))
+            if (UIActionButtonControl.Draw(button, label, palette))
                 clicked();
 
             return button.yMax + AnimalPaneParts.RowGap;

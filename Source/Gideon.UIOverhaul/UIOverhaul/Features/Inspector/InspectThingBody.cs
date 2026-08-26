@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Integrations;
+using HarmonyLib;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -100,6 +102,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             column = flow.Take(out y);
             flow.Give(column, Fuel(column, y, thing, palette));
+
+            column = flow.Take(out y);
+            flow.Give(column, Substructure(column, y, thing, palette));
+
+            column = flow.Take(out y);
+            flow.Give(column, Research(column, y, thing, palette));
+
+            column = flow.Take(out y);
+            flow.Give(column, Speed(column, y, thing, palette));
 
             column = flow.Take(out y);
             flow.Give(column, Bioferrite(column, y, thing, palette));
@@ -344,25 +355,37 @@ namespace Gideon.UIOverhaul.Features.Inspector
         ///
         /// <b>Red because it is a countdown, not a gauge.</b> Aaron asked for a red bar on 2026-08-25 and the
         /// reading is right: unlike fuel or charge, nothing about this bar being full is an achievement, and every
-        /// direction it moves on its own is downwards. The mark sits at the mod's own maintenance threshold, which
-        /// is the point below which a colonist will be sent to fix it, so a full-looking bar with the mark just
-        /// underneath reads as "about to become somebody's job" rather than as "fine".
+        /// direction it moves on its own is downwards.
+        ///
+        /// <b>No threshold mark on it.</b> It carried one at the mod's maintenance threshold, on the reasoning
+        /// that a full-looking bar with the mark just underneath reads as "about to become somebody's job". Aaron
+        /// took it off the same day, and the bar is better for it: the mark was a second reading to take from a
+        /// row that has one number in it, and the caption already says "due" the moment the threshold is crossed.
+        /// A bar answers "how much is left" and nothing else.
         ///
         /// <b>Placed after Condition on purpose.</b> That block already carries health and breakdown state, and
         /// maintenance is the thing that decides the second of those -- so it belongs beside it rather than up
         /// with the tanks, even though it is drawn like one.
         ///
-        /// Absent entirely without the mod, which is what an integration means here. See
+        /// <b>Without the mod it is a component count, not an empty space.</b> The block used to vanish entirely,
+        /// on the reading that maintenance is that mod's idea and nothing of ours. Half right: the schedule is
+        /// theirs, but the part a component plays is vanilla's, and a building that breaks down needs one fetched
+        /// before anybody can fix it. Aaron asked for the row on 2026-08-25. See
         /// <see cref="FluffyBreakdownsIntegration"/>.
         /// </summary>
         private static float Maintenance(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
             float? durability = FluffyBreakdownsIntegration.Durability(thing);
 
-            if (!durability.HasValue)
-                return y;
+            return durability.HasValue
+                ? Durability(view, y, durability.Value, palette)
+                : Components(view, y, thing, palette);
+        }
 
-            float level = Mathf.Clamp01(durability.Value);
+        /// <summary>How maintained the building is, on Fluffy Breakdowns' own reckoning.</summary>
+        private static float Durability(Rect view, float y, float value, UIColorPaletteDef palette)
+        {
+            float level = Mathf.Clamp01(value);
             float threshold = Mathf.Clamp01(FluffyBreakdownsIntegration.Threshold);
 
             bool wanting = level < threshold;
@@ -371,12 +394,279 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             y = InspectPaneParts.Need(view, y, "Components", InspectPaneParts.Percent(level),
                 wanting ? palette.Danger : palette.TextSecondary, level, palette.Danger,
-                new[] { threshold }, null, palette);
+                null, null, palette);
 
             return y + InspectPaneParts.BlockGap;
         }
 
-        /// <summary>A battery's own charge, which the grid total above does not tell you about this one.</summary>
+        /// <summary>
+        /// Whether the colony has a component to hand, for a building that can break down.
+        ///
+        /// <b>Stock, not state.</b> Condition already says whether this thing is broken, so repeating that here
+        /// would be a second row saying one fact. What it does not say is whether the repair can actually happen:
+        /// <c>WorkGiver_FixBrokenDownBuilding</c> sends a colonist to find a component first, and a colony with
+        /// none has a broken machine that nobody is coming to fix. That is the thing worth a row.
+        ///
+        /// <b>Counted from the map's own resource readout,</b> which is the same number the resource bar at the
+        /// top of the screen shows -- so it counts what is in a stockpile and ignores what is lying in the mud
+        /// outside, exactly as the work giver's own search effectively does.
+        /// </summary>
+        private static float Components(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            CompBreakdownable breakdown = UIGuard.Try("Inspector.MaintenanceComp",
+                thing.TryGetComp<CompBreakdownable>, null, null);
+
+            if (breakdown == null || thing.Map == null)
+                return y;
+
+            bool broken = UIGuard.Try("Inspector.MaintenanceBroken", () => breakdown.BrokenDown, false, null);
+
+            int held = UIGuard.Try("Inspector.ComponentStock",
+                () => thing.Map.resourceCounter.GetCount(ThingDefOf.ComponentIndustrial), 0, null);
+
+            y = InspectPaneParts.Cap(view, y, "Maintenance", broken ? "needs a part" : null, palette);
+
+            // Danger only when the shortage is currently costing something. A colony with no spares and nothing
+            // broken is a colony that is fine, and colouring that red would train the reader to ignore it.
+            Color color = held > 0
+                ? palette.TextSecondary
+                : broken
+                    ? palette.Danger
+                    : palette.Warning;
+
+            y = InspectPaneParts.Fact(view, y, "Components",
+                held > 0 ? held + " in store" : "none in store", color, palette);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// A gravship's substructure: how much of it a grav engine is holding, or how much a pylon adds.
+        ///
+        /// <b>A bar for the engine, because it is a budget being spent.</b> Vanilla writes "Connected
+        /// substructure: 931 / 1250" into the inspect string, which is two numbers you have to divide in your head
+        /// to answer the only question a player has: how much more can I build before the ship stops flying. A bar
+        /// answers it without arithmetic, and it warns before the ceiling rather than at it.
+        ///
+        /// <b>A plain figure for everything else, because it is a contribution.</b> A grav field extender adds
+        /// support and has no capacity of its own, so a bar would need a maximum that does not exist. Asked for on
+        /// 2026-08-26, both halves.
+        ///
+        /// <b>Read from the stat and the engine's own set,</b> not recounted. <c>SubstructureSupport</c> is what
+        /// the engine itself asks for its capacity, and <c>AllConnectedSubstructure</c> is the set it built while
+        /// deciding what flies. Counting substructure tiles ourselves would be a second opinion about which of
+        /// them are connected.
+        /// </summary>
+        private static float Substructure(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            Building_GravEngine engine = thing as Building_GravEngine;
+
+            if (engine != null)
+                return Engine(view, y, engine, palette);
+
+            if (!(thing is Building) || thing.Map == null)
+                return y;
+
+            float support = UIGuard.Try("Inspector.SubstructureSupport", () => Support(thing.def), 0f, null);
+
+            if (Mathf.Abs(support) < 0.5f)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Substructure", null, palette);
+
+            // Signed, because a negative one is a thing a mod can define and a bare number would read as a
+            // benefit either way.
+            y = InspectPaneParts.Fact(view, y, "Support",
+                (support > 0f ? "+" : string.Empty) + Mathf.RoundToInt(support),
+                support > 0f ? palette.Success : palette.Danger, palette);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// What a building contributes to a gravship's substructure support.
+        ///
+        /// <b>Not <c>GetStatValue</c>, which was the bug.</b> A grav field extender's +250 lives in its facility
+        /// comp's <c>statOffsets</c>, because a facility's offsets apply to the building it is linked to rather
+        /// than to itself -- that is what a facility is. Asking the extender for its own
+        /// <c>SubstructureSupport</c> therefore returns the stat's default base value, which is 1 because the def
+        /// declares no default. So the panel reported "+1" beside a game that said "+250", and it was our reading
+        /// that was wrong rather than vanilla's. Reported and fixed 2026-08-26.
+        ///
+        /// <b>The facility offset first, then the def's own base.</b> The offset is the contributing case and the
+        /// only one in the game today; the base is there for a thing that genuinely carries the stat itself, which
+        /// a mod may well add. Neither route can be confused with the absent case, which is what
+        /// <c>GetStatValue</c> could not manage.
+        /// </summary>
+        private static float Support(ThingDef def)
+        {
+            if (def == null)
+                return 0f;
+
+            CompProperties_Facility facility = def.GetCompProperties<CompProperties_Facility>();
+
+            float offset = Modifier(facility?.statOffsets);
+
+            return Mathf.Abs(offset) >= 0.5f ? offset : Modifier(def.statBases);
+        }
+
+        /// <summary>The substructure support entry in a list of stat modifiers, or zero when it has none.</summary>
+        private static float Modifier(List<StatModifier> modifiers)
+        {
+            if (modifiers == null)
+                return 0f;
+
+            for (int i = 0; i < modifiers.Count; i++)
+            {
+                StatModifier modifier = modifiers[i];
+
+                if (modifier != null && modifier.stat == StatDefOf.SubstructureSupport)
+                    return modifier.value;
+            }
+
+            return 0f;
+        }
+
+        /// <summary>How much of its capacity a grav engine's hull is using.</summary>
+        private static float Engine(Rect view, float y, Building_GravEngine engine, UIColorPaletteDef palette)
+        {
+            int used = UIGuard.Try("Inspector.SubstructureUsed",
+                () => engine.AllConnectedSubstructure?.Count ?? 0, 0, null);
+
+            float capacity = UIGuard.Try("Inspector.SubstructureCap",
+                () => engine.GetStatValue(StatDefOf.SubstructureSupport), 0f, null);
+
+            if (capacity < 0.5f)
+                return y;
+
+            float fraction = Mathf.Clamp01(used / capacity);
+
+            // Amber near the ceiling and red at it, because running out is what stops the ship flying rather than
+            // something that degrades gracefully.
+            Color tone = fraction >= 1f
+                ? palette.Danger
+                : fraction >= 0.9f
+                    ? palette.Warning
+                    : palette.Success;
+
+            y = InspectPaneParts.Cap(view, y, "Substructure",
+                fraction >= 1f ? "at capacity" : null, palette);
+
+            y = InspectPaneParts.Need(view, y, "Connected",
+                used + " / " + Mathf.RoundToInt(capacity), tone, fraction, tone, null,
+                fraction >= 1f ? "no room for more hull" : null, palette);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// A research bench: how fast it works, what it is working on, and how far along that is.
+        ///
+        /// <b>The progress bar is the reason this block exists.</b> Vanilla writes "1420 / 4000 (35.5%)" into the
+        /// inspect string, which is the answer to "how far along" spelled out three times and legible none of
+        /// them. It also puts the current project on the line below the grid readout, so the thing you selected
+        /// the bench to check is the last thing you read.
+        ///
+        /// <b>The speed factor comes first because it is the actionable one.</b> 87% means this bench is missing
+        /// something -- a laboratory room, a multi-analyzer -- and that is a thing a player can go and fix. The
+        /// project and its progress are status; the factor is a prompt.
+        ///
+        /// <b>Progress is the game's own apparent figures.</b> <c>ProgressApparent</c> and <c>CostApparent</c>
+        /// are scaled by the colony's tech level, which is what makes a low-tech colony's numbers larger than the
+        /// raw ones; showing the real pair instead would disagree with the research screen.
+        /// </summary>
+        private static float Research(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            if (!(thing is Building_ResearchBench))
+                return y;
+
+            float factor = UIGuard.Try("Inspector.ResearchFactor",
+                () => thing.GetStatValue(StatDefOf.ResearchSpeedFactor), 1f, null);
+
+            ResearchProjectDef project = UIGuard.Try("Inspector.ResearchProject",
+                () => Find.ResearchManager?.GetProject(), null, null);
+
+            y = InspectPaneParts.Cap(view, y, "Research", project == null ? "idle" : null, palette);
+
+            y = InspectPaneParts.Fact(view, y, "Speed", InspectPaneParts.Percent(factor),
+                Factor(factor, palette), palette);
+
+            if (project == null)
+            {
+                return InspectPaneParts.Fact(view, y, "Project", "None".Translate(), palette.TextDisabled,
+                    palette) + InspectPaneParts.BlockGap;
+            }
+
+            y = InspectPaneParts.Fact(view, y, "Project", project.LabelCap, palette.TextPrimary, palette);
+
+            float done = UIGuard.Try("Inspector.ResearchProgress", () => project.ProgressApparent, 0f, null);
+            float cost = UIGuard.Try("Inspector.ResearchCost", () => project.CostApparent, 0f, null);
+
+            float fraction = cost <= 0f ? 0f : Mathf.Clamp01(done / cost);
+
+            y = InspectPaneParts.Need(view, y, "Progress",
+                Mathf.RoundToInt(done) + " / " + Mathf.RoundToInt(cost), palette.TextSecondary, fraction,
+                InspectPaneParts.Level(fraction, palette), null, null, palette);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// How fast a workbench works, when something is making it faster or slower than it should be.
+        ///
+        /// <b>Said only when it is not 100%.</b> A bench at full speed has nothing to report, and a row saying so
+        /// on every bench in the colony is a row players learn to skip -- which costs them the one time it says
+        /// 62%. Vanilla prints it either way.
+        ///
+        /// <b>Research benches are excluded because they have their own block above,</b> which reports the same
+        /// idea against the research stat rather than the worktable one.
+        /// </summary>
+        private static float Speed(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            if (!(thing is Building_WorkTable) || thing is Building_ResearchBench)
+                return y;
+
+            float factor = UIGuard.Try("Inspector.WorkFactor",
+                () => thing.GetStatValue(StatDefOf.WorkTableWorkSpeedFactor), 1f, null);
+
+            if (Mathf.Abs(factor - 1f) < 0.005f)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Speed", null, palette);
+
+            y = InspectPaneParts.Fact(view, y, "Work speed", InspectPaneParts.Percent(factor),
+                Factor(factor, palette), palette);
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// The colour for a multiplier: green above par, amber below, plain at it.
+        ///
+        /// <b>Above 100% is coloured too,</b> because a bench a mod or a facility has made faster is as worth
+        /// noticing as one something has slowed down, and leaving it plain would say the bonus did not count.
+        /// </summary>
+        private static Color Factor(float factor, UIColorPaletteDef palette)
+        {
+            if (factor > 1.005f)
+                return palette.Success;
+
+            return factor < 0.995f ? palette.Warning : palette.TextSecondary;
+        }
+
+        /// <summary>
+        /// A battery's own charge, which the grid total above does not tell you about this one.
+        ///
+        /// <b>Efficiency and self-discharge are the two facts that explain the bar.</b> Asked for on 2026-08-26.
+        /// A player watching a bank of batteries fail to fill is looking at a 50% efficiency they had forgotten
+        /// about, and one watching them empty overnight with nothing switched on is looking at self-discharge.
+        /// Neither is visible from the bar, and neither changes, which is exactly why they are easy to forget.
+        ///
+        /// <b>Self-discharge is said even at zero, as "none".</b> An empty battery is not losing anything, and
+        /// printing 5 W beside an empty bar would be describing a drain that is not happening -- but dropping the
+        /// row entirely, as vanilla does, makes the fact appear and disappear depending on charge and reads as a
+        /// panel that cannot make up its mind.
+        /// </summary>
         private static float Charge(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
             CompPowerBattery battery = UIGuard.Try("Inspector.BatteryComp",
@@ -394,8 +684,48 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
                 palette);
 
+            float efficiency = UIGuard.Try("Inspector.BatteryEfficiency",
+                () => battery.Props != null ? battery.Props.efficiency : 1f, 1f, null);
+
+            y = InspectPaneParts.Fact(view, y, "Efficiency", InspectPaneParts.Percent(efficiency),
+                palette.TextSecondary, palette);
+
+            y = InspectPaneParts.Fact(view, y, "Self-discharge",
+                stored > 0f ? Mathf.RoundToInt(SelfDischargeWatts) + " W" : "none",
+                stored > 0f ? palette.TextSecondary : palette.TextDisabled, palette);
+
             return y + InspectPaneParts.BlockGap;
         }
+
+        /// <summary>
+        /// What a battery loses to self-discharge, read out of RimWorld rather than copied from it.
+        ///
+        /// <b>It is a private const, so this reads the constant itself.</b> Vanilla writes the literal <c>5f</c>
+        /// into its own inspect string beside the const it should have used, which is how a number ends up
+        /// disagreeing with itself. Reading the field means our figure follows theirs if it ever changes, and the
+        /// fallback is only reached if the field is renamed -- in which case 5 is still what the game shipped.
+        /// </summary>
+        private static float SelfDischargeWatts
+        {
+            get
+            {
+                if (selfDischarge.HasValue)
+                    return selfDischarge.Value;
+
+                selfDischarge = UIGuard.Try("Inspector.BatteryDischargeConst", () =>
+                {
+                    FieldInfo field = AccessTools.Field(typeof(CompPowerBattery), "SelfDischargingWatts");
+
+                    object value = field?.GetRawConstantValue();
+
+                    return value is float ? (float) value : 5f;
+                }, 5f, null);
+
+                return selfDischarge.Value;
+            }
+        }
+
+        private static float? selfDischarge;
 
         /// <summary>Fuel, against the level it is being refilled to rather than against the tank.</summary>
         private static float Fuel(Rect view, float y, Thing thing, UIColorPaletteDef palette)

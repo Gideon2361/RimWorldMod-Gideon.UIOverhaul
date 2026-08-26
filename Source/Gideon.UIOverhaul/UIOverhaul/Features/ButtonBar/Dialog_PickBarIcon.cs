@@ -186,7 +186,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                 Widgets.DrawBoxSolid(cell, palette.HoverOverlay);
 
             Color previous = GUI.color;
-            GUI.color = chosen || over ? palette.BorderFocused : palette.Border;
+            GUI.color = chosen || over ? palette.Accent : palette.Border;
             Widgets.DrawBox(cell, 1);
 
             // Tinted on the same ramp the bar uses, so the grid previews what the button will look like
@@ -207,22 +207,17 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             Close();
         }
 
+        /// <summary>
+        /// A button, and the mod's own one since 2026-08-25.
+        ///
+        /// <b>It used to set no font at all,</b> which meant it took whatever the last thing drawn had left in
+        /// <c>Text.Font</c> -- so its size depended on what happened to be above it rather than on what it is.
+        /// Naming it Small and then not saying so is the same defect the window titles have to guard against by
+        /// resetting the font on the line after they use Medium. It is Small now because it says it is.
+        /// </summary>
         private static bool SmallButton(Rect r, string label, UIColorPaletteDef palette)
         {
-            bool over = Mouse.IsOver(r);
-            UIElementPainter.PaintButton(r, palette, over, over && Input.GetMouseButton(0));
-
-            Color previousColor = GUI.color;
-            TextAnchor previousAnchor = Text.Anchor;
-
-            GUI.color = palette.TextPrimary;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(r, label);
-
-            Text.Anchor = previousAnchor;
-            GUI.color = previousColor;
-
-            return Widgets.ButtonInvisible(r);
+            return UIActionButtonControl.Draw(r, label, palette, false, true, GameFont.Small);
         }
     }
 }

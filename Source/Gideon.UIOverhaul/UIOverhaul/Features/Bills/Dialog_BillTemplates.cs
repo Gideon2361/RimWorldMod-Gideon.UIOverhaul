@@ -286,21 +286,13 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             if (!ready)
             {
-                UIElementPainter.OutlineRounded(apply, palette.Border, palette.ControlBackgroundFaded);
-
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextDisabled;
-
-                Widgets.Label(apply, "Apply to bill");
-
-                Text.Anchor = TextAnchor.UpperLeft;
-
-                if (Mouse.IsOver(apply) && chosen != null && target == null)
-                {
-                    TooltipHandler.TipRegion(apply,
-                        (TipSignal)"Select a bill first, or use Make on a bench to create a new one.");
-                }
+                // The control's own disabled state, rather than the copy of it that used to live here. The two had
+                // drifted -- this one drew a faded control background where the control draws a panel one -- so
+                // the same button looked different depending on which window refused it.
+                UIActionButtonControl.Draw(apply, "Apply to bill", palette, true, false, GameFont.Small,
+                    chosen != null && target == null
+                        ? "Select a bill first, or use Make on a bench to create a new one."
+                        : null);
 
                 return;
             }

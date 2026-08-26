@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Defs>
+
+  <!--
+    Convert, then recruit. A child of Convert the way "reduce resistance only" is a child of Recruit, so it
+    sits under it in the prisoner tab and reads as a variant of it rather than a mode of its own.
+
+    listOrder 29 puts it directly after Convert at 28, which is what makes it draw indented beneath it.
+
+    allowInClassicIdeoMode is false for the same reason Convert's is: there is no conversion to do when
+    ideoligions are switched off, and a mode that can never make progress should not be offered.
+
+    hideIfNotRecruitable is true because this one ends in a recruitment. Convert itself does not carry that
+    flag, and correctly so: converting a prisoner you can never recruit is still worth doing.
+
+    MayRequire is what keeps it out of a game without Ideology. Vanilla has no "requires this DLC" flag on the
+    def itself and does not need one, because its own Convert lives inside the Ideology data folder and so is
+    simply absent. Ours cannot be, so it says so here instead. allowInClassicIdeoMode covers the other case,
+    where Ideology is installed and ideoligions are switched off.
+
+    Note for whoever edits this comment: XML forbids a double hyphen inside a comment. An earlier draft used
+    one as a dash, the whole file failed to parse, and the def silently did not exist.
+  -->
+  <PrisonerInteractionModeDef MayRequire="Ludeon.RimWorld.Ideology">
+    <defName>Gideon_ConvertThenRecruit</defName>
+    <label>recruit</label>
+    <isChildInteraction>true</isChildInteraction>
+    <listOrder>29</listOrder>
+    <description>Wardens will attempt to convert the prisoner to their ideoligion, then switch to recruiting them once the conversion succeeds. A converted prisoner is far easier to recruit, so this is the patient route to a new colonist.</description>
+    <allowInClassicIdeoMode>false</allowInClassicIdeoMode>
+    <hideIfNotRecruitable>true</hideIfNotRecruitable>
+  </PrisonerInteractionModeDef>
+
+</Defs>

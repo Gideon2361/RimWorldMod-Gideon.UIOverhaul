@@ -290,27 +290,17 @@ namespace Gideon.UIOverhaul.Features.Bills
             return bar.yMax;
         }
 
-        /// <summary>A filter toggle. Returns its width so the next one can sit beside it.</summary>
+        /// <summary>
+        /// A filter toggle. Returns its width so the next one can sit beside it.
+        ///
+        /// <b>It is the mod's button with the toggled state set, not a shape of its own.</b> Drawn by hand it
+        /// answered the pointer in no way at all -- no fill, no border, no sound -- so Needs attention and
+        /// Suspended read as two captions somebody had drawn a box around. Reported on 2026-08-25. Nothing about
+        /// its appearance changed except that it now reacts.
+        /// </summary>
         private static float Chip(Rect rect, string label, ref bool on, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, on ? palette.Accent : palette.Border,
-                on ? palette.AccentMuted : palette.PanelBackground);
-
-            GameFont font = Text.Font;
-            TextAnchor anchor = Text.Anchor;
-            Color color = GUI.color;
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = on ? palette.Accent : palette.TextSecondary;
-
-            Widgets.Label(rect, label);
-
-            GUI.color = color;
-            Text.Anchor = anchor;
-            Text.Font = font;
-
-            if (Widgets.ButtonInvisible(rect))
+            if (UIActionButtonControl.Draw(rect, label, palette, false, true, GameFont.Tiny, null, on))
                 on = !on;
 
             return rect.width;
@@ -999,22 +989,19 @@ namespace Gideon.UIOverhaul.Features.Bills
             return row.yMax + 4f;
         }
 
+        /// <summary>
+        /// One segment of a radio row: the mod's button, with the selected one toggled on.
+        ///
+        /// <b>Hand drawn until 2026-08-25, and it showed.</b> It painted its own outline and never looked at the
+        /// mouse, so a row of these sat in a window full of buttons that all lit up when the pointer crossed them
+        /// and stayed dark. The control has a toggled state for exactly this -- accent border, accent text, muted
+        /// accent fill -- so the look is unchanged and the behaviour is now everyone else's.
+        /// </summary>
         private void Mode(Rect rect, BillRepeatModeDef mode, string label, UIColorPaletteDef palette)
         {
             bool on = selected.repeatMode == mode;
 
-            UIElementPainter.OutlineRounded(rect, on ? palette.Accent : palette.Border,
-                on ? palette.AccentMuted : palette.PanelBackground);
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = on ? palette.Accent : palette.TextSecondary;
-
-            Widgets.Label(rect, label);
-
-            Text.Anchor = TextAnchor.UpperLeft;
-
-            if (Widgets.ButtonInvisible(rect))
+            if (UIActionButtonControl.Draw(rect, label, palette, false, true, GameFont.Tiny, null, on) && !on)
                 selected.repeatMode = mode;
         }
 

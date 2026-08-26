@@ -467,30 +467,8 @@ namespace Gideon.UIOverhaul.Features.Animals
             y = AnimalPaneParts.Heading(view, y, "THIS ANIMAL", palette);
 
             Rect button = new Rect(view.x, y, view.width, 28f);
-            bool over = Mouse.IsOver(button);
 
-            UIElementPainter.PaintButton(button, palette, over, over && Input.GetMouseButton(0));
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = palette.TextPrimary;
-
-                Widgets.Label(button, "Show me on the map");
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (Widgets.ButtonInvisible(button))
+            if (UIActionButtonControl.Draw(button, "Show me on the map", palette))
                 PawnCameraJump.Request(animal);
 
             return button.yMax + 6f;

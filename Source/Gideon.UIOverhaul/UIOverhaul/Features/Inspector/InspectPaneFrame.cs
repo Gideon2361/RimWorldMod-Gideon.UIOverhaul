@@ -278,6 +278,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             // nearly every animal in the game; see AnimalRenameButton for the condition that does it.
             lineEndWidth += Animals.AnimalRenameButton.Draw(rect, lineEndWidth, pawn);
 
+            // Leftmost of the corner icons, and the only one drawn in a colour of its own. See IdeoBadge.
+            lineEndWidth += IdeoBadge.Draw(rect, lineEndWidth, pawn, palette);
+
             float nameX = 0f;
 
             if (full && pawn != null)

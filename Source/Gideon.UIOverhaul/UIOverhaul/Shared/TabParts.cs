@@ -1,4 +1,5 @@
 using System;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using UnityEngine;
@@ -320,57 +321,19 @@ namespace Gideon.UIOverhaul.Shared
         /// picker leans on hardest: an operation you cannot do yet is a shopping list entry, and a missing button
         /// would leave nothing to hover.
         /// </summary>
+        /// <summary>
+        /// The tab strips' name for the mod's button.
+        ///
+        /// <b>The drawing moved to <see cref="UIActionButtonControl"/> and this is the seventy-two call sites'
+        /// shorthand.</b> What it drew was nearly right and wrong in one specific way: its border was
+        /// <c>palette.Border</c> whatever the pointer was doing, so the corpse pane's Strip buttons lifted their
+        /// fill on hover and never gained the accent edge every other button in the mod had. Reported on
+        /// 2026-08-25. The ellipsing label and the tooltip came with it, so nothing was lost in the move.
+        /// </summary>
         internal static bool Button(Rect rect, string label, UIColorPaletteDef palette, bool enabled = true,
             bool primary = false, string tooltip = null)
         {
-            bool over = enabled && Mouse.IsOver(rect);
-            bool held = over && Input.GetMouseButton(0);
-
-            if (primary && enabled)
-                UIElementPainter.FillRounded(rect, held ? palette.AccentMuted : palette.Accent);
-            else
-                UIElementPainter.OutlineRounded(rect, palette.Border,
-                    !enabled ? palette.PanelBackground : over ? palette.SurfaceRaised : palette.SurfaceSunken);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Text.WordWrap = false;
-
-                GUI.color = !enabled
-                    ? palette.TextDisabled
-                    : primary
-                        ? palette.WindowBackground
-                        : palette.TextPrimary;
-
-                // Ellipsed rather than clipped, which is what turned "Default care: herbal medicine or worse"
-                // into "ault care: herbal medicine or wo" on the hospital strip: a centred label too wide for
-                // its rect loses both ends and gives no sign that it did.
-                UIRichText.Label(rect, label);
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (!tooltip.NullOrEmpty())
-                TooltipHandler.TipRegion(rect, (TipSignal) tooltip);
-
-            if (!enabled || !Widgets.ButtonInvisible(rect))
-                return false;
-
-            SoundDefOf.Click.PlayOneShotOnCamera();
-
-            return true;
+            return UIActionButtonControl.Draw(rect, label, palette, primary, enabled, GameFont.Small, tooltip);
         }
 
         /// <summary>

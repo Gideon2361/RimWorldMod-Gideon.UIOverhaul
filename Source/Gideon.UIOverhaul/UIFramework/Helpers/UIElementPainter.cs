@@ -217,6 +217,14 @@ namespace Gideon.UIFramework.Helpers
         /// from that rule and from its neighbours, leaving a lit arc floating above the tab -- which is exactly
         /// what it looked like. A strip of abutting controls has no corners to round; only the strip does.
         /// </param>
+        /// <summary>
+        /// <b>The hover border is the accent, matching <c>UIActionButtonControl</c> exactly.</b> It used to be
+        /// <see cref="UIColorPaletteDef.BorderFocused"/>, which the palette defines as a <i>dimmed</i> accent for
+        /// field borders -- correct for a text box, too quiet for a button, and different from what the mod's own
+        /// button control does. Every icon button in the mod paints through here, so one line puts the button bar,
+        /// the schedule brushes, the work tools and the pawn tools on the same hover as everything else. Changed
+        /// 2026-08-25 on Aaron's report that buttons were not answering the pointer consistently.
+        /// </summary>
         internal static void PaintButton(Rect rect, UIColorPaletteDef palette, bool over, bool held,
             bool border = true, bool rounded = true)
         {
@@ -245,7 +253,7 @@ namespace Gideon.UIFramework.Helpers
 
                 if (border)
                 {
-                    GUI.color = over ? palette.BorderFocused : palette.Border;
+                    GUI.color = over ? palette.Accent : palette.Border;
                     Widgets.DrawBox(rect, 1);
                 }
 
@@ -257,7 +265,7 @@ namespace Gideon.UIFramework.Helpers
             // The border is drawn as a rounded outline rather than with DrawBox, which only knows how to draw
             // square corners and would leave four hard ticks poking past the curve.
             if (border)
-                OutlineRounded(rect, over ? palette.BorderFocused : palette.Border, palette.SurfaceRaised);
+                OutlineRounded(rect, over ? palette.Accent : palette.Border, palette.SurfaceRaised);
             else
                 FillRounded(rect, palette.SurfaceRaised);
 

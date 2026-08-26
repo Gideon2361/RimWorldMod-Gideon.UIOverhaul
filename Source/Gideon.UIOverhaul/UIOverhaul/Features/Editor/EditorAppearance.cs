@@ -292,6 +292,13 @@ namespace Gideon.UIOverhaul.Features.Editor
                     {
                         Label = EditorParts.LabelOf(def),
                         Note = Gendered(def.styleGender),
+
+                        // <b>Drawn in the pawn's own hair colour,</b> not white. A hairstyle is a silhouette, and
+                        // two hundred silhouettes all in the same flat white is a page of blobs -- the colour is
+                        // what makes one of them look like this pawn's hair rather than like a shape.
+                        Icon = def,
+                        IconColor = HairColorOf(pawn),
+
                         Current = def == pawn.story.hairDef,
                         Chosen = () => context.Changes.Set("hair", () => pawn.story.hairDef,
                             value =>
@@ -307,6 +314,20 @@ namespace Gideon.UIOverhaul.Features.Editor
             }, null);
 
             Dialog_PickFrom.Open("Choose hair", options, "Search hair");
+        }
+
+        /// <summary>
+        /// The colour to draw a hair or beard preview in.
+        ///
+        /// <b>Read off the pawn rather than taken from the def,</b> because a hairstyle has no colour of its own:
+        /// the graphic is a mask and the colour comes from whoever is wearing it. Falls back to white so a pawn
+        /// with no story -- which the editor can be pointed at mid-construction -- still draws something visible
+        /// rather than nothing at all.
+        /// </summary>
+        private static Color HairColorOf(Pawn pawn)
+        {
+            return UIGuard.Try("Editor.HairColor", () => pawn?.story?.HairColor ?? Color.white, Color.white,
+                null);
         }
 
         private static string Gendered(StyleGender gender)
@@ -327,28 +348,33 @@ namespace Gideon.UIOverhaul.Features.Editor
         }
 
         /// <summary>
-        /// Hair colours, from RimWorld's own eight.
+        /// Hair colour, from every colour the styling station offers.
         ///
-        /// <c>PawnHairColors</c> exposes them as named statics; the gene-driven ones behind it are private. Eight
-        /// natural colours is what a picker of this size can show, and a gene that overrides hair colour will win
-        /// over any of them, which the note under the block says.
+        /// <b>It used to be six swatches drawn in the cell.</b> They were <c>PawnHairColors</c>' named statics,
+        /// which is all that class exposes -- and the game's real palette is the <c>ColorDef</c>s the styling
+        /// station reads, which is far more than six. A row showing the first six of forty looks like the whole
+        /// choice, so it was worse than showing none. Replaced with a picker on 2026-08-25; see
+        /// <see cref="Dialog_PickColor"/>.
+        ///
+        /// A gene that overrides hair colour still wins over anything set here, which the note under the block
+        /// says.
         /// </summary>
         private static void HairColor(Rect cell, EditorContext context, UIColorPaletteDef palette)
         {
             Pawn pawn = context.Pawn;
 
-            List<Color> colours = new List<Color>
-            {
-                PawnHairColors.DarkBlack, PawnHairColors.MidBlack, PawnHairColors.DarkBrown,
-                PawnHairColors.ReddishBrown, PawnHairColors.SandyBlonde, PawnHairColors.Blonde
-            };
-
             Color current = UIGuard.Try("Editor.HairColorNow", () => pawn.story.HairColor, Color.white, null);
 
-            Color? chosen = EditorParts.Swatches(cell, "hair colour", colours, current, palette);
-
-            if (!chosen.HasValue)
+            if (!EditorParts.ColorButton(cell, "hair colour", current, palette))
                 return;
+
+            Dialog_PickColor.Open("Hair colour", current, picked => Apply(context, picked));
+        }
+
+        /// <summary>Records a hair colour through the editor's own undo, as every other change goes.</summary>
+        private static void Apply(EditorContext context, Color chosen)
+        {
+            Pawn pawn = context.Pawn;
 
             context.Changes.Set("hair colour", () => pawn.story.HairColor,
                 value =>
@@ -356,7 +382,7 @@ namespace Gideon.UIOverhaul.Features.Editor
                     pawn.story.HairColor = value;
 
                     EditorParts.Redraw(pawn);
-                }, chosen.Value);
+                }, chosen);
         }
 
         private static void Beard(Rect cell, EditorContext context, UIColorPaletteDef palette)
@@ -388,6 +414,8 @@ namespace Gideon.UIOverhaul.Features.Editor
                     {
                         Label = EditorParts.LabelOf(def),
                         Note = Gendered(def.styleGender),
+                        Icon = def,
+                        IconColor = HairColorOf(pawn),
                         Current = def == pawn.style.beardDef,
                         Chosen = () => context.Changes.Set("beard", () => pawn.style.beardDef,
                             value =>

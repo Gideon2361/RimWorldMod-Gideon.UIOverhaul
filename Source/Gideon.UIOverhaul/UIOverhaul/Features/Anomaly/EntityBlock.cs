@@ -1,3 +1,5 @@
+using System;
+using System.Globalization;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Inspector;
@@ -116,6 +118,7 @@ namespace Gideon.UIOverhaul.Features.Anomaly
                     palette.TextDisabled, palette);
 
                 y = Conditions(view, y, platform, palette);
+                y = Breakdown(view, y, platform, palette);
 
                 return y + InspectPaneParts.BlockGap;
             }
@@ -139,6 +142,7 @@ namespace Gideon.UIOverhaul.Features.Anomaly
                 enough ? null : "too weak to hold this", palette);
 
             y = Conditions(view, y, platform, palette);
+            y = Breakdown(view, y, platform, palette);
 
             CompHoldingPlatformTarget target = held.TryGetComp<CompHoldingPlatformTarget>();
 
@@ -183,6 +187,106 @@ namespace Gideon.UIOverhaul.Features.Anomaly
             }
 
             return y;
+        }
+
+        /// <summary>
+        /// What the containment number is actually made of: lighting, walls, doors, floor, and the rest.
+        ///
+        /// <b>Read from the stat's own explanation rather than worked out again.</b>
+        /// <c>StatWorker_ContainmentStrength</c> computes all of this in <c>CalculateValues</c>, which is private,
+        /// as is the struct it returns -- so the choice was to reimplement the arithmetic or to ask the game what
+        /// it already decided. Reimplementing it would mean owning a copy of curves, a 0.9 per-platform falloff
+        /// and a -30 roof penalty that Ludeon can change in a patch, and being quietly wrong the day they do.
+        /// <c>GetExplanationUnfinalized</c> is public, is what the info card shows, and hands back exactly these
+        /// factors already worded and already translated.
+        ///
+        /// <b>So what is written here is a layout, not a calculation.</b> One line becomes one row, the label on
+        /// the left and the number on the right, coloured by whether it is helping or hurting -- which is the
+        /// question the wall of text in the info card makes you work out for yourself.
+        ///
+        /// <b>Nothing at all outdoors, and that is correct.</b> The stat worker returns an empty set of values for
+        /// a room that is psychologically outdoors or touches the map edge, because none of these factors apply
+        /// there. <see cref="Conditions"/> is what says so in words, which is why it stays.
+        /// </summary>
+        private static float Breakdown(Rect view, float y, Building_HoldingPlatform platform,
+            UIColorPaletteDef palette)
+        {
+            if (!platform.Spawned)
+                return y;
+
+            string explanation = UIGuard.Try("Anomaly.ContainmentExplanation",
+                () => StatDefOf.ContainmentStrength.Worker.GetExplanationUnfinalized(
+                    StatRequest.For(platform), ToStringNumberSense.Absolute), null, null);
+
+            if (explanation.NullOrEmpty())
+                return y;
+
+            string[] lines = explanation.Split('\n');
+
+            bool captioned = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+
+                if (line.Length == 0)
+                    continue;
+
+                // Split at the last colon rather than the first: the value never contains one, and a translated
+                // label might.
+                int split = line.LastIndexOf(": ", StringComparison.Ordinal);
+
+                if (split <= 0 || split + 2 >= line.Length)
+                    continue;
+
+                string label = line.Substring(0, split).Trim();
+                string value = line.Substring(split + 2).Trim();
+
+                if (label.Length == 0 || value.Length == 0)
+                    continue;
+
+                if (!captioned)
+                {
+                    y = InspectPaneParts.Cap(view, y, "Made up of", null, palette);
+
+                    captioned = true;
+                }
+
+                y = InspectPaneParts.Fact(view, y, label, value, Tone(value, palette), palette);
+            }
+
+            return y;
+        }
+
+        /// <summary>
+        /// Green for what is helping, red for what is costing, plain for a multiplier.
+        ///
+        /// <b>Parsed in the current culture first.</b> The stat worker formats these with <c>{0:F2}</c>, which
+        /// follows the player's locale -- so a German game writes "-30,00" and an invariant parse would read that
+        /// as nothing at all and colour a penalty as neutral. Invariant is the fallback rather than the rule.
+        /// </summary>
+        private static Color Tone(string value, UIColorPaletteDef palette)
+        {
+            // A multiplier is neither a gain nor a loss on its own: x0.90 is a penalty and x1.10 is not, but the
+            // number it acts on is every row above it, so colouring it either way would overstate it.
+            if (value.StartsWith("x", StringComparison.OrdinalIgnoreCase))
+                return palette.TextSecondary;
+
+            int end = value.IndexOf(' ');
+            string number = end > 0 ? value.Substring(0, end) : value;
+
+            float parsed;
+
+            if (!float.TryParse(number, NumberStyles.Float, CultureInfo.CurrentCulture, out parsed)
+                && !float.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out parsed))
+            {
+                return palette.TextSecondary;
+            }
+
+            if (parsed > 0f)
+                return palette.Success;
+
+            return parsed < 0f ? palette.Danger : palette.TextSecondary;
         }
 
         /// <summary>

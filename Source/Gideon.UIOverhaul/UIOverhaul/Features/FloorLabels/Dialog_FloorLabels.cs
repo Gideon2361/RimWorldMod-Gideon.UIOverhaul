@@ -555,35 +555,7 @@ namespace Gideon.UIOverhaul.Features.FloorLabels
 
         private static bool Button(Rect rect, string label, UIColorPaletteDef palette, bool primary)
         {
-            bool over = Mouse.IsOver(rect);
-
-            if (primary)
-            {
-                UIElementPainter.FillRounded(rect, palette.Accent);
-
-                if (over)
-                    UIElementPainter.FillRounded(rect, palette.HoverOverlay);
-            }
-            else
-            {
-                UIElementPainter.PaintButton(rect, palette, over, over && Input.GetMouseButton(0));
-            }
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            GUI.color = primary ? palette.WindowBackground : palette.TextPrimary;
-
-            Widgets.Label(rect, label);
-
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
-
-            return Widgets.ButtonInvisible(rect);
+            return UIActionButtonControl.Draw(rect, label, palette, primary, true, GameFont.Tiny);
         }
 
         /// <summary>Writes the name and color into the store, then rereads the list so the row agrees.</summary>

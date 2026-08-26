@@ -248,37 +248,20 @@ namespace Gideon.UIOverhaul.Features.Bills
             y += 40f;
         }
 
-        /// <summary>One of the three repeat modes, on or off. The whole segment is the hit target.</summary>
+        /// <summary>
+        /// One segment of a radio row: the mod's button, with the selected one toggled on.
+        ///
+        /// <b>Hand drawn until 2026-08-25, and it showed.</b> It painted its own outline and never looked at the
+        /// mouse, so a row of these sat in a window full of buttons that all lit up when the pointer crossed them
+        /// and stayed dark. The control has a toggled state for exactly this -- accent border, accent text, muted
+        /// accent fill -- so the look is unchanged and the behaviour is now everyone else's.
+        /// </summary>
         private static void Mode(Rect rect, Bill_Production bill, BillRepeatModeDef mode, string label,
             UIColorPaletteDef palette)
         {
             bool on = bill.repeatMode == mode;
 
-            UIElementPainter.OutlineRounded(rect, on ? palette.Accent : palette.Border,
-                on ? palette.AccentMuted : palette.PanelBackground);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Text.WordWrap = false;
-                GUI.color = on ? palette.Accent : palette.TextSecondary;
-
-                Widgets.Label(rect, label);
-            }
-            finally
-            {
-                Text.WordWrap = true;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (Widgets.ButtonInvisible(rect))
+            if (UIActionButtonControl.Draw(rect, label, palette, false, true, GameFont.Tiny, null, on) && !on)
                 bill.repeatMode = mode;
         }
 

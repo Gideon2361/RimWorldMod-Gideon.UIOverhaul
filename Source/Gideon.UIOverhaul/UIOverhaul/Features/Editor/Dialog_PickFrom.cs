@@ -39,6 +39,19 @@ namespace Gideon.UIOverhaul.Features.Editor
         internal string Marked;
 
         internal Action Chosen;
+
+        /// <summary>
+        /// The def to draw a picture of, when this option is one you choose by looking rather than by reading.
+        ///
+        /// <b>A def rather than a texture,</b> because <c>Widgets.DefIcon</c> is what knows how to turn one into a
+        /// picture -- including a hair or beard, which has no icon of its own and is drawn from its south-facing
+        /// graphic. Handing it the def means a style added by another mod draws exactly as it does in the game's
+        /// own styling station.
+        /// </summary>
+        internal Def Icon;
+
+        /// <summary>What colour to draw <see cref="Icon"/> in. Hair and beards take the pawn's own hair colour.</summary>
+        internal Color IconColor = Color.white;
     }
 
     /// <summary>
@@ -62,6 +75,22 @@ namespace Gideon.UIOverhaul.Features.Editor
 
         private const float Pad = 8f;
 
+        /// <summary>How wide a tile is, and how tall. The extra height is the name under the picture.</summary>
+        private const float TileWidth = 84f;
+
+        private const float TileHeight = 104f;
+
+        private const float TileGap = 6f;
+
+        /// <summary>
+        /// Whether this picker shows pictures in a grid instead of names in a list.
+        ///
+        /// <b>Decided by the options rather than by a flag the caller passes.</b> A picker draws tiles exactly
+        /// when every option has something to draw, which is a question the options can answer themselves -- and
+        /// it means a call site cannot ask for tiles and then supply half of them.
+        /// </summary>
+        private readonly bool tiled;
+
         private readonly string heading;
 
         private readonly List<EditorOption> options;
@@ -80,6 +109,8 @@ namespace Gideon.UIOverhaul.Features.Editor
         {
             this.heading = heading;
             this.options = options;
+
+            tiled = Drawable(options);
 
             search.Placeholder = placeholder ?? "Search";
 
@@ -103,9 +134,31 @@ namespace Gideon.UIOverhaul.Features.Editor
             Find.WindowStack.Add(new Dialog_PickFrom(heading, options, placeholder));
         }
 
+        /// <summary>Whether every option carries a picture, which is what makes this a grid.</summary>
+        private static bool Drawable(List<EditorOption> options)
+        {
+            if (options == null || options.Count == 0)
+                return false;
+
+            for (int i = 0; i < options.Count; i++)
+            {
+                if (options[i]?.Icon == null)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Wider and taller when it is showing pictures.
+        ///
+        /// <b>Six tiles to a row.</b> Two hundred hairstyles at one name per line is a list nobody reads to the
+        /// end of; the same two hundred as pictures is something you scan. The window has to be wide enough that
+        /// scanning is what it feels like, which a 420 pixel column is not.
+        /// </summary>
         public override Vector2 InitialSize
         {
-            get { return new Vector2(420f, 520f); }
+            get { return tiled ? new Vector2(640f, 620f) : new Vector2(420f, 520f); }
         }
 
         /// <summary>
@@ -155,20 +208,10 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Rect list = new Rect(inRect.x, box.yMax + Pad, inRect.width,
                     Mathf.Max(0f, inRect.height - HeaderHeight - 26f - FooterHeight - Pad * 2f));
 
-                Rect view = new Rect(0f, 0f, list.width - 18f, matching.Count * RowHeight + 4f);
-
-                Widgets.BeginScrollView(list, ref scroll, view);
-
-                float y = 0f;
-
-                for (int i = 0; i < matching.Count; i++)
-                {
-                    Row(new Rect(0f, y, view.width, RowHeight - 2f), matching[i], palette);
-
-                    y += RowHeight;
-                }
-
-                Widgets.EndScrollView();
+                if (tiled)
+                    Tiles(list, palette);
+                else
+                    Rows(list, palette);
 
                 if (matching.Count == 0)
                 {
@@ -192,6 +235,127 @@ namespace Gideon.UIOverhaul.Features.Editor
                 Text.Anchor = previousAnchor;
                 Text.Font = previousFont;
             }
+        }
+
+        /// <summary>The list form: one option per line, with its consequence beside it.</summary>
+        private void Rows(Rect list, UIColorPaletteDef palette)
+        {
+            Rect view = new Rect(0f, 0f, list.width - 18f, matching.Count * RowHeight + 4f);
+
+            Widgets.BeginScrollView(list, ref scroll, view);
+
+            float y = 0f;
+
+            for (int i = 0; i < matching.Count; i++)
+            {
+                Row(new Rect(0f, y, view.width, RowHeight - 2f), matching[i], palette);
+
+                y += RowHeight;
+            }
+
+            Widgets.EndScrollView();
+        }
+
+        /// <summary>
+        /// The grid form: a picture per option, with its name under it.
+        ///
+        /// <b>The name stays.</b> Vanilla's styling station shows pictures alone and puts the name in a tooltip,
+        /// which is fine when you are browsing and useless when somebody has told you to pick "Bowlcut". The
+        /// search box above filters on that name, so it has to be readable for the search to make sense.
+        /// </summary>
+        private void Tiles(Rect list, UIColorPaletteDef palette)
+        {
+            int columns = Mathf.Max(1, Mathf.FloorToInt((list.width - 18f + TileGap) / (TileWidth + TileGap)));
+            int rows = Mathf.CeilToInt(matching.Count / (float) columns);
+
+            Rect view = new Rect(0f, 0f, list.width - 18f, rows * (TileHeight + TileGap) + 4f);
+
+            Widgets.BeginScrollView(list, ref scroll, view);
+
+            // Only what is on screen. A colony with a few style mods installed has several hundred of these, and
+            // every one drawn is a material fetched and a label measured.
+            float first = scroll.y - TileHeight - TileGap;
+            float last = scroll.y + list.height;
+
+            for (int i = 0; i < matching.Count; i++)
+            {
+                float y = i / columns * (TileHeight + TileGap);
+
+                if (y < first || y > last)
+                    continue;
+
+                Rect cell = new Rect(i % columns * (TileWidth + TileGap), y, TileWidth, TileHeight);
+
+                Tile(cell, matching[i], palette);
+            }
+
+            Widgets.EndScrollView();
+        }
+
+        /// <summary>One tile: the picture, the name, and the ring that says which one is already set.</summary>
+        private void Tile(Rect rect, EditorOption option, UIColorPaletteDef palette)
+        {
+            bool over = Mouse.IsOver(rect);
+
+            UIElementPainter.OutlineRounded(rect, option.Current ? palette.Accent : palette.Border,
+                option.Current
+                    ? UIElementPainter.Composite(palette.PanelBackground, palette.SelectionOverlay)
+                    : over
+                        ? palette.SurfaceRaised
+                        : palette.PanelBackground);
+
+            Rect picture = new Rect(rect.x + 4f, rect.y + 4f, rect.width - 8f, rect.height - 26f);
+
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                // Vanilla's own icon drawer, which is how a hair or beard becomes a picture at all: they carry no
+                // icon and are drawn from their south-facing graphic, and reproducing that here would be a second
+                // opinion about shaders and mask textures.
+                GUI.color = option.IconColor;
+
+                UIGuard.Try("Editor.PickerIcon", () => Widgets.DefIcon(picture, option.Icon, null, 1.25f));
+
+                GUI.color = option.Marked.NullOrEmpty() ? palette.TextPrimary : palette.Warning;
+
+                Text.Font = GameFont.Tiny;
+                Text.Anchor = TextAnchor.UpperCenter;
+                Text.WordWrap = false;
+
+                Widgets.LabelEllipses(new Rect(rect.x + 2f, picture.yMax, rect.width - 4f, 20f), option.Label);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+
+            if (over)
+            {
+                string tip = option.Label;
+
+                if (!option.Note.NullOrEmpty())
+                    tip += "\n\n" + option.Note;
+
+                if (!option.Marked.NullOrEmpty())
+                    tip += "\n\n" + option.Marked;
+
+                if (!option.Tooltip.NullOrEmpty())
+                    tip += "\n\n" + option.Tooltip;
+
+                TooltipHandler.TipRegion(rect, (TipSignal) tip);
+            }
+
+            if (!Widgets.ButtonInvisible(rect))
+                return;
+
+            Take(option);
         }
 
         private void Gather()
@@ -271,11 +435,17 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (!Widgets.ButtonInvisible(rect))
                 return;
 
+            Take(option);
+        }
+
+        /// <summary>Commits a choice, whether it came from a row or from a tile.</summary>
+        private void Take(EditorOption option)
+        {
             // Closed before the callback runs. A callback that opens another window -- picking a body part after
             // picking a hediff -- would otherwise open it behind this one.
             Close();
 
-            if (option.Chosen == null)
+            if (option?.Chosen == null)
                 return;
 
             UIGuard.Try("Editor.Chosen", option.Chosen, "That change could not be made.");

@@ -548,6 +548,29 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool penAnimalsUseAreas;
 
         /// <summary>
+        /// Whether a bed can be marked communal, letting anybody sleep in it while a slot is free.
+        ///
+        /// <b>An owned bed that others may still use.</b> RimWorld's rule is that once a bed has an owner, nobody
+        /// else may sleep in it except a love partner -- which is right for a private bedroom and wrong for the
+        /// spare bunk in a barracks, the bed beside the workshop somebody naps in, or a shift-worked bunk. There
+        /// is no way to say "this one is mine but help yourself when I am not in it". This adds the mark that
+        /// says it.
+        ///
+        /// <b>It changes only who a bed will accept, not who owns it.</b> Assignment, bedroom thoughts and the
+        /// rest of ownership are untouched: a communal bed with an owner still counts as that pawn's room for
+        /// mood. The single rule relaxed is the refusal in <c>RestUtility.BedOwnerWillShare</c>, and the
+        /// unoccupied check above it in <c>CanUseBedNow</c> is vanilla's own and still applies -- so a communal
+        /// bed with somebody in it is as unavailable as any other.
+        ///
+        /// <b>On by default.</b> It shipped off on the reasoning that a behaviour change should be opted into,
+        /// which is right for the livestock areas beside it -- that one changes what every animal in the colony
+        /// does the moment it is switched on. This one changes nothing until a bed is marked, and a switch that
+        /// does nothing on its own does not need guarding: a player who never touches a bed never notices it, and
+        /// a player who wants it should not have to find a setting first. Turned on the same day it shipped.
+        /// </summary>
+        public bool allowCommunalBeds = true;
+
+        /// <summary>
         /// Whether the character editor exists at all.
         ///
         /// <b>Off, and off means absent rather than greyed.</b> Asked for on 2026-08-22 in those words: with this
@@ -1318,6 +1341,13 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.penAnimalsUseAreas = value.EqualsIgnoreCase("true");
                             break;
 
+                        // Read the permissive way round, matching the default: anything but an explicit false
+                        // leaves the feature on. It grants a switch rather than changing behaviour on its own,
+                        // so a file written before this setting existed should come back with it available.
+                        case "allowCommunalBeds":
+                            settings.allowCommunalBeds = !value.EqualsIgnoreCase("false");
+                            break;
+
                         case "salvageAncientWrecks":
                             settings.salvageAncientWrecks = value.EqualsIgnoreCase("true");
                             break;
@@ -1692,6 +1722,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("notifyPhinixChat", notifyPhinixChat ? "true" : "false");
                     writer.WriteElementString("warnStalledBills", warnStalledBills ? "true" : "false");
                     writer.WriteElementString("penAnimalsUseAreas", penAnimalsUseAreas ? "true" : "false");
+                    writer.WriteElementString("allowCommunalBeds", allowCommunalBeds ? "true" : "false");
                     writer.WriteElementString("salvageAncientWrecks",
                         salvageAncientWrecks ? "true" : "false");
                     writer.WriteElementString("barracksAreNeutral", barracksAreNeutral ? "true" : "false");

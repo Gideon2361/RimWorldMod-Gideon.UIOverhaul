@@ -342,41 +342,18 @@ namespace Gideon.UIOverhaul.Features.Animals
             return row.yMax + 8f;
         }
 
+        /// <summary>
+        /// One segment of the stock-or-cull switch: the mod's button, with the selected one toggled on.
+        ///
+        /// <b>The chosen segment used to be filled at full accent,</b> which is the primary treatment -- the one
+        /// reserved for the single button a window exists to press. Two of those on one row, one of them a mode
+        /// switch, is emphasis spent on the wrong control. Toggled is what "this one is selected" looks like
+        /// everywhere else in the mod, and now here. Changed 2026-08-25.
+        /// </summary>
         private void Segment(Rect rect, string label, bool on, UIColorPaletteDef palette, Action chosen)
         {
-            bool over = Mouse.IsOver(rect);
-
-            if (on)
-                UIElementPainter.FillRounded(rect, palette.Accent);
-            else
-                UIElementPainter.OutlineRounded(rect, palette.Border,
-                    over ? palette.SurfaceRaised : palette.PanelBackground);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                GUI.color = on ? palette.WindowBackground : palette.TextPrimary;
-
-                Widgets.Label(rect, label);
-            }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            if (!Widgets.ButtonInvisible(rect) || on)
-                return;
-
-            chosen();
-
-            SoundDefOf.Click.PlayOneShotOnCamera();
+            if (UIActionButtonControl.Draw(rect, label, palette, false, true, GameFont.Small, null, on) && !on)
+                chosen();
         }
 
         // ---------------------------------------------------------------------------------------
