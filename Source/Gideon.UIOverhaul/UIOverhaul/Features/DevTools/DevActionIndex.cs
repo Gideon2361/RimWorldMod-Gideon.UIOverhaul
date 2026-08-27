@@ -137,7 +137,15 @@ namespace Gideon.UIOverhaul.Features.DevTools
         }
 
         /// <summary>
-        /// Adds a node and, where it is already expanded, its children.
+        /// Adds a node's direct children, and stops there.
+        ///
+        /// <b>One level deep by design since 2026-08-26.</b> This used to recurse into every already-populated
+        /// branch so that a query could find a buried action by name. Search no longer reaches past this level --
+        /// see <see cref="Search"/> for why -- so descending would only collect rows nothing can return, while
+        /// making the counts on the rail describe a reach the box does not have.
+        ///
+        /// The depth parameter is kept because the recursion guard it existed for is cheap insurance if anybody
+        /// puts the descent back.
         /// </summary>
         /// <param name="depth">Guards against a tree that refers to itself, which a mod can produce.</param>
         private static void Walk(DebugActionNode node, string tab, string where, List<DevAction> into, int depth)
@@ -167,9 +175,6 @@ namespace Gideon.UIOverhaul.Features.DevTools
                     Destructive = IsDestructive(label),
                     Haystack = (label + " " + where).ToLowerInvariant()
                 });
-
-                if (child.children.Count > 0)
-                    Walk(child, tab, label, into, depth + 1);
             }
         }
 
@@ -196,6 +201,18 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// where they were, so the thing you typed for can be anywhere in a column of three hundred. Scoring puts
         /// a label that starts with the query above one that merely contains it, and both above a match that only
         /// hit the category, which is nearly always the order a reader wants.
+        ///
+        /// <b>This level only. Typing does not reach into branches.</b> It used to: the index held every node at
+        /// every depth and a query searched the lot, on the reasoning that finding a buried action by name beat
+        /// clicking down to it. What that produced in practice was several hundred rows reading "In pods,
+        /// autoplace", because vanilla's raid menu is forty point values each with the same handful of arrival
+        /// modes beneath it, and the only thing telling those rows apart was their parent in dim text at the far
+        /// edge. Reported on 2026-08-26.
+        ///
+        /// <b>So search is a filter on what is in front of you,</b> which is what the box inside a branch has
+        /// always been -- see <c>Dialog_DevPalette.Narrow</c>. Both boxes now mean the same thing, and neither can
+        /// answer with something the reader cannot see the context for. Reaching a leaf is what walking into the
+        /// branch is for, and once inside, its own box narrows it.
         /// </summary>
         internal static List<DevAction> Search(string query, string tab, int limit)
         {
@@ -230,6 +247,10 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
             foreach (DevAction action in actions)
             {
+                // The tab's own top level and nothing below it. See the note on this method.
+                if (action.Depth != 1)
+                    continue;
+
                 if (!tab.NullOrEmpty() && action.Tab != tab)
                     continue;
 
@@ -260,8 +281,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
         {
             string label = action.Label?.ToLowerInvariant() ?? string.Empty;
 
-            // Depth is a penalty, and a heavy one. A top level action is nearly always what somebody typing two
-            // words meant; the same words matching a leaf four levels down inside a branch almost never are.
+            // Zero for every action the index now holds, since it holds only the top level. The term is kept
+            // rather than deleted because it is where a depth penalty belongs, and a reader comparing this to
+            // the ranking it describes should find the slot rather than wonder where it went.
             int depth = Mathf.Max(0, action.Depth - 1) * 12;
 
             if (label.StartsWith(needle, StringComparison.Ordinal))

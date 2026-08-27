@@ -1,6 +1,8 @@
-using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 
@@ -143,10 +145,17 @@ namespace Gideon.UIOverhaul.Features.Panel
 
             if (drew)
             {
-                // worldView false: this is the map's set of toggles. The world view has its own, shorter list,
-                // and a tab that showed map toggles while looking at the planet would offer buttons that do
-                // nothing.
-                Find.PlaySettings.DoPlaySettingsGlobalControls(row, false);
+                // <b>Which set of toggles depends on what is being looked at.</b> The map's list and the planet's
+                // are different -- zones, beauty, roof and fertility overlays against north lock, expanding icons
+                // and world features -- and this used to pass false unconditionally. The comment that stood here
+                // said in as many words that showing map toggles over the planet would offer buttons that do
+                // nothing, and then did exactly that: two dozen colony toggles in the corner of the world map.
+                // Reported on 2026-08-26.
+                //
+                // WorldSelected rather than DrawingMap: the test is "the planet is the view", not "a map is not
+                // being drawn". They differ while the world renders as a background behind a map, which is a
+                // caravan or a gravship in flight -- and there the player is still looking at their colony.
+                Find.PlaySettings.DoPlaySettingsGlobalControls(row, WorldView());
             }
 
             Widgets.EndScrollView();
@@ -156,6 +165,18 @@ namespace Gideon.UIOverhaul.Features.Panel
             // the panel would measure itself as empty every time a key was pressed.
             if (drew)
                 measuredHeight = Mathf.Max(RowHeight, row.FinalY + IconSize);
+        }
+
+        /// <summary>
+        /// Whether the planet is what the player is looking at.
+        ///
+        /// Guarded because it reaches through <c>Find</c> during drawing, and a null world renderer on the way
+        /// into or out of a game should leave the tab showing the map's toggles rather than throwing: the map set
+        /// is the one that is right nearly all of the time.
+        /// </summary>
+        private static bool WorldView()
+        {
+            return UIGuard.Try("Panel.TabWorldView", () => WorldRendererUtility.WorldSelected, false, null);
         }
     }
 }
