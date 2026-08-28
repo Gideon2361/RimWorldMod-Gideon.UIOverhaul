@@ -223,6 +223,12 @@ namespace Gideon.UIOverhaul.Features.Saves
         /// are cleared in a second pass. The invariant that buys is worth the extra walk: <b>a swept file never
         /// refers to anything it does not contain</b>, whichever options were chosen.
         ///
+        /// <b>With one deliberate exception, and it is the reason this pass corrupted saves.</b> A reference sitting
+        /// in a dictionary's <c>keys</c> or <c>values</c> list is left pointing at what is gone. Those two lists are
+        /// matched by position, so removing an entry from one of them shifts every pair that follows, and the file
+        /// stays well formed while meaning something else entirely. RimWorld discards a pair it cannot resolve on
+        /// its own, so leaving the reference is both safe and what the game already expects to find.
+        ///
         /// <b>The original is still never touched.</b> The intermediate is a sibling of the target, and the target
         /// is only ever written, never moved onto or deleted.
         /// </summary>
@@ -496,12 +502,30 @@ namespace Gideon.UIOverhaul.Features.Saves
                             // A list of references loses the entry entirely, which is what the list would look like
                             // had the record never existed. Writing null into it would leave a hole the game then
                             // has to interpret.
-                            if (name == "li")
-                                dropLine = true;
-                            else
+                            //
+                            // Everywhere except a dictionary. Its keys and values are two lists matched by
+                            // position, so dropping a key without its value shifts every pair after it and pawns
+                            // end up holding other pawns' schedules. That is the rule IsListReference already
+                            // applies to the repair above; it was missing here because this path matches raw
+                            // values and so skipped the test that carried it. Measured on a 46 MB save, removing
+                            // one race's pawns left seven dictionaries unbalanced, among them schedules at one key
+                            // against forty-four values. Found on 2026-08-26.
+                            //
+                            // The entry is left exactly as it stands rather than nulled. RimWorld drops an entry
+                            // it cannot resolve as a whole pair, which is the one operation a line oriented
+                            // rewrite cannot perform, and a null key is worse to load than a broken one.
+                            if (name != "li")
+                            {
                                 line = WithValue(line, "null");
 
-                            outcome.Repaired++;
+                                outcome.Repaired++;
+                            }
+                            else if (SaveSweepXml.IsListReference(name, depth, ancestors))
+                            {
+                                dropLine = true;
+
+                                outcome.Repaired++;
+                            }
                         }
                     }
 

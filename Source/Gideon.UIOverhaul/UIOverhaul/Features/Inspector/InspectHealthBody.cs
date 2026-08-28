@@ -11,10 +11,16 @@ namespace Gideon.UIOverhaul.Features.Inspector
     /// <summary>
     /// The Health body: what is wrong, how it is going, and what is being done about it.
     ///
-    /// <b>It leads with the conditions rather than with a body part tree,</b> which is the one structural change
+    /// <b>It lists the conditions rather than drawing a body part tree,</b> which is the one structural change
     /// from vanilla's health card. The tree answers "what is the state of the left leg", a question nobody has;
     /// the list answers "what is wrong with her and how long have I got", which is the question that made
     /// somebody open the tab.
+    ///
+    /// <b>Capacities and Care share the top in two columns; the conditions run the full width underneath.</b>
+    /// Both blocks above are short and fixed in shape -- a handful of impaired capacities, four care rows -- so a
+    /// half width column costs them nothing. A condition label is the opposite: "Scratch (shambler hand)" is
+    /// ordinary, and at half width every one of them truncated to an ellipsis that hid the part of the label
+    /// saying what had done the damage. Reported on 2026-08-26.
     ///
     /// <b>Healthy capacities are hidden, and Aaron chose that when he approved the mockup.</b> Only the impaired
     /// ones are listed, with a count of the rest and a way to see them; a column of twelve rows all reading 100
@@ -45,20 +51,27 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             InspectBodies.Columns(view, out left, out right);
 
-            bool split = InspectBodies.Live(right);
+            float y;
 
-            float leftY = Conditions(left, view.y, pawn, palette);
+            if (InspectBodies.Live(right))
+            {
+                // Both start at the top and the taller one sets the floor for what follows. Which side that is
+                // varies: Capacities grows when its hidden rows are expanded, and shrinks again when they are not.
+                y = Mathf.Max(Capacities(left, view.y, pawn, palette), Care(right, view.y, pawn, palette));
+            }
+            else
+            {
+                // Too narrow to divide, so they stack in the order they would have been read in.
+                y = Capacities(view, view.y, pawn, palette);
+                y = Care(view, y, pawn, palette);
+            }
+
+            y = Conditions(view, y, pawn, palette);
 
             if (operations)
-                leftY = Operations(left, leftY, pawn, palette);
+                y = Operations(view, y, pawn, palette);
 
-            Rect second = split ? right : left;
-            float secondY = split ? view.y : leftY;
-
-            secondY = Capacities(second, secondY, pawn, palette);
-            secondY = Care(second, secondY, pawn, palette);
-
-            return (split ? Mathf.Max(leftY, secondY) : secondY) - view.y;
+            return y - view.y;
         }
 
         /// <summary>

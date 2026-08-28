@@ -13,7 +13,20 @@ namespace Gideon.UIOverhaul.Features.Saves
     ///
     /// <b>Line oriented, and that is a deliberate bet on RimWorld's own writer.</b> <c>ScribeSaver</c> configures
     /// <c>XmlWriterSettings</c> with <c>Indent = true</c> and <c>IndentChars = "\t"</c>, so a save is one element
-    /// per line with depth expressed as tabs. Callers check that bet rather than assume it.
+    /// per line with depth expressed as tabs.
+    ///
+    /// <b>The bet is not universally true, and nothing verifies it.</b> A text value containing newlines is written
+    /// with those newlines intact, so it spans as many physical lines as it has breaks: quest descriptions, letters
+    /// and combat logs all do this. One 46 MB save carries 40,901 such continuation lines, 428 of which end with a
+    /// closing tag and therefore read here as a close. <c>SaveSweepReport.Shaped</c> does not test for this despite
+    /// what this note used to claim -- it checks only that a <c>game</c> element and some sections were found.
+    ///
+    /// <b>They are harmless, and it is worth writing down why rather than trusting it twice.</b> A continuation
+    /// line carries no leading tab, so it reads as depth zero; a frame only closes on a matching depth and name,
+    /// and every record sits deeper than the root, so a stray close can never settle one. <see cref="Opens"/>
+    /// rejects them, so the ancestor stack never sees them. Every repair is guarded on the line not being a close.
+    /// A value spanning lines yields null from <see cref="Value"/>, since the closing tag is on a later line.
+    /// Change any one of those and multi-line text stops being harmless.
     ///
     /// <b>Nothing here knows about the game</b>, which is what lets both halves be run against a save from a test
     /// harness with no RimWorld loaded.
