@@ -32,7 +32,17 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
     /// </summary>
     internal static class IdeoPanel
     {
-        internal const float WindowWidth = 1120f;
+        /// <summary>
+        /// Wide enough that the rail does not come out of the blocks' pocket.
+        ///
+        /// The rail grew by 95 to stop faith names truncating, and that width came straight off the column
+        /// beside it -- roles and obligations are drawn side by side there, so each lost half of it just as
+        /// their own name columns were widened. This gives it back rather than having the two changes cancel.
+        /// Clamped to the screen where it is used, so a display too small for it is not left with a window it
+        /// cannot drag back.
+        /// </summary>
+        internal const float WindowWidth = 1215f;
+
         internal const float WindowHeight = 760f;
 
         private const float Pad = 12f;

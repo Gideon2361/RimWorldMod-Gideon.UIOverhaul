@@ -26,8 +26,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         {
             get
             {
+                // Both axes are clamped to the screen. The height always was; the width needs it now that the
+                // window asks for more than most laptops have, and a tab wider than the display cannot be
+                // dragged back into view.
                 return UIGuard.Try("Ideoligions.RequestedSize",
-                    () => new Vector2(IdeoPanel.WindowWidth,
+                    () => new Vector2(
+                        Mathf.Min(IdeoPanel.WindowWidth, UI.screenWidth - 40f),
                         Mathf.Min(IdeoPanel.WindowHeight, UI.screenHeight - 90f)),
                     new Vector2(1000f, 640f), null);
             }
