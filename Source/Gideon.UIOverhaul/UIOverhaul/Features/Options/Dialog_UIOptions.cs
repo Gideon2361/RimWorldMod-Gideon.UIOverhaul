@@ -2709,6 +2709,24 @@ namespace Gideon.UIOverhaul.Features.Options
             y += 44f;
             GUI.color = palette.TextPrimary;
 
+            if (ModsConfig.IdeologyActive)
+            {
+                GroupLabel(view, ref y, palette, "Ideoligions");
+
+                WidgetToggle(view, ref y, palette, settings, Indent, "Keep the doctrine when memes change",
+                    settings.preservePrecepts, value => settings.preservePrecepts = value,
+                    "Changing a meme normally makes RimWorld reconcile the whole doctrine against the new meme "
+                    + "set, dropping the precepts it forbids and adding the ones it demands. During world "
+                    + "generation it goes further and rolls a completely new doctrine, which is what loses the "
+                    + "ideoligion you just loaded from a file the moment you adjust one meme.\n\nWith this on, "
+                    + "the precepts, roles, rituals and demanded buildings are left exactly as they are.\n\nIt is "
+                    + "also on the designer's review step, where the decision is usually made. It only ever "
+                    + "applies to an ideoligion that already has a doctrine: one that has not been generated yet "
+                    + "is always generated normally, so this cannot leave a faction believing nothing.");
+
+                y += 8f;
+            }
+
             GroupLabel(view, ref y, palette, "Overlays");
 
             WidgetToggle(view, ref y, palette, settings, Indent, "Enable customizable room name labels",

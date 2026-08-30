@@ -20,12 +20,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
     /// wrong is the one way this feature can leave a faith in a state the game did not intend. So the sequence
     /// lives here, once, rather than at each button that changes a meme.
     ///
-    /// <b>Preserve doctrine is read here and nowhere else.</b> That is deliberate and it is the difference
-    /// between this and the mod the idea came from: <c>Persistent Precepts</c> blocks
-    /// <c>IdeoFoundation.RandomizePrecepts</c> globally while a flag is set, and its own description warns what
-    /// that costs -- start a new game with the toggle on and the faction's ideoligion generates with no precepts
-    /// at all. Because the designer owns its own orchestration, the switch can simply mean "do not call these
-    /// two", with nothing patched and no way for it to reach world generation.
+    /// <b>Preserve doctrine costs nothing to honor here,</b> because the designer owns its own orchestration:
+    /// the switch simply means "do not call <c>EnsurePreceptsCompatibleWithMemes</c>", with nothing patched.
+    /// World generation is the other half of the same feature and cannot be reached this way, since the meme
+    /// picker there is vanilla's own window; that half lives in <see cref="PreserveDoctrine"/> and carries the
+    /// condition this path does not need -- that there is already a doctrine to keep.
     /// </summary>
     internal class IdeoDraft
     {
