@@ -664,6 +664,37 @@ namespace Gideon.UIOverhaul.Features.Quests
             return Mathf.Clamp(furthest, floor, ceiling);
         }
 
+        /// <summary>
+        /// The mark on a bar that runs off the end of the chart.
+        ///
+        /// <b>Pulsing rather than static,</b> because a clamped bar and a bar that genuinely ends at the edge
+        /// of the axis are the same picture, and the difference between them is exactly what a clamped chart
+        /// has to say out loud. Movement is the one channel nothing else on this panel is using.
+        ///
+        /// Through <c>Pulser</c>, which is RimWorld's own, so it keeps time with every other pulsing thing on
+        /// screen instead of beating against them. Slow and shallow: this is a footnote, not an alert.
+        /// </summary>
+        private static void Beyond(Rect bar, Color tint)
+        {
+            const float width = 22f;
+
+            Rect mark = new Rect(bar.xMax - width - 2f, bar.y, width, bar.height);
+
+            Color previous = GUI.color;
+
+            try
+            {
+                GUI.color = tint * UIGuard.Try("Quests.Pulse",
+                    () => Pulser.PulseBrightness(0.6f, 0.45f), 1f, null);
+
+                UITextControl.Label(mark, ">>>", QuestFaces.Mono, QuestFaces.Size.Small);
+            }
+            finally
+            {
+                GUI.color = previous;
+            }
+        }
+
         /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>
         private static void Axis(Rect track, float span, UIColorPaletteDef palette)
         {
@@ -841,7 +872,11 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 for (int c = 0; c < Clocks.Count; c++)
                 {
-                    float width = Mathf.Max(3f, track.width * (Clocks[c].ticks / span));
+                    // Clamped, because the axis is capped at twenty days and a quest can run past it. Left
+                    // unclamped the bar drew straight out of the panel and over the scroll bar, which read as a
+                    // layout fault rather than as a long quest.
+                    bool beyond = Clocks[c].ticks > span;
+                    float width = Mathf.Clamp(track.width * (Clocks[c].ticks / span), 3f, track.width);
 
                     Color tint = Clocks[c].ticks <= GenDate.TicksPerDay
                         ? palette.Danger
@@ -855,8 +890,14 @@ namespace Gideon.UIOverhaul.Features.Quests
                         UIElementPainter.Composite(palette.SurfaceSunken,
                             new Color(tint.r, tint.g, tint.b, 0.22f)));
 
+                    if (beyond)
+                        Beyond(bar, tint);
+
                     if (Mouse.IsOver(bar) && !Clocks[c].text.NullOrEmpty())
-                        TooltipHandler.TipRegion(bar, (TipSignal) (row.name + "\n\n" + Clocks[c].text));
+                    {
+                        TooltipHandler.TipRegion(bar, (TipSignal) (row.name + "\n\n" + Clocks[c].text
+                            + (beyond ? "\n\nThis one runs past the end of the chart." : string.Empty)));
+                    }
                 }
 
                 cursor = band.yMax + 2f;
