@@ -421,9 +421,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 for (int i = 0; i < rows.Count; i++)
                     names.Add(rows[i].pawn.LabelShortCap);
 
-                // A quarter at most: the bar, the percentage, the drift and the chip all live to the right of
-                // the name, and the bar is the thing worth keeping wide.
-                float column = Column(names, GameFont.Small, 90f, inner.width, 0.25f);
+                // Twice what it was, on both the floor and the ceiling. The bar is the least important thing on
+                // this row: it says the same as the percentage beside it, and a name cut to "Undead Nekt..."
+                // fails at the one thing the row exists for, which is telling you who is slipping. The floor is
+                // raised as well as the cap so the bars start at the same x whatever the roster is called --
+                // a column that moves as colonists come and go is harder to read down than a slightly wide one.
+                float column = Column(names, GameFont.Small, 180f, inner.width, 0.5f);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = ConvictionRowDraw(inner, cursor, rows[i], column, palette);
