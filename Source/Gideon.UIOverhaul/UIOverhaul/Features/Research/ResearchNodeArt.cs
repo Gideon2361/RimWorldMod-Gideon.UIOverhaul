@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Shared;
@@ -227,20 +228,20 @@ namespace Gideon.UIOverhaul.Features.Research
             if (chip.NullOrEmpty())
                 return;
 
-            // Bold for the three states that are about what you can do, plain for the ones explaining why you
-            // cannot. Available and Done are the words somebody scans a column for, and they are short enough
-            // that bold costs them nothing; "Needs intermediate necromancy" is a sentence to read once and it
-            // needs the room more than it needs the weight.
-            // Bold for the three states that are about what you can do, plain for the ones explaining why you
-            // cannot. Available and Done are the words somebody scans a column for, and they are short enough
-            // that bold costs them nothing; "Needs intermediate necromancy" is a sentence to read once and it
-            // needs the room more than the weight.
+            // <b>Caps for the three states that say what you can do, sentence case for the ones explaining why
+            // you cannot.</b> AVAILABLE and DONE are what somebody scans a column of nodes for, and caps is what
+            // marks them as a status rather than a sentence -- the same device the band headings use. "Needs
+            // intermediate necromancy" is a line to read once; shouting it would cost room it needs more than
+            // emphasis, and a sentence in caps reads as an error message.
+            //
+            // This replaces a bold tag that did the same job. Markup cannot be drawn from a baked sheet, so the
+            // weight had to go; caps and the monospace rhythm carry it instead. IBMPlexMonoSemiBold is a face
+            // away if that turns out not to be enough.
             if (state == ResearchState.Ready || state == ResearchState.Finished
                                              || state == ResearchState.Researching)
-                chip = "<b>" + chip + "</b>";
-
+                chip = chip.ToUpperInvariant();
             TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - costWidth - 6f), band.height),
-                chip, flag, GameFont.Tiny);
+                chip, flag, GameFont.Tiny, UIFace.IBMPlexMono);
         }
 
         /// <summary>
@@ -449,7 +450,11 @@ namespace Gideon.UIOverhaul.Features.Research
                 Text.WordWrap = false;
                 GUI.color = color;
 
-                UIRichText.Label(band, text);
+                // Barlow Condensed for a project name, which is the face earning its keep: a condensed letter
+                // fits more of "Multi-analyzer" into a node than the game's own does before the ellipsis. A name
+                // carrying markup or a character the sheet was not baked over falls back to RimWorld's font on
+                // its own, so a modded project with an unusual name still reads.
+                UITextControl.LabelEllipses(band, text, UIFace.BarlowCondensed, GameFont.Small);
             }
             finally
             {

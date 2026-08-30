@@ -44,19 +44,45 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
         internal const float Gap = 12f;
 
         /// <summary>
+        /// The typefaces this panel is set in, named once so the whole suite moves together.
+        ///
+        /// <b>Five screens share this chrome,</b> so a face chosen at a call site would have to be chosen right
+        /// five times and would drift the first time one of them was edited alone. Naming them here also makes
+        /// the experiment revertible: put <see cref="UIFace.Game"/> in both and the panel is back to RimWorld's
+        /// own text with nothing else touched.
+        /// </summary>
+        internal const UIFace Body = UIFace.BarlowCondensed;
+
+        /// <summary>
+        /// The quieter face, for captions and the lines under a heading.
+        ///
+        /// <b>Thin needs the size back that Tiny took away.</b> A thin condensed stem is well under a pixel at
+        /// Tiny and survives as a grey suggestion of a letter, so caption text moves up to Small and gets its
+        /// lightness from the weight instead of from being small. Asked for on 2026-08-29.
+        ///
+        /// That makes rows taller wherever a caption sits under a value -- <see cref="RowHeight"/> is built from
+        /// this -- so the table shows a few fewer lines than it did. That is the trade being tried.
+        /// </summary>
+        internal const UIFace Subtle = UIFace.BarlowCondensedThin;
+
+        /// <summary>The size <see cref="Subtle"/> is drawn at. Was Tiny; see that field for why it is not.</summary>
+        internal const GameFont SubtleSize = GameFont.Small;
+
+        /// <summary>
         /// Height of one row in a table whose rows carry a second line under the name.
         ///
         /// <b>Derived rather than written down, because 34 was wrong and could not have been right.</b> Reported
-        /// on 2026-08-25 as clipped text: a trade row stacks a Small line over a Tiny one, and RimWorld computes
-        /// both heights at run time from the loaded font -- <c>Text.lineHeights[i] = CalcHeight("W", 999f)</c> --
-        /// so they move with the font, with the UI scale and with a translation that ships its own. Any constant
-        /// here is a guess about somebody else's display, and the guess was four pixels short on this one.
+        /// on 2026-08-25 as clipped text: a trade row stacks a Small line over a caption line, and RimWorld
+        /// computes both heights at run time from the loaded font -- <c>Text.lineHeights[i] = CalcHeight("W",
+        /// 999f)</c> -- so they move with the font, with the UI scale and with a translation that ships its own.
+        /// Any constant here is a guess about somebody else's display, and the guess was four pixels short on
+        /// this one.
         /// </summary>
         internal static float RowHeight
         {
             get
             {
-                return UIFonts.LineHeightOf(GameFont.Small) + UIFonts.LineHeightOf(GameFont.Tiny) + 6f;
+                return UIFonts.LineHeightOf(GameFont.Small) + UIFonts.LineHeightOf(SubtleSize) + 6f;
             }
         }
 
@@ -82,7 +108,7 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
         internal static void TwoLine(Rect rect, out Rect first, out Rect second)
         {
             float top = UIFonts.LineHeightOf(GameFont.Small);
-            float bottom = UIFonts.LineHeightOf(GameFont.Tiny);
+            float bottom = UIFonts.LineHeightOf(SubtleSize);
 
             float y = rect.y + Mathf.Max(0f, Mathf.Round((rect.height - top - bottom) * 0.5f));
 
@@ -133,21 +159,13 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
         /// <summary>
         /// How wide a title will actually draw, for anything sharing its line.
         ///
-        /// Exposed because the title's font lives here and the callers sharing that line should not have to know
-        /// it. The standing line beside the trade title used to take a flat share of the row instead of what the
-        /// title left behind, which truncated it while empty space sat between the two. Reported 2026-08-29.
+        /// Exposed because the title's face and size live here and the callers sharing that line should not have
+        /// to know either. Measuring in one face and drawing in another is how a line ends up overlapping the
+        /// thing beside it.
         /// </summary>
         internal static float TitleWidth(string title)
         {
-            GameFont previous = Text.Font;
-
-            Text.Font = GameFont.Medium;
-
-            float width = Text.CalcSize(title ?? string.Empty).x;
-
-            Text.Font = previous;
-
-            return width;
+            return UITextControl.Width(title ?? string.Empty, UIFace.BarlowCondensed, GameFont.Medium, FontStyle.Bold);
         }
 
         /// <summary>
@@ -177,16 +195,25 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
                 float titleHeight = UIFonts.LineHeightOf(GameFont.Medium);
 
-                Widgets.LabelEllipses(new Rect(rect.x, rect.y, rect.width - 260f, titleHeight), title ?? string.Empty);
+                // Set in Barlow Condensed, which is the face this mod ships for interface text and the reason it
+                // was baked at all. Semibold for the name and regular under it: the two lines are a hierarchy
+                // rather than two headings, and the game's font has no weight between its own and bold to say so.
+                //
+                // Both lines keep the line height they had, because UITextControl scales a face to RimWorld's
+                // line box rather than to a point size. So this changes the letters and nothing else, and a
+                // trader whose name uses a character the sheet was not baked over reads in the game's font.
+                UITextControl.LabelEllipses(new Rect(rect.x, rect.y, rect.width - 260f, titleHeight),
+                    title ?? string.Empty, UIFace.BarlowCondensed, GameFont.Medium, FontStyle.Bold);
 
                 Text.Font = GameFont.Small;
                 GUI.color = palette.TextSecondary;
 
                 if (!detail.NullOrEmpty())
                 {
-                    Widgets.LabelEllipses(
-                        new Rect(rect.x, rect.y + titleHeight + 2f, rect.width - 260f, UIFonts.LineHeightOf(GameFont.Small)),
-                        detail);
+                    UITextControl.LabelEllipses(
+                        new Rect(rect.x, rect.y + titleHeight + 2f, rect.width - 260f,
+                            UIFonts.LineHeightOf(SubtleSize)),
+                        detail, Subtle, SubtleSize);
                 }
 
                 GUI.color = palette.Border;
@@ -217,10 +244,11 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
                 Widgets.DrawLineHorizontal(rect.x, y, rect.width);
 
-                Text.Font = GameFont.Tiny;
+                Text.Font = SubtleSize;
                 GUI.color = palette.TextDisabled;
 
-                Widgets.Label(new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(GameFont.Tiny)), text);
+                UITextControl.Label(new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(SubtleSize)), text,
+                    Subtle, SubtleSize);
             }
             finally
             {
@@ -228,12 +256,12 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
                 Text.Font = previousFont;
             }
 
-            return y + UIFonts.LineHeightOf(GameFont.Tiny) + 8f;
+            return y + UIFonts.LineHeightOf(SubtleSize) + 8f;
         }
 
         /// <summary>Wrapped explanatory text under a heading. Returns the y below it.</summary>
         internal static float Note(Rect rect, float y, string text, UIColorPaletteDef palette,
-            GameFont font = GameFont.Tiny)
+            GameFont font = SubtleSize)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -271,12 +299,12 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
             try
             {
-                Text.Font = GameFont.Tiny;
+                Text.Font = SubtleSize;
                 Text.Anchor = anchor;
                 GUI.color = palette.TextDisabled;
                 Text.WordWrap = false;
 
-                Widgets.Label(rect, text);
+                UITextControl.Label(rect, text, Subtle, SubtleSize);
             }
             finally
             {
@@ -318,11 +346,13 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
             try
             {
-                Text.Font = GameFont.Tiny;
+                Text.Font = SubtleSize;
                 Text.Anchor = TextAnchor.MiddleCenter;
                 Text.WordWrap = false;
 
-                float keyWidth = Text.CalcSize(key).x + 12f;
+                // Measured through the control that draws it. A chip sized against the game's font and filled
+                // with a condensed one is a box with air on both sides of its letter.
+                float keyWidth = UITextControl.Width(key, Subtle, SubtleSize) + 12f;
 
                 Rect chip = new Rect(x, rect.y + (rect.height - 18f) * 0.5f, keyWidth, 18f);
 
@@ -330,14 +360,15 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
                 GUI.color = palette.TextSecondary;
 
-                Widgets.Label(chip, key);
+                UITextControl.Label(chip, key, Subtle, SubtleSize);
 
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextDisabled;
 
-                float whatWidth = Text.CalcSize(what).x + 4f;
+                float whatWidth = UITextControl.Width(what, Subtle, SubtleSize) + 4f;
 
-                Widgets.Label(new Rect(chip.xMax + 5f, rect.y, whatWidth, rect.height), what);
+                UITextControl.Label(new Rect(chip.xMax + 5f, rect.y, whatWidth, rect.height), what,
+                    Subtle, SubtleSize);
 
                 return keyWidth + 5f + whatWidth + 14f;
             }
@@ -423,11 +454,11 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
             try
             {
-                Text.Font = GameFont.Tiny;
+                Text.Font = SubtleSize;
                 Text.Anchor = TextAnchor.MiddleCenter;
                 Text.WordWrap = false;
 
-                float width = Text.CalcSize(text).x + 12f;
+                float width = UITextControl.Width(text, Subtle, SubtleSize) + 12f;
 
                 Rect pill = new Rect(right - width, rect.y + (rect.height - 17f) * 0.5f, width, 17f);
 
@@ -435,7 +466,7 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
                 GUI.color = color;
 
-                Widgets.Label(pill, text);
+                UITextControl.Label(pill, text, Subtle, SubtleSize);
 
                 return width + 5f;
             }

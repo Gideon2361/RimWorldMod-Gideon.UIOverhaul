@@ -356,7 +356,12 @@ namespace Gideon.UIOverhaul.Shared
         /// Anchored middle-left, which is what makes taking the full row height safe: the text sits on the row's
         /// centre line however tall the row is.
         /// </summary>
-        internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small)
+        /// <param name="face">
+        /// Which typeface to set it in. Defaults to the game's own, so all thirty-odd existing callers are
+        /// unchanged and a caller opts in by naming a face rather than by everything moving at once.
+        /// </param>
+        internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small,
+            UIFace face = UIFace.Game)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -370,7 +375,10 @@ namespace Gideon.UIOverhaul.Shared
                 Text.WordWrap = false;
                 GUI.color = color;
 
-                UIRichText.Label(band, text);
+                if (face == UIFace.Game)
+                    UIRichText.Label(band, text);
+                else
+                    UITextControl.LabelEllipses(band, text, face, font);
             }
             finally
             {
