@@ -388,7 +388,13 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect cap = new Rect(box.x, box.y, box.width, capHeight);
 
             UIElementPainter.FillRounded(cap, palette.SurfaceRaised);
-            TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight), title, palette.TextPrimary, GameFont.Small, IdeoFaces.Mono);
+
+            // Tiny and upper case, which is what the mockup's block headers are: the smallest thing on the
+            // screen rather than the largest. At Small it came out bigger than the rows underneath it, so a
+            // block announced itself more loudly than anything it contained -- and five of those stacked down
+            // the tab read as five headlines with data between them.
+            TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
+                title.ToUpperInvariant(), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
 
             if (!suffix.NullOrEmpty())
             {
@@ -548,7 +554,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 // Narrower share than the obligations block: this row carries a holder's name and a chip after
                 // the role, so the role cannot have most of the width even when its name is long.
-                float column = Column(names, GameFont.Tiny, 80f, inner.width, 0.4f, IdeoFaces.Condensed);
+                float column = Column(names, GameFont.Small, 80f, inner.width, 0.4f, IdeoFaces.Condensed);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = RoleRowDraw(inner, cursor, rows[i], column, palette);
@@ -565,7 +571,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect band = new Rect(inner.x, y, inner.width, height);
 
             TabParts.RowLabel(new Rect(band.x, band.y, column, height), row.role.LabelCap, palette.Accent,
-                GameFont.Tiny, IdeoFaces.Condensed);
+                GameFont.Small, IdeoFaces.Condensed);
 
             string chip;
             Color tint;
