@@ -53,6 +53,12 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>IBM Plex Mono. Fixed width, and quieter than Cascadia at the same size.</summary>
         IBMPlexMono,
 
+        /// <summary>
+        /// IBM Plex Sans. The proportional sibling of the mono face, for running text rather than columns.
+        /// Bold, italic and bold italic are the family's own drawn faces.
+        /// </summary>
+        IBMPlexSans,
+
         /// <summary>Oswald. Condensed and tall; its long line box makes it draw smaller than the others at the
         /// same <c>GameFont</c>, so reach for a larger size with it.</summary>
         Oswald
@@ -149,6 +155,15 @@ namespace Gideon.UIFramework.Helpers
                         default: return "IBMPlexMono-Regular";
                     }
 
+                case UIFace.IBMPlexSans:
+                    switch (weight)
+                    {
+                        case FontStyle.Bold: return "IBMPlexSans-SemiBold";
+                        case FontStyle.Italic: return "IBMPlexSans-Italic";
+                        case FontStyle.BoldAndItalic: return "IBMPlexSans-SemiBoldItalic";
+                        default: return "IBMPlexSans-Regular";
+                    }
+
                 case UIFace.Oswald:
                     synthesize = weight;
 
@@ -198,6 +213,7 @@ namespace Gideon.UIFramework.Helpers
                 case UIFace.CascadiaMono: return "Cascadia Mono";
                 case UIFace.HammersmithOne: return "Hammersmith One";
                 case UIFace.IBMPlexMono: return "IBM Plex Mono";
+                case UIFace.IBMPlexSans: return "IBM Plex Sans";
                 case UIFace.Oswald: return "Oswald";
                 default: return "RimWorld";
             }
