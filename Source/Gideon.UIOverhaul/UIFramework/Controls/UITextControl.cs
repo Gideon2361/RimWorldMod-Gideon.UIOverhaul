@@ -41,12 +41,12 @@ namespace Gideon.UIFramework.Controls
         /// <c>Text.CalcSize</c> whenever the draw would.
         /// </summary>
         internal static float Width(string text, UIFace face, GameFont size,
-            FontStyle weight = FontStyle.Normal)
+            FontStyle weight = FontStyle.Normal, float scale = 1f)
         {
             if (string.IsNullOrEmpty(text))
                 return 0f;
 
-            GUIStyle style = StyleFor(face, size, TextAnchor.UpperLeft, false, weight);
+            GUIStyle style = StyleFor(face, size, TextAnchor.UpperLeft, false, weight, scale);
 
             if (style != null)
                 return style.CalcSize(new GUIContent(text)).x;
@@ -64,27 +64,27 @@ namespace Gideon.UIFramework.Controls
 
         /// <summary>One line of text in the given face, overflow clipped to the rect.</summary>
         internal static void Label(Rect rect, string text, UIFace face, GameFont size,
-            FontStyle weight = FontStyle.Normal)
+            FontStyle weight = FontStyle.Normal, float scale = 1f)
         {
-            Paint(rect, text, face, size, false, weight);
+            Paint(rect, text, face, size, false, weight, scale);
         }
 
         /// <summary>One line, cut short with an ellipsis rather than clipped when it will not fit.</summary>
         internal static void LabelEllipses(Rect rect, string text, UIFace face, GameFont size,
-            FontStyle weight = FontStyle.Normal)
+            FontStyle weight = FontStyle.Normal, float scale = 1f)
         {
-            Paint(rect, text, face, size, true, weight);
+            Paint(rect, text, face, size, true, weight, scale);
         }
 
         private static void Paint(Rect rect, string text, UIFace face, GameFont size, bool ellipses,
-            FontStyle weight)
+            FontStyle weight, float scale)
         {
             if (string.IsNullOrEmpty(text))
                 return;
 
             // An ellipsed label never wraps, whatever the caller left WordWrap set to: a label being cut short
             // and a label growing a second line are two answers to the same question.
-            GUIStyle style = StyleFor(face, size, Text.Anchor, !ellipses && Text.WordWrap, weight);
+            GUIStyle style = StyleFor(face, size, Text.Anchor, !ellipses && Text.WordWrap, weight, scale);
 
             if (style == null)
             {
@@ -109,7 +109,7 @@ namespace Gideon.UIFramework.Controls
         /// font's own metrics so each face fills one RimWorld line exactly.
         /// </summary>
         private static GUIStyle StyleFor(UIFace face, GameFont size, TextAnchor anchor, bool wrap,
-            FontStyle weight)
+            FontStyle weight, float scale)
         {
             if (face == UIFace.Game)
                 return null;
@@ -120,8 +120,13 @@ namespace Gideon.UIFramework.Controls
             if (font == null)
                 return null;
 
+            // The scale is part of the identity of the style, not a property of it: two callers asking for the
+            // same face at the same GameFont and different scales are asking for two different styles, and
+            // leaving it out of the key hands the second one whatever size the first cached.
+            int scaled = Mathf.Max(1, Mathf.RoundToInt(scale * 100f));
+
             long key = (long) face | ((long) size << 8) | ((long) anchor << 16) | ((long) weight << 24)
-                       | ((wrap ? 1L : 0L) << 32);
+                       | ((wrap ? 1L : 0L) << 32) | ((long) scaled << 40);
 
             GUIStyle style;
 
@@ -131,7 +136,10 @@ namespace Gideon.UIFramework.Controls
             style = new GUIStyle
             {
                 font = font,
-                fontSize = UIFaces.PointSizeFor(font, size),
+                // Scaled off the point size the GameFont resolves to, which is the only way to go below Tiny:
+                // RimWorld has no smaller GameFont, and a bundled face is drawn at a point size rather than
+                // picked from a fixed set.
+                fontSize = Mathf.Max(1, Mathf.RoundToInt(UIFaces.PointSizeFor(font, size) * scale)),
                 fontStyle = synthesize,
                 alignment = anchor,
                 wordWrap = wrap,
