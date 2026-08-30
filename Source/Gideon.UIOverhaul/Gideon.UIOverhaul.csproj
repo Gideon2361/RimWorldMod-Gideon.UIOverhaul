@@ -34,7 +34,7 @@
              branches out together, and what it carries is whatever main last named plus whatever is
              being tested on top. -->
         <!-- Bumped on merge to main only. See the note above before changing this line. -->
-        <Version>1.6.4871.14201</Version>
+        <Version>1.6.4871.14202</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -51,10 +51,22 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- The Unity project that bakes the font AssetBundle. Its editor script compiles inside Unity
-             against UnityEditor, which no mod assembly may reference, so the glob must not see it. -->
+        <!-- Offline tooling, kept in the repo and out of the mod. The glob would otherwise compile both of
+             these into the shipped assembly, where neither can ever run.
+
+             BundleProject is the Unity project that bakes the AssetBundle. Its editor script compiles inside
+             Unity against UnityEditor, which no mod assembly may reference.
+
+             Baker is the GDI+ atlas baker, a console tool with its own Main. It only ever runs on a developer
+             machine, before a build, and its output is the PNG and metrics pairs already committed under
+             Fonts/. Compiled in, it put a System.Drawing reference in the assembly manifest of a RimWorld UI
+             mod: dead weight in every subscriber's download, and a reference the game would have to resolve on
+             Mac and Linux while enumerating our types at startup. Type enumeration that fails to resolve
+             throws ReflectionTypeLoadException and takes the whole assembly with it, not just the one type. -->
         <Compile Remove="ThirdParty\Fonts\BundleProject\**\*.cs" />
         <None Remove="ThirdParty\Fonts\BundleProject\**" />
+        <Compile Remove="ThirdParty\Fonts\Baker\**\*.cs" />
+        <None Remove="ThirdParty\Fonts\Baker\**" />
     </ItemGroup>
 
     <PropertyGroup>
@@ -167,11 +179,21 @@
 
              Opt in for one build:  msbuild ... -p:DeployToGame=true
 
-             KNOW WHERE THIS WRITES. The Mods entry is a symlink into main's checkout, so this target
-             writes main's copy of Gideon.UIOverhaul.dll, and that copy is tracked in git. After
-             testing a branch build, main shows a modified assembly that wants reverting. The
-             alternative is to repoint the symlink at the worktree being tested, which keeps main
-             clean but takes the game away from every other branch. -->
+             KNOW WHERE THIS WRITES, because the answer changed. The Mods entry is a junction, and it
+             now points at the BuildTest worktree's mod folder rather than main's checkout: that was
+             the alternative this note used to describe, and it is the arrangement in use since
+             2026-08-30.
+
+             What follows from that is that this switch is usually the wrong tool. Branches are merged
+             into BuildTest and built there, and an ordinary build in that worktree already lands in
+             the folder the game reads, through the junction and with DeployToModFolder alone. Turning
+             this one on from any other worktree writes a branch's assembly into BuildTest's checkout,
+             where it is tracked, so BuildTest then shows a modified assembly that disagrees with its
+             own source and wants reverting.
+
+             Repointing the junction is what to change if the game should read some other worktree.
+             Whichever it points at, that checkout is the one whose tracked assembly this target
+             overwrites. -->
         <DeployToGame>false</DeployToGame>
         <GameModAssembliesDir>$(SteamAppsDir)\common\RimWorld\Mods\Gideon.UIOverhaul\1.6\Assemblies</GameModAssembliesDir>
     </PropertyGroup>
