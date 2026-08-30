@@ -192,6 +192,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             if (string.Equals(defName, Ideoligions.IdeoTabs.VanillaDefName, StringComparison.OrdinalIgnoreCase))
                 return Ideoligions.IdeoTabs.Available;
 
+            // Vanilla's quests tab, when ours is present, for the same reason as the ideoligions pair: its
+            // content moves into ours, so leaving its button on the bar would be two doors into one screen.
+            if (string.Equals(defName, Quests.QuestTabs.VanillaDefName, StringComparison.OrdinalIgnoreCase))
+                return Quests.QuestTabs.Available;
+
+            // And ours when it is not, which can only happen if the mod's defs failed to load. Suppressing it
+            // then leaves the player with RimWorld's button rather than with two that both do nothing.
+            if (string.Equals(defName, Quests.QuestTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
+                return !Quests.QuestTabs.Available;
+
             // Our own ideoligions tab is suppressed the other way about: the button exists in every install
             // because a MainButtonDef cannot be conditionally undefined, and without Ideology it would open a
             // screen with nothing in it. This is what makes the tab absent rather than empty.
