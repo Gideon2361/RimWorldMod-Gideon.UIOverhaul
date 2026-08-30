@@ -130,7 +130,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
             x = Toggle(row, x, "vanilla", path == 0, () => path = 0);
             x = Toggle(row, x, "glyphs", path == 1, () => path = 1);
 
-            Toggle(row, x, "font", path == 2, () => path = 2);
+            x = Toggle(row, x, "font", path == 2, () => path = 2);
+
+            Toggle(row, x, "ttf", path == 3, () => path = 3);
 
             return y + 36f;
         }
@@ -214,7 +216,96 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 y += cellHeight + 4f;
             }
 
-            return Widths(inRect, y) + 10f;
+            return Ttf(inRect, Widths(inRect, y)) + 10f;
+        }
+
+        /// <summary>
+        /// The same sample through a TTF loaded straight off disk, which is the vanilla mechanism itself.
+        ///
+        /// <b>This section exists to settle one question:</b> <c>Font(string)</c> routes a path to
+        /// <c>Internal_CreateFontFromPath</c> in RimWorld's own player build, and if the native side honours it,
+        /// a shipped TTF becomes a live dynamic font -- FreeType rasterizing hinted glyphs at any size, exactly
+        /// as the game's own text does. That would supersede the entire baked-atlas pipeline: no sheets, no
+        /// baker, no per-size bakes, no rounding arithmetic. The sample carries bold and italic tags because a
+        /// dynamic font is supposed to honour them on its own.
+        ///
+        /// <b>What each failure looks like.</b> "Did not load" means the native call is a stub in the player and
+        /// the atlas pipeline stays. Text at the wrong size means the fontSize calibration is ours to do. Blurry
+        /// or wavy text here would mean FreeType is not being asked at native size -- unlikely, since hinted
+        /// per-size rasterization is the whole point of a dynamic font.
+        /// </summary>
+        private float Ttf(Rect inRect, float y)
+        {
+            Font font = UIDynamicFont.FromFile("BarlowCondensed-Regular");
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(1f, 1f, 1f, 0.6f);
+
+            Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), font == null
+                ? "TTF from disk: did not load. Internal_CreateFontFromPath is a stub in this player."
+                : string.Format(
+                    "TTF from disk: dynamic={0} lineHeight={1} ascent={2} fontSize={3} hasA={4}",
+                    font.dynamic, font.lineHeight, font.ascent, font.fontSize, font.HasCharacter('A')));
+
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            y += 20f;
+
+            if (font == null)
+                return y;
+
+            float x = inRect.x;
+            float tallest = 0f;
+
+            foreach (GameFont each in new[] { GameFont.Tiny, GameFont.Small, GameFont.Medium })
+            {
+                float line = UIFonts.LineHeightOf(each);
+                Rect cell = new Rect(x, y, 300f, line + 8f);
+
+                Widgets.DrawBox(cell);
+
+                GUI.Label(cell.ContractedBy(4f), Sample + " <b>bold</b> <i>italic</i>", TtfStyle(font, each));
+
+                tallest = Mathf.Max(tallest, cell.height);
+                x += 308f;
+            }
+
+            return y + tallest + 4f;
+        }
+
+        private static readonly Dictionary<int, GUIStyle> TtfStyles = new Dictionary<int, GUIStyle>();
+
+        /// <summary>
+        /// A style asking the dynamic font for one size.
+        ///
+        /// <b><c>fontSize</c> is the entire mechanism.</b> A dynamic font rasterizes at whatever size the style
+        /// requests, so this is where the atlas pipeline's whole per-size bake collapses into one integer. The
+        /// 1.2 divisor is Barlow's line ratio, hard coded because this is a spike; the real version would read
+        /// it from the face.
+        /// </summary>
+        private static GUIStyle TtfStyle(Font font, GameFont size)
+        {
+            GUIStyle style;
+
+            if (TtfStyles.TryGetValue((int) size, out style))
+                return style;
+
+            style = new GUIStyle
+            {
+                font = font,
+                fontSize = Mathf.RoundToInt(UIFonts.LineHeightOf(size) / 1.2f),
+                alignment = TextAnchor.MiddleLeft,
+                richText = true,
+                wordWrap = false,
+                clipping = TextClipping.Clip
+            };
+
+            style.normal.textColor = Color.white;
+
+            TtfStyles[(int) size] = style;
+
+            return style;
         }
 
         /// <summary>
@@ -369,13 +460,20 @@ namespace Gideon.UIOverhaul.Features.DevTools
                     {
                         UITextControl.Label(cell, text, UIFace.BarlowCondensed, GameFont.Tiny);
                     }
-                    else
+                    else if (path == 2)
                     {
                         GUIStyle style = UIRuntimeFont.StyleFor(UIFace.BarlowCondensed, GameFont.Tiny,
                             TextAnchor.UpperLeft, false);
 
                         if (style != null)
                             GUI.Label(cell, text, style);
+                    }
+                    else
+                    {
+                        Font ttf = UIDynamicFont.FromFile("BarlowCondensed-Regular");
+
+                        if (ttf != null)
+                            GUI.Label(cell, text, TtfStyle(ttf, GameFont.Tiny));
                     }
                 }
             });
@@ -387,7 +485,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
         private string PathName()
         {
-            return path == 0 ? "RimWorld" : path == 1 ? "glyph by glyph" : "runtime font";
+            return path == 0 ? "RimWorld" : path == 1 ? "glyph by glyph" : path == 2 ? "runtime font" : "ttf from disk";
         }
 
         private static float Heading(Rect inRect, float y, string text)
