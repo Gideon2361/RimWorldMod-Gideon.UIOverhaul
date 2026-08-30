@@ -36,7 +36,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         internal const float WindowHeight = 760f;
 
         private const float Pad = 12f;
-        private const float RailWidth = 190f;
+        private const float RailWidth = 285f;
         private const float HeaderHeight = 74f;
         private const float BlockGap = 10f;
         private const float RowGap = 2f;
@@ -195,7 +195,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect view = rect.ContractedBy(6f);
             float y = view.y + 2f;
 
-            y = TabParts.Heading(view, y, "In this colony", palette);
+            y = TabParts.Heading(view, y, "In this colony", palette, false);
 
             for (int i = 0; i < here.Count; i++)
                 y = Entry(view, y, here[i], selected, palette, true);
@@ -713,8 +713,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     issues.Add(rows[i].issue);
 
                 // Measured against the issue names in this faith, so "Diversity of thought" is not cut down to
-                // make room for a stance that had the width to spare.
-                float column = Column(issues, GameFont.Tiny, 110f, inner.width, 0.3f);
+                // make room for a stance that had the width to spare. Half again the room it used to get.
+                float column = Column(issues, GameFont.Tiny, 165f, inner.width, 0.45f);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = DoctrineRowDraw(inner, cursor, rows[i], column, palette);
@@ -740,13 +740,21 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Rect band = new Rect(inner.x, y, inner.width, height);
 
-            Color tint = row.impact == PreceptImpact.High
-                ? palette.TextPrimary
+            // Impact is a stripe rather than a word. It was a column reading "low" fifteen times down a list of
+            // nineteen, which spent real width restating the least interesting thing on the row; as a mark in
+            // the margin it is read without being looked at, and the two rows that are not low stand out.
+            Color impact = row.impact == PreceptImpact.High
+                ? palette.Danger
                 : row.impact == PreceptImpact.Medium
-                    ? palette.TextSecondary
-                    : palette.TextDisabled;
+                    ? palette.Warning
+                    : palette.Accent;
 
-            Rect icon = new Rect(band.x, band.y + 2f, 20f, 20f);
+            Widgets.DrawBoxSolid(new Rect(band.x, band.y + 3f, 3f, height - 6f), impact);
+
+            TooltipHandler.TipRegion(new Rect(band.x, band.y, 8f, height),
+                (TipSignal) (row.impact.ToString().ToLower() + " impact"));
+
+            Rect icon = new Rect(band.x + 11f, band.y + 2f, 20f, 20f);
 
             UIGuard.Try("Ideoligions.PreceptIcon", () =>
             {
@@ -757,7 +765,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 Color previous = GUI.color;
 
-                GUI.color = tint;
+                GUI.color = palette.TextSecondary;
                 GUI.DrawTexture(icon, texture);
                 GUI.color = previous;
             }, null);
@@ -765,14 +773,20 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), row.issue, palette.TextSecondary,
                 GameFont.Tiny);
 
-            float impactWidth = 58f;
+            // The stance is the answer to the issue and is the thing worth reading, so it takes the primary
+            // colour and a third of what is left; the effect follows it in the secondary.
             float stanceX = icon.xMax + 8f + column + 8f;
+            float remaining = Mathf.Max(40f, band.xMax - stanceX);
+            float stanceWidth = row.effect.NullOrEmpty() ? remaining : remaining * 0.4f;
 
-            TabParts.RowLabel(new Rect(stanceX, band.y,
-                Mathf.Max(20f, band.xMax - stanceX - impactWidth - 6f), height), row.stance, tint);
+            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary);
 
-            TabParts.RowLabel(new Rect(band.xMax - impactWidth, band.y, impactWidth, height),
-                row.impact.ToString().ToLower(), palette.TextDisabled, GameFont.Tiny);
+            if (!row.effect.NullOrEmpty())
+            {
+                TabParts.RowLabel(new Rect(stanceX + stanceWidth + 6f, band.y,
+                        Mathf.Max(20f, remaining - stanceWidth - 6f), height), row.effect,
+                    palette.TextSecondary, GameFont.Tiny);
+            }
 
             if (Mouse.IsOver(band))
             {

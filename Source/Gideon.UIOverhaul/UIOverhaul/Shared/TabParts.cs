@@ -31,8 +31,12 @@ namespace Gideon.UIOverhaul.Shared
         ///
         /// The same shape the hunting bill dialog uses, so a player moving between the two windows is reading the
         /// same furniture rather than learning a second convention.
+        ///
+        /// <paramref name="rule"/> draws the hairline and is on by default, because the line is what separates one
+        /// section from the one above it. Pass false for the first heading inside a panel, where there is nothing
+        /// above to separate from and the line only doubles up on the panel's own edge.
         /// </summary>
-        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette)
+        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette, bool rule = true)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -41,7 +45,8 @@ namespace Gideon.UIOverhaul.Shared
             {
                 GUI.color = palette.Border;
 
-                Widgets.DrawLineHorizontal(rect.x, y, rect.width);
+                if (rule)
+                    Widgets.DrawLineHorizontal(rect.x, y, rect.width);
 
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;

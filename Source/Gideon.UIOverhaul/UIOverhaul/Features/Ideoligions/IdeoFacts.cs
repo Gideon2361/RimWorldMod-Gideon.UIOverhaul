@@ -51,8 +51,16 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
     internal struct DoctrineRow
     {
         internal Precept precept;
+
+        /// <summary>The question: Female clothing, Cannibalism, Slavery.</summary>
         internal string issue;
+
+        /// <summary>The answer: No rules, Acceptable, Abhorrent. Not the question again.</summary>
         internal string stance;
+
+        /// <summary>What holding this position does to a believer, in the game's own numbers.</summary>
+        internal string effect;
+
         internal PreceptImpact impact;
     }
 
@@ -520,7 +528,13 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 {
                     precept = precept,
                     issue = precept.def.issue.LabelCap,
-                    stance = precept.LabelCap,
+
+                    // The def's label, not the precept's name. The name is generated and for most precepts it
+                    // comes back as the issue over again, which put the same words in both columns and told the
+                    // reader nothing twice. The def's label is the variation: No rules, Acceptable, Abhorrent.
+                    stance = precept.def.LabelCap,
+
+                    effect = Effect(precept.def),
                     impact = precept.def.impact
                 });
             }
@@ -533,6 +547,82 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             });
 
             return rows;
+        }
+
+        /// <summary>
+        /// What holding this position costs or pays a believer, in the game's own numbers.
+        ///
+        /// <b>Read off the precept's thought comps rather than described in words here.</b> Every precept that
+        /// moves a mood does it through a <c>PreceptComp_Thought</c>, and the thought's stages carry the actual
+        /// figures; taking the extremes of those stages gives the range a believer can swing between without
+        /// this mod having an opinion about any particular precept. A modded precept is summarised the same way
+        /// for free.
+        ///
+        /// <b>The stages are walked here rather than asking <c>AffectsMood</c>,</b> which iterates
+        /// <c>thought.stages</c> with no null check of its own and would throw on a def that declares none.
+        ///
+        /// Falls back to naming the stats a precept shifts, so a row that changes something real is never blank.
+        /// Null when it genuinely does nothing measurable, and the column is then left empty rather than filled
+        /// with the word "none".
+        /// </summary>
+        private static string Effect(PreceptDef def)
+        {
+            return UIGuard.Try("Ideoligions.Effect", () =>
+            {
+                float best = 0f;
+                float worst = 0f;
+
+                for (int i = 0; def.comps != null && i < def.comps.Count; i++)
+                {
+                    PreceptComp_Thought comp = def.comps[i] as PreceptComp_Thought;
+                    List<ThoughtStage> stages = comp?.thought?.stages;
+
+                    for (int s = 0; stages != null && s < stages.Count; s++)
+                    {
+                        if (stages[s] == null)
+                            continue;
+
+                        best = Mathf.Max(best, stages[s].baseMoodEffect);
+                        worst = Mathf.Min(worst, stages[s].baseMoodEffect);
+                    }
+                }
+
+                if (best > 0f && worst < 0f)
+                    return "mood " + Signed(worst) + " to " + Signed(best);
+
+                if (best > 0f)
+                    return "mood " + Signed(best);
+
+                if (worst < 0f)
+                    return "mood " + Signed(worst);
+
+                return Stats(def);
+            }, null, null);
+        }
+
+        private static string Signed(float mood)
+        {
+            return (mood > 0f ? "+" : "") + mood.ToString("0.#");
+        }
+
+        /// <summary>The stats a precept shifts, named rather than valued: the numbers vary by pawn.</summary>
+        private static string Stats(PreceptDef def)
+        {
+            List<string> names = new List<string>();
+
+            for (int i = 0; def.statOffsets != null && i < def.statOffsets.Count && names.Count < 2; i++)
+            {
+                if (def.statOffsets[i]?.stat != null)
+                    names.Add(def.statOffsets[i].stat.label);
+            }
+
+            for (int i = 0; def.statFactors != null && i < def.statFactors.Count && names.Count < 2; i++)
+            {
+                if (def.statFactors[i]?.stat != null && !names.Contains(def.statFactors[i].stat.label))
+                    names.Add(def.statFactors[i].stat.label);
+            }
+
+            return names.Count == 0 ? null : "affects " + string.Join(" and ", names.ToArray());
         }
 
         /// <summary>How many distinct issues the doctrine covers, for the block's heading.</summary>
