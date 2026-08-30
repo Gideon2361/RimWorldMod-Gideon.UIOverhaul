@@ -20,7 +20,7 @@
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
              The first three move when the game does; the last increments on every change. -->
-        <Version>1.6.4871.14198</Version>
+        <Version>1.6.4871.14200</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
