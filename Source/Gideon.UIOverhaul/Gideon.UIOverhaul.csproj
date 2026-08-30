@@ -20,7 +20,7 @@
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
              The first three move when the game does; the last increments on every change. -->
-        <Version>1.6.4871.14196</Version>
+        <Version>1.6.4871.14197</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -35,6 +35,13 @@
              project kept an explicit <Compile Include> list, which silently drifted from reality. -->
         <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- The Unity project that bakes the font AssetBundle. Its editor script compiles inside Unity
+             against UnityEditor, which no mod assembly may reference, so the glob must not see it. -->
+        <Compile Remove="ThirdParty\Fonts\BundleProject\**\*.cs" />
+        <None Remove="ThirdParty\Fonts\BundleProject\**" />
+    </ItemGroup>
 
     <PropertyGroup>
         <!-- The only machine-specific settings in the project. On this machine
@@ -65,6 +72,13 @@
              are otherwise unavailable during a load: ModContentPack.ReloadContent defers all content
              loading to LongEventHandler.ExecuteWhenFinished, which does not run until the long event
              ends. See UIImageLoader. -->
+        <!-- UnityEngine.AssetBundle, for the fonts shipped as a bundle. RimWorld loads the bundle itself;
+             this is only for fishing the Font assets back out of it. -->
+        <Reference Include="UnityEngine.AssetBundleModule">
+            <HintPath>$(RimWorldManagedDir)\UnityEngine.AssetBundleModule.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+
         <Reference Include="UnityEngine.ImageConversionModule">
             <HintPath>$(RimWorldManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath>
             <Private>false</Private>
