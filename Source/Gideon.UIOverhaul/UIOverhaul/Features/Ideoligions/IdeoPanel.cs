@@ -52,14 +52,16 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         private const float RowGap = 2f;
 
         /// <summary>
-        /// How much smaller the doctrine stance sets than the Small it is measured at.
+        /// How much smaller a row set in the body face draws than the Small it is measured at.
         ///
-        /// The stance is the answer to the issue beside it and wants to lead the row, but at full Small in a
-        /// body face it was half again the size of the issue label and read as the only thing on the line.
-        /// Dropping it to Tiny went too far the other way and flattened the pair into one grey column, so it
-        /// sits between the two -- which a bundled face can do and a GameFont cannot.
+        /// <b>Barlow at Small is bigger than the game font at Small.</b> Every face here is sized to fill one
+        /// RimWorld line, so two faces agreeing on a GameFont still disagree on how large the letters look, and
+        /// the body face is the one that comes out heaviest. Left alone it made the doctrine stance half again
+        /// the size of the issue beside it, and made a demand name the loudest thing in a column of condensed
+        /// role names. Tiny went too far the other way and flattened each pair into one grey line, so this sits
+        /// between the two -- which a bundled face can do and a GameFont cannot.
         /// </summary>
-        private const float StanceScale = 0.86f;
+        private const float BodyScale = 0.86f;
 
         private static Vector2 scroll;
         private static float viewHeight = 1f;
@@ -301,13 +303,17 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             // one answer to "who is doing what, and what is owed".
             float half = (view.width - BlockGap) * 0.5f;
 
-            float left = Roles(new Rect(view.x, y, half, 0f), y, roles, palette);
-            float rightY = Obligations(new Rect(view.x + half + BlockGap, y, half, 0f), y, obligations, ideo,
-                palette);
+            Rect column = new Rect(view.x, y, half, 0f);
+            Rect beside = new Rect(view.x + half + BlockGap, y, half, 0f);
 
-            y = Mathf.Max(left, rightY);
+            // Demands is stacked under roles rather than run across the page, because it is the shortest block
+            // on the screen: a colony usually owes its faith one altar, so at full width it was a header with a
+            // single name under it and the other two thirds of the row empty. Under roles it fills the column
+            // that obligations, which has more rows, would otherwise leave short.
+            float left = Demands(column, Roles(column, y, roles, palette), demands, map, palette);
+            float right = Obligations(beside, y, obligations, ideo, palette);
 
-            y = Demands(view, y, demands, map, palette);
+            y = Mathf.Max(left, right);
             y = Doctrine(view, y, doctrine, palette);
 
             if (Event.current.type == EventType.Layout)
@@ -750,7 +756,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(row.state), tint, palette, chipWidth, null, IdeoFaces.Mono);
 
             TabParts.RowLabel(new Rect(band.x, band.y, band.width - chipWidth - 8f, height),
-                row.precept.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Body);
+                row.precept.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, BodyScale);
 
             return y + height + RowGap;
         }
@@ -843,7 +849,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float remaining = Mathf.Max(40f, band.xMax - stanceX);
             float stanceWidth = row.effect.NullOrEmpty() ? remaining : remaining * 0.4f;
 
-            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, StanceScale);
+            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, BodyScale);
 
             if (!row.effect.NullOrEmpty())
             {
