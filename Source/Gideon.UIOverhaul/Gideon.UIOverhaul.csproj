@@ -19,7 +19,21 @@
         <!-- Kept in step with <modVersion> in About/About.xml, which is the number the player sees.
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
-             The first three move when the game does; the last increments on every change. -->
+             The first three move when the game does.
+
+             THE LAST INCREMENTS ONLY WHEN WORK IS PUSHED TO MAIN. It used to increment on every
+             change, and with more than one branch in flight at a time that stopped working: main,
+             FontOverhaul and InProgress were each incrementing the same counter on their own, and
+             between them they issued 14193 through 14201 twice over. Two different builds wearing
+             one number is worse than no number, and every merge turned into a question about which
+             of them was really that build.
+
+             So a feature commit on a branch leaves this line alone, however many of them there are.
+             The number changes once, when the work reaches main, and that is the build a player can
+             be given. A merge into BuildTest does not bump it either: BuildTest exists to try
+             branches out together, and what it carries is whatever main last named plus whatever is
+             being tested on top. -->
+        <!-- Bumped on merge to main only. See the note above before changing this line. -->
         <Version>1.6.4871.14202</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
@@ -165,11 +179,21 @@
 
              Opt in for one build:  msbuild ... -p:DeployToGame=true
 
-             KNOW WHERE THIS WRITES. The Mods entry is a symlink into main's checkout, so this target
-             writes main's copy of Gideon.UIOverhaul.dll, and that copy is tracked in git. After
-             testing a branch build, main shows a modified assembly that wants reverting. The
-             alternative is to repoint the symlink at the worktree being tested, which keeps main
-             clean but takes the game away from every other branch. -->
+             KNOW WHERE THIS WRITES, because the answer changed. The Mods entry is a junction, and it
+             now points at the BuildTest worktree's mod folder rather than main's checkout: that was
+             the alternative this note used to describe, and it is the arrangement in use since
+             2026-08-30.
+
+             What follows from that is that this switch is usually the wrong tool. Branches are merged
+             into BuildTest and built there, and an ordinary build in that worktree already lands in
+             the folder the game reads, through the junction and with DeployToModFolder alone. Turning
+             this one on from any other worktree writes a branch's assembly into BuildTest's checkout,
+             where it is tracked, so BuildTest then shows a modified assembly that disagrees with its
+             own source and wants reverting.
+
+             Repointing the junction is what to change if the game should read some other worktree.
+             Whichever it points at, that checkout is the one whose tracked assembly this target
+             overwrites. -->
         <DeployToGame>false</DeployToGame>
         <GameModAssembliesDir>$(SteamAppsDir)\common\RimWorld\Mods\Gideon.UIOverhaul\1.6\Assemblies</GameModAssembliesDir>
     </PropertyGroup>
