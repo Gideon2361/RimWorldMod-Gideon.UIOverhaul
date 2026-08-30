@@ -52,16 +52,14 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         private const float RowGap = 2f;
 
         /// <summary>
-        /// How much smaller a row set in the body face draws than the Small it is measured at.
+        /// Whether the conviction block is sorted by name rather than by devotion.
         ///
-        /// <b>Barlow at Small is bigger than the game font at Small.</b> Every face here is sized to fill one
-        /// RimWorld line, so two faces agreeing on a GameFont still disagree on how large the letters look, and
-        /// the body face is the one that comes out heaviest. Left alone it made the doctrine stance half again
-        /// the size of the issue beside it, and made a demand name the loudest thing in a column of condensed
-        /// role names. Tiny went too far the other way and flattened each pair into one grey line, so this sits
-        /// between the two -- which a bundled face can do and a GameFont cannot.
+        /// Kept here, not saved, because it is a way of looking at the list rather than a preference about it:
+        /// the reason to sort by name is to find one colonist, and once they are found the reason is gone. A
+        /// setting that survived a restart would leave the block permanently answering the question nobody was
+        /// asking any more, which is the one the default order answers well.
         /// </summary>
-        private const float BodyScale = 0.86f;
+        private static bool Alphabetical;
 
         private static Vector2 scroll;
         private static float viewHeight = 1f;
@@ -155,15 +153,15 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             }
 
             right = Readout(inner, right, Points(ideo), "to reform", palette);
-            right = Readout(inner, right, faithsHere.ToString(), "faiths here", palette);
+            right = Readout(inner, right, faithsHere.ToString(), "other faiths", palette);
             Readout(inner, right, ideo.ColonistBelieverCountCached.ToString(), "believers", palette);
 
             Rect name = new Rect(x, inner.y + 2f, Mathf.Max(60f, right - x - 12f), 28f);
 
-            TabParts.RowLabel(name, ideo.name, ideo.TextColor, GameFont.Medium, IdeoFaces.Display);
+            TabParts.RowLabel(name, ideo.name, ideo.TextColor, GameFont.Medium, IdeoFaces.Display, IdeoFaces.Size.Title);
 
             TabParts.RowLabel(new Rect(x, name.yMax, name.width, 20f), Subtitle(ideo), palette.TextSecondary,
-                GameFont.Tiny, IdeoFaces.Condensed);
+                GameFont.Tiny, IdeoFaces.Condensed, IdeoFaces.Size.Subtitle);
         }
 
         /// <summary>Points against the price of the next reform, or a dash for a faith that cannot reform.</summary>
@@ -193,14 +191,53 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             return text;
         }
 
-        /// <summary>One right-aligned number over its caption. Returns the x the next one should end at.</summary>
+        /// <summary>
+        /// One readout: the figure, with its caption in small caps under it. Returns the x the next one ends at.
+        ///
+        /// <b>The figure sits above the caption, which is the way round the mockup has it and the way round we
+        /// did not.</b> A header readout is read figure-first -- the caption only says which figure it is -- so
+        /// putting the caption on top makes the eye cross a dim label to reach the number every time. Reported
+        /// against the real screen on 2026-08-30.
+        ///
+        /// <b>Right-aligned, both lines.</b> These are laid out from the right edge inward, so a right edge is
+        /// the one thing every readout shares; centring them instead leaves the figures on a ragged line.
+        /// </summary>
         private static float Readout(Rect inner, float right, string value, string caption,
             UIColorPaletteDef palette)
         {
-            float width = Mathf.Max(TabParts.PillWidth(value, 9999f, IdeoFaces.Mono), TabParts.PillWidth(caption, 9999f, IdeoFaces.Mono)) + 10f;
-            Rect band = new Rect(right - width, inner.y + 4f, width, inner.height - 8f);
+            string label = IdeoFaces.Caps(caption);
 
-            TabParts.Labelled(band, caption, value, palette.TextPrimary, palette);
+            float width = Mathf.Max(
+                UITextControl.Width(value, IdeoFaces.Mono, IdeoFaces.Size.Readout),
+                UITextControl.Width(label, IdeoFaces.Mono, IdeoFaces.Size.Caption)) + 4f;
+
+            float figure = UITextControl.LineHeight(IdeoFaces.Mono, IdeoFaces.Size.Readout);
+            float under = UITextControl.LineHeight(IdeoFaces.Mono, IdeoFaces.Size.Caption);
+
+            float top = inner.y + (inner.height - figure - under - 2f) * 0.5f;
+
+            Rect band = new Rect(right - width, top, width, figure + under + 2f);
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+
+                GUI.color = palette.TextPrimary;
+                UITextControl.LabelEllipses(new Rect(band.x, band.y, band.width, figure), value,
+                    IdeoFaces.Mono, IdeoFaces.Size.Readout);
+
+                GUI.color = palette.TextSecondary;
+                UITextControl.LabelEllipses(new Rect(band.x, band.y + figure + 2f, band.width, under), label,
+                    IdeoFaces.Mono, IdeoFaces.Size.Caption);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
 
             return band.x - 14f;
         }
@@ -262,11 +299,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float countWidth = 24f;
 
             TabParts.RowLabel(new Rect(row.xMax - countWidth - 4f, row.y, countWidth, height), count,
-                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono);
+                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Small);
 
             TabParts.RowLabel(new Rect(swatch.xMax + 6f, row.y, row.width - 20f - countWidth - 12f, height),
                 ideo.name, on ? ideo.TextColor : present ? palette.TextPrimary : palette.TextDisabled,
-                GameFont.Small, IdeoFaces.Condensed);
+                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.Name);
 
             if (Widgets.ButtonInvisible(row))
             {
@@ -285,7 +322,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         {
             Map map = Find.CurrentMap;
 
-            List<ConvictionRow> conviction = IdeoFacts.Conviction(ideo);
+            List<ConvictionRow> conviction = IdeoFacts.Conviction(ideo, Alphabetical);
             List<RoleRow> roles = IdeoFacts.Roles(ideo);
             List<ObligationRow> obligations = IdeoFacts.Obligations(ideo);
             List<DemandRow> demands = IdeoFacts.Demands(ideo, map);
@@ -353,14 +390,14 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         /// truncation bug in a new coat: Barlow Condensed fits noticeably more in a given width than the game
         /// font does, so a column sized against the wrong one is either short or padded with air.
         /// </param>
-        private static float Column(List<string> labels, GameFont font, float minimum, float available,
+        private static float Column(List<string> labels, float points, float minimum, float available,
             float share = 0.55f, UIFace face = UIFace.Game)
         {
             GameFont previous = Text.Font;
 
             try
             {
-                Text.Font = font;
+                Text.Font = UIFonts.Nearest(points);
 
                 float widest = 0f;
 
@@ -371,7 +408,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                     float w = face == UIFace.Game
                         ? Text.CalcSize(labels[i]).x
-                        : UITextControl.Width(labels[i], face, font);
+                        : UITextControl.Width(labels[i], face, points);
 
                     widest = Mathf.Max(widest, w);
                 }
@@ -384,9 +421,16 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             }
         }
 
-        /// <summary>A titled box drawn around one body. Returns the y under it.</summary>
+        /// <summary>
+        /// A titled box drawn around one body. Returns the y under it.
+        /// </summary>
+        /// <param name="hot">
+        /// The tail of <paramref name="suffix"/> that is a control rather than a readout, or null when the
+        /// whole suffix is just text. Only this part lights on hover and only this part takes the click, so a
+        /// block can carry a count and a sort order in one line without the count looking pressable.
+        /// </param>
         private static float Block(Rect view, float y, string title, string suffix, UIColorPaletteDef palette,
-            System.Func<Rect, float, float> body)
+            System.Func<Rect, float, float> body, string hot = null, System.Action onHot = null)
         {
             const float capHeight = 24f;
 
@@ -427,7 +471,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             // block announced itself more loudly than anything it contained -- and five of those stacked down
             // the tab read as five headlines with data between them.
             TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
-                title.ToUpperInvariant(), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
+                title.ToUpperInvariant(), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono,
+                IdeoFaces.Size.BlockHead);
 
             if (!suffix.NullOrEmpty())
             {
@@ -444,8 +489,35 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     // Mono and upper case, matching the header on the other side of the cap. This one was still
                     // in the game's own font: it was the only label on the block that never got a face, so a
                     // row of blocks had mono headers on the left and RimWorld's face on the right.
-                    UITextControl.LabelEllipses(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
-                        IdeoFaces.Caps(suffix), IdeoFaces.Mono, GameFont.Tiny);
+                    Rect band = new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight);
+
+                    // The hot tail is measured and drawn on its own so it can take a hover colour the rest of
+                    // the suffix does not. Drawn second, over the right end of the line the full suffix just
+                    // laid down, which keeps one right edge for both and needs no layout arithmetic.
+                    UITextControl.LabelEllipses(band, IdeoFaces.Caps(suffix), IdeoFaces.Mono,
+                        IdeoFaces.Size.BlockHead);
+
+                    if (!hot.NullOrEmpty() && onHot != null)
+                    {
+                        float width = UITextControl.Width(IdeoFaces.Caps(hot), IdeoFaces.Mono,
+                            IdeoFaces.Size.BlockHead);
+
+                        Rect control = new Rect(band.xMax - width, band.y, width, band.height);
+
+                        bool over = Mouse.IsOver(control);
+
+                        GUI.color = over ? palette.Accent : palette.TextSecondary;
+
+                        UITextControl.LabelEllipses(control, IdeoFaces.Caps(hot), IdeoFaces.Mono,
+                            IdeoFaces.Size.BlockHead);
+
+                        if (Widgets.ButtonInvisible(control))
+                        {
+                            SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+
+                            onHot();
+                        }
+                    }
                 }
                 finally
                 {
@@ -470,9 +542,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         {
             int drifting = IdeoFacts.Drifting(rows);
 
+            string order = Alphabetical ? "Alpha - Descending" : "Devotion - Ascending";
+
             string suffix = rows.Count == 0
                 ? "nobody here holds it"
-                : "weakest first" + (drifting > 0 ? "  -  " + drifting + " drifting" : "");
+                : (drifting > 0 ? drifting + " drifting" + "  -  " : "") + order;
 
             return Block(view, y, "Conviction", suffix, palette, (inner, top) =>
             {
@@ -491,13 +565,13 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 // fails at the one thing the row exists for, which is telling you who is slipping. The floor is
                 // raised as well as the cap so the bars start at the same x whatever the roster is called --
                 // a column that moves as colonists come and go is harder to read down than a slightly wide one.
-                float column = Column(names, GameFont.Small, 180f, inner.width, 0.5f, IdeoFaces.Condensed);
+                float column = Column(names, IdeoFaces.Size.Name, 180f, inner.width, 0.5f, IdeoFaces.Condensed);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = ConvictionRowDraw(inner, cursor, rows[i], column, palette);
 
                 return cursor;
-            });
+            }, rows.Count == 0 ? null : order, () => Alphabetical = !Alphabetical);
         }
 
         private static float ConvictionRowDraw(Rect inner, float y, ConvictionRow row, float column,
@@ -508,7 +582,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect band = new Rect(inner.x, y, inner.width, height);
 
             TabParts.RowLabel(new Rect(band.x, band.y, column, height), row.pawn.LabelShortCap,
-                palette.TextPrimary, GameFont.Small, IdeoFaces.Condensed);
+                palette.TextPrimary, GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.Name);
 
             Color tint = row.certainty < IdeoFacts.ConvertingBelow
                 ? palette.Danger
@@ -528,7 +602,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             UIProgressBarControl.Draw(bar, row.certainty, palette, tint);
 
             TabParts.RowLabel(new Rect(bar.xMax + 4f, band.y, numberWidth, height),
-                row.certainty.ToStringPercent("0"), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
+                row.certainty.ToStringPercent("0"), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono,
+                IdeoFaces.Size.Figure);
 
             string drift = row.drift > 0.0005f
                 ? "+" + row.drift.ToStringPercent("0") + "/d"
@@ -543,7 +618,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     : palette.TextDisabled;
 
             TabParts.RowLabel(new Rect(bar.xMax + 4f + numberWidth, band.y, driftWidth, height), drift,
-                driftColor, GameFont.Tiny, IdeoFaces.Mono);
+                driftColor, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Small);
 
             string word = row.certainty < IdeoFacts.ConvertingBelow
                 ? "slipping"
@@ -553,7 +628,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                         ? "devout"
                         : "settled";
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(word), tint, palette, 9999f, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(word), tint, palette, 9999f, null, IdeoFaces.Mono, IdeoFaces.Size.Chip);
 
             TooltipHandler.TipRegion(band, (TipSignal) (row.pawn.LabelShortCap + " is " + word
                 + " at " + row.certainty.ToStringPercent("0") + " certainty.\n\nCertainty falls when they see "
@@ -591,7 +666,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 // Narrower share than the obligations block: this row carries a holder's name and a chip after
                 // the role, so the role cannot have most of the width even when its name is long.
-                float column = Column(names, GameFont.Small, 80f, inner.width, 0.4f, IdeoFaces.Condensed);
+                float column = Column(names, IdeoFaces.Size.Name, 80f, inner.width, 0.4f, IdeoFaces.Condensed);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = RoleRowDraw(inner, cursor, rows[i], column, palette);
@@ -608,7 +683,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect band = new Rect(inner.x, y, inner.width, height);
 
             TabParts.RowLabel(new Rect(band.x, band.y, column, height), row.role.LabelCap, palette.Accent,
-                GameFont.Small, IdeoFaces.Condensed);
+                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.Name);
 
             string chip;
             Color tint;
@@ -629,15 +704,15 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 tint = palette.Success;
             }
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(chip), 9999f, IdeoFaces.Mono), band.width * 0.5f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(chip), 9999f, IdeoFaces.Mono, IdeoFaces.Size.Chip), band.width * 0.5f);
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(chip), tint, palette, chipWidth, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(chip), tint, palette, chipWidth, null, IdeoFaces.Mono, IdeoFaces.Size.Chip);
 
             TabParts.RowLabel(new Rect(band.x + column + 4f, band.y,
                     Mathf.Max(20f, band.width - column - 4f - chipWidth - 6f), height),
                 row.holder != null ? row.holder.LabelShortCap : "nobody assigned",
                 row.holder != null ? palette.TextPrimary : palette.TextDisabled,
-                GameFont.Small, IdeoFaces.Body);
+                GameFont.Small, IdeoFaces.Body, IdeoFaces.Size.Body);
 
             return y + height + RowGap;
         }
@@ -680,7 +755,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 // Wider than the others, because a ritual's name is the longest thing in any of these blocks
                 // and what it competes with is usually the words "never held".
-                float column = Column(names, GameFont.Small, 96f, inner.width, 0.62f, IdeoFaces.Condensed);
+                float column = Column(names, IdeoFaces.Size.Name, 96f, inner.width, 0.62f, IdeoFaces.Condensed);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = ObligationRowDraw(inner, cursor, rows[i], column, palette);
@@ -696,7 +771,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Rect band = new Rect(inner.x, y, inner.width, height);
 
-            TabParts.RowLabel(new Rect(band.x, band.y, column, height), row.ritual.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Condensed);
+            TabParts.RowLabel(new Rect(band.x, band.y, column, height), row.ritual.LabelCap, palette.TextPrimary,
+                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.Name);
 
             string text = row.when;
 
@@ -704,7 +780,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 text += "   " + row.note;
 
             TabParts.RowLabel(new Rect(band.x + column + 6f, band.y, band.width - column - 6f, height), text,
-                row.owed ? palette.Warning : palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
+                row.owed ? palette.Warning : palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono,
+                IdeoFaces.Size.When);
 
             return y + height + RowGap;
         }
@@ -751,12 +828,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Color tint = row.met ? palette.Success : row.disrespected ? palette.Warning : palette.Danger;
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(row.state), 9999f, IdeoFaces.Mono), 160f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(row.state), 9999f, IdeoFaces.Mono, IdeoFaces.Size.Chip), 160f);
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(row.state), tint, palette, chipWidth, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(row.state), tint, palette, chipWidth, null, IdeoFaces.Mono, IdeoFaces.Size.Chip);
 
             TabParts.RowLabel(new Rect(band.x, band.y, band.width - chipWidth - 8f, height),
-                row.precept.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, BodyScale);
+                row.precept.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, IdeoFaces.Size.Body);
 
             return y + height + RowGap;
         }
@@ -784,7 +861,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 // Measured against the issue names in this faith, so "Diversity of thought" is not cut down to
                 // make room for a stance that had the width to spare. Half again the room it used to get.
-                float column = Column(issues, GameFont.Tiny, 165f, inner.width, 0.45f, IdeoFaces.Mono);
+                float column = Column(issues, IdeoFaces.Size.Issue, 165f, inner.width, 0.45f, IdeoFaces.Mono);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = DoctrineRowDraw(inner, cursor, rows[i], column, palette);
@@ -841,7 +918,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             }, null);
 
             TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), IdeoFaces.Caps(row.issue), palette.TextSecondary,
-                GameFont.Tiny, IdeoFaces.Mono);
+                GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Issue);
 
             // The stance is the answer to the issue and is the thing worth reading, so it takes the primary
             // colour and a third of what is left; the effect follows it in the secondary.
@@ -849,13 +926,14 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float remaining = Mathf.Max(40f, band.xMax - stanceX);
             float stanceWidth = row.effect.NullOrEmpty() ? remaining : remaining * 0.4f;
 
-            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, BodyScale);
+            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance,
+                palette.TextPrimary, GameFont.Small, IdeoFaces.Body, IdeoFaces.Size.Body);
 
             if (!row.effect.NullOrEmpty())
             {
                 TabParts.RowLabel(new Rect(stanceX + stanceWidth + 6f, band.y,
                         Mathf.Max(20f, remaining - stanceWidth - 6f), height), row.effect,
-                    palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
+                    palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Small);
             }
 
             if (Mouse.IsOver(band))

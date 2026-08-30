@@ -37,6 +37,19 @@ namespace Gideon.UIOverhaul.Shared
         private const float ChipScale = 0.76f;
 
         /// <summary>
+        /// The point size a chip sets at: the caller's if it named one, and otherwise the size the old
+        /// Tiny-times-a-fraction rule worked out to.
+        ///
+        /// Keeping the old rule as the default is what lets the chips on twenty other tabs stay exactly where
+        /// they are while a converted screen names a real size. It resolves against the game font rather than
+        /// the face on purpose: it is standing in for a number nobody chose, so it should not also vary by face.
+        /// </summary>
+        private static float ChipPoints(float points)
+        {
+            return points > 0f ? points : UIFonts.PointsOf(GameFont.Tiny) * ChipScale;
+        }
+
+        /// <summary>
         /// Air either side of a chip's word, for a chip set in a bundled face.
         ///
         /// The game-font path adds six and that is right for it, because UIRichText measures with the thirteen
@@ -407,8 +420,14 @@ namespace Gideon.UIOverhaul.Shared
         /// Which typeface to set it in. Defaults to the game's own, so all thirty-odd existing callers are
         /// unchanged and a caller opts in by naming a face rather than by everything moving at once.
         /// </param>
+        /// <param name="points">
+        /// An absolute point size, overriding <paramref name="font"/> for a caller that names a real size. Zero
+        /// leaves the GameFont in charge, which is what every caller written before point sizes existed wants.
+        /// It is ignored on the game font, which comes in three sizes and cannot honour a fourth; the row still
+        /// sets in the GameFont beside it, so a screen half converted looks off rather than breaking.
+        /// </param>
         internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small,
-            UIFace face = UIFace.Game, float scale = 1f)
+            UIFace face = UIFace.Game, float points = 0f)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -424,8 +443,10 @@ namespace Gideon.UIOverhaul.Shared
 
                 if (face == UIFace.Game)
                     UIRichText.Label(band, text);
+                else if (points > 0f)
+                    UITextControl.LabelEllipses(band, text, face, points);
                 else
-                    UITextControl.LabelEllipses(band, text, face, font, FontStyle.Normal, scale);
+                    UITextControl.LabelEllipses(band, text, face, font);
             }
             finally
             {
@@ -436,7 +457,8 @@ namespace Gideon.UIOverhaul.Shared
             }
         }
 
-        internal static float PillWidth(string text, float ceiling = 9999f, UIFace face = UIFace.Game)
+        internal static float PillWidth(string text, float ceiling = 9999f, UIFace face = UIFace.Game,
+            float points = 0f)
         {
             GameFont previousFont = Text.Font;
 
@@ -451,7 +473,7 @@ namespace Gideon.UIOverhaul.Shared
                 // Measured in the same face Pill will draw it in, for the same reason.
                 float measured = face == UIFace.Game
                     ? UIRichText.WidthOf(text ?? string.Empty)
-                    : UITextControl.Width(text ?? string.Empty, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
+                    : UITextControl.Width(text ?? string.Empty, face, ChipPoints(points));
 
                 return Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
             }
@@ -505,7 +527,7 @@ namespace Gideon.UIOverhaul.Shared
         /// <paramref name="face"/> sizes the pill as well as setting it: measuring in one face and drawing in
         /// another is how a pill ends up either padded with air or ellipsing a word that would have fitted.
         internal static Rect Pill(Rect view, float x, float y, string text, Color color, UIColorPaletteDef palette,
-            float ceiling = 9999f, Color? behind = null, UIFace face = UIFace.Game)
+            float ceiling = 9999f, Color? behind = null, UIFace face = UIFace.Game, float points = 0f)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -519,10 +541,12 @@ namespace Gideon.UIOverhaul.Shared
 
                 float measured = face == UIFace.Game
                     ? UIRichText.WidthOf(text)
-                    : UITextControl.Width(text, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
+                    : UITextControl.Width(text, face, ChipPoints(points));
 
                 float width = Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
-                float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
+                float height = (face == UIFace.Game
+                    ? UIFonts.LineHeightOf(GameFont.Tiny)
+                    : UITextControl.LineHeight(face, ChipPoints(points))) + 2f;
 
                 Rect pill = new Rect(x, y, width, height);
 
@@ -541,7 +565,7 @@ namespace Gideon.UIOverhaul.Shared
                 if (face == UIFace.Game)
                     UIRichText.Label(pill, text);
                 else
-                    UITextControl.LabelEllipses(pill, text, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
+                    UITextControl.LabelEllipses(pill, text, face, ChipPoints(points));
 
                 return pill;
             }

@@ -1,3 +1,5 @@
+using System;
+using UnityEngine;
 using Verse;
 
 namespace Gideon.UIFramework.Helpers
@@ -53,6 +55,69 @@ namespace Gideon.UIFramework.Helpers
         internal static float LineHeightOf(GameFont font)
         {
             return UnityEngine.Mathf.Ceil(Text.LineHeightOf(Effective(font)));
+        }
+
+        /// <summary>
+        /// The point size the game really draws <paramref name="font"/> at.
+        ///
+        /// Read off the style rather than tabulated, because the three fonts are assets -- Calibri_tiny,
+        /// Arial_small and Arial_medium -- and their imported sizes are the game's to change. A GUIStyle whose
+        /// own fontSize is zero is deferring to the font, which is how RimWorld builds all three.
+        /// </summary>
+        internal static float PointsOf(GameFont font)
+        {
+            GameFont effective = Effective(font);
+
+            GUIStyle style = Text.fontStyles != null && (int) effective < Text.fontStyles.Length
+                ? Text.fontStyles[(int) effective]
+                : null;
+
+            if (style != null)
+            {
+                if (style.fontSize > 0)
+                    return style.fontSize;
+
+                if (style.font != null && style.font.fontSize > 0)
+                    return style.font.fontSize;
+            }
+
+            // Only reached before Text has run its static constructor, which is not a frame anything draws in.
+            switch (effective)
+            {
+                case GameFont.Tiny: return 10f;
+                case GameFont.Medium: return 18f;
+                default: return 12f;
+            }
+        }
+
+        /// <summary>
+        /// The <see cref="GameFont"/> nearest a point size, for text the game font has to draw.
+        ///
+        /// <b>This is the whole fallback.</b> A bundled face is drawn at whatever size it is given; the game
+        /// font comes in three and that is the end of it. So a caller names eleven points once and gets eleven
+        /// points in a face that can do it and Tiny in the one that cannot, rather than every call site
+        /// carrying two numbers and a rule for choosing between them.
+        ///
+        /// Ties go to the smaller font. Text a point small still reads; text a point large in a rect measured
+        /// for the smaller one is clipped at the top and bottom, which is the failure this file exists over.
+        /// </summary>
+        internal static GameFont Nearest(float points)
+        {
+            GameFont best = GameFont.Tiny;
+            float closest = float.MaxValue;
+
+            foreach (GameFont font in Enum.GetValues(typeof(GameFont)))
+            {
+                float distance = Mathf.Abs(PointsOf(font) - points);
+
+                if (distance < closest)
+                {
+                    closest = distance;
+                    best = font;
+                }
+            }
+
+            return best;
         }
 
         /// <summary>
