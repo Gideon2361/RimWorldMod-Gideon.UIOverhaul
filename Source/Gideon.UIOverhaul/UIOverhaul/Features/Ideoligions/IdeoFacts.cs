@@ -35,6 +35,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         internal string when;
         internal bool owed;
         internal string note;
+
+        /// <summary>Ticks until the soonest obligation lapses, or int.MaxValue when none of them expire.</summary>
+        internal int soonest;
+
+        /// <summary>How many rituals this row stands for. One, unless several share a name.</summary>
+        internal int variants;
     }
 
     /// <summary>One building the faith demands, judged against the map you are looking at.</summary>
@@ -403,14 +409,84 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 rows.Add(Row(ritual));
             }
 
+            rows = Collapse(rows);
+
             rows.Sort((a, b) => (a.owed ? 0 : 1).CompareTo(b.owed ? 0 : 1));
 
             return rows;
         }
 
+        /// <summary>
+        /// Folds rituals that share a name into one row each.
+        ///
+        /// <b>A faith can carry several rituals under one name, and they are meant to be one thing.</b> Trial,
+        /// TrialPrisoner and TrialMentalState are three precepts whose defs say <c>takeNameFrom</c> Trial, so
+        /// the game deliberately shows all three as "trial" and tells them apart by icon and by who they can be
+        /// held over. Listed straight, that is three identical rows saying "never held", and a reader has no way
+        /// to know they are not a bug. Reported on 2026-08-30.
+        ///
+        /// <b>The kept row is the one with something to say.</b> An owed ritual beats an unowed one, the sooner
+        /// deadline beats the later, and among rituals nobody owes, the one held most recently beats one never
+        /// held. So a colony that owes a prisoner's trial sees the deadline rather than a sibling's blank -- the
+        /// merge cannot hide an obligation, which is the only way it could do real harm.
+        /// </summary>
+        private static List<ObligationRow> Collapse(List<ObligationRow> rows)
+        {
+            List<ObligationRow> folded = new List<ObligationRow>();
+            Dictionary<string, int> seen = new Dictionary<string, int>();
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                string name = rows[i].ritual?.LabelCap;
+
+                if (name.NullOrEmpty())
+                {
+                    folded.Add(rows[i]);
+
+                    continue;
+                }
+
+                int at;
+
+                if (!seen.TryGetValue(name, out at))
+                {
+                    seen[name] = folded.Count;
+                    folded.Add(rows[i]);
+
+                    continue;
+                }
+
+                ObligationRow kept = folded[at];
+                int variants = kept.variants + 1;
+
+                if (Louder(rows[i], kept))
+                    kept = rows[i];
+
+                kept.variants = variants;
+                folded[at] = kept;
+            }
+
+            return folded;
+        }
+
+        /// <summary>Whether <paramref name="candidate"/> has more to say than <paramref name="held"/>.</summary>
+        private static bool Louder(ObligationRow candidate, ObligationRow held)
+        {
+            if (candidate.owed != held.owed)
+                return candidate.owed;
+
+            if (candidate.owed)
+                return candidate.soonest < held.soonest;
+
+            int mine = candidate.ritual?.lastFinishedTick ?? 0;
+            int theirs = held.ritual?.lastFinishedTick ?? 0;
+
+            return mine > theirs;
+        }
+
         private static ObligationRow Row(Precept_Ritual ritual)
         {
-            ObligationRow row = new ObligationRow { ritual = ritual };
+            ObligationRow row = new ObligationRow { ritual = ritual, soonest = int.MaxValue, variants = 1 };
 
             UIGuard.Try("Ideoligions.Obligation", () =>
             {
@@ -423,6 +499,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     // The soonest to lapse, since that is the one the deadline belongs to.
                     int soonest = int.MaxValue;
 
+
                     for (int i = 0; i < ritual.activeObligations.Count; i++)
                     {
                         RitualObligation obligation = ritual.activeObligations[i];
@@ -430,6 +507,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                         if (obligation != null && obligation.expires)
                             soonest = Mathf.Min(soonest, obligation.TicksUntilExpiration);
                     }
+
+                    row.soonest = soonest;
 
                     row.when = soonest == int.MaxValue
                         ? (active > 1 ? active + " owed" : "owed")

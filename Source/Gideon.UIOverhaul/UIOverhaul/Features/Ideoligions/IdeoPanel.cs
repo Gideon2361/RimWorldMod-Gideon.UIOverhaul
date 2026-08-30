@@ -779,6 +779,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             if (row.note != null)
                 text += "   " + row.note;
 
+            // Said out loud, because a row standing for three rituals that all answer to "trial" otherwise looks
+            // like two of them went missing.
+            if (row.variants > 1)
+                text += "   " + row.variants + " kinds";
+
             TabParts.RowLabel(new Rect(band.x + column + 6f, band.y, band.width - column - 6f, height), text,
                 row.owed ? palette.Warning : palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono,
                 IdeoFaces.Size.When);
