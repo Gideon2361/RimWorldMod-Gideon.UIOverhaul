@@ -136,12 +136,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 : null;
 
             TabParts.RowLabel(new Rect(crest.xMax + 10f, inner.y, inner.width - 50f, 22f),
-                "Reforming " + draft.original.name, draft.draft.TextColor, GameFont.Medium);
+                "Reforming " + draft.original.name, draft.draft.TextColor, GameFont.Medium, IdeoFaces.Display);
 
             if (price != null)
             {
                 TabParts.RowLabel(new Rect(crest.xMax + 10f, inner.y + 22f, inner.width - 50f, 16f), price,
-                    palette.TextSecondary, GameFont.Tiny);
+                    palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono);
             }
         }
 
@@ -296,12 +296,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect inner = rect.ContractedBy(8f);
             Color text = taken ? palette.Accent : usable ? palette.TextPrimary : palette.TextDisabled;
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y, inner.width - 56f, 18f), meme.LabelCap, text);
+            TabParts.RowLabel(new Rect(inner.x, inner.y, inner.width - 56f, 18f), meme.LabelCap, text, GameFont.Small, IdeoFaces.Condensed);
 
             if (meme.impact > 0)
             {
                 TabParts.RowLabel(new Rect(inner.xMax - 54f, inner.y, 54f, 18f), "impact " + meme.impact,
-                    palette.TextDisabled, GameFont.Tiny);
+                    palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono);
             }
 
             string blurb = blocked ?? meme.description;
@@ -402,7 +402,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     UIElementPainter.FillRounded(row, palette.HoverOverlay);
 
                 TabParts.RowLabel(new Rect(row.x + 6f, row.y, row.width - 12f, row.height), issues[i].LabelCap,
-                    on ? palette.Accent : palette.TextPrimary, GameFont.Tiny);
+                    on ? palette.Accent : palette.TextPrimary, GameFont.Tiny, IdeoFaces.Mono);
 
                 if (Widgets.ButtonInvisible(row))
                 {
@@ -480,15 +480,15 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect inner = card.ContractedBy(8f);
 
             TabParts.RowLabel(new Rect(inner.x, inner.y, inner.width - 60f, 18f), def.LabelCap,
-                taken ? palette.Accent : palette.TextPrimary);
+                taken ? palette.Accent : palette.TextPrimary, GameFont.Small, IdeoFaces.Condensed);
 
             TabParts.RowLabel(new Rect(inner.xMax - 58f, inner.y, 58f, 18f), def.impact.ToString().ToLower(),
-                palette.TextDisabled, GameFont.Tiny);
+                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono);
 
             if (!def.description.NullOrEmpty())
             {
                 TabParts.RowLabel(new Rect(inner.x, inner.y + 20f, inner.width, 18f),
-                    def.description.Truncate(inner.width * 3.4f), palette.TextSecondary, GameFont.Tiny);
+                    def.description.Truncate(inner.width * 3.4f), palette.TextSecondary, GameFont.Tiny, IdeoFaces.Body);
             }
 
             if (Widgets.ButtonInvisible(card) && !taken)
@@ -594,9 +594,9 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                         ? "forbids"
                         : "rules out";
 
-            TabParts.RowLabel(new Rect(view.x, y, 62f, 18f), tag, tint, GameFont.Tiny);
+            TabParts.RowLabel(new Rect(view.x, y, 62f, 18f), tag, tint, GameFont.Tiny, IdeoFaces.Mono);
             TabParts.RowLabel(new Rect(view.x + 66f, y, view.width - 66f, 18f), row.text, palette.TextSecondary,
-                GameFont.Tiny);
+                GameFont.Tiny, IdeoFaces.Body);
 
             return y + 19f;
         }
@@ -604,10 +604,10 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         private static float Diff(Rect view, float y, DiffRow row, UIColorPaletteDef palette)
         {
             TabParts.RowLabel(new Rect(view.x, y, 12f, 18f), row.good ? "+" : "-",
-                row.good ? palette.Success : palette.Danger, GameFont.Tiny);
+                row.good ? palette.Success : palette.Danger, GameFont.Tiny, IdeoFaces.Mono);
 
             TabParts.RowLabel(new Rect(view.x + 14f, y, view.width - 14f, 18f), row.text, palette.TextSecondary,
-                GameFont.Tiny);
+                GameFont.Tiny, IdeoFaces.Body);
 
             return y + 19f;
         }

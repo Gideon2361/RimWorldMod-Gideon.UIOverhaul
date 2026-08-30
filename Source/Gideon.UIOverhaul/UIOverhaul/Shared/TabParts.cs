@@ -31,8 +31,14 @@ namespace Gideon.UIOverhaul.Shared
         ///
         /// The same shape the hunting bill dialog uses, so a player moving between the two windows is reading the
         /// same furniture rather than learning a second convention.
+        ///
+        /// <paramref name="rule"/> draws the hairline and is on by default, because the line is what separates one
+        /// section from the one above it. Pass false for the first heading inside a panel, where there is nothing
+        /// above to separate from and the line only doubles up on the panel's own edge.
         /// </summary>
-        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette)
+        /// <paramref name="face"/> defaults to the game's own, so existing callers are unchanged.
+        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette, bool rule = true,
+            UIFace face = UIFace.Game)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -41,12 +47,18 @@ namespace Gideon.UIOverhaul.Shared
             {
                 GUI.color = palette.Border;
 
-                Widgets.DrawLineHorizontal(rect.x, y, rect.width);
+                if (rule)
+                    Widgets.DrawLineHorizontal(rect.x, y, rect.width);
 
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
 
-                Widgets.Label(new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(GameFont.Tiny)), text);
+                Rect caption = new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(GameFont.Tiny));
+
+                if (face == UIFace.Game)
+                    Widgets.Label(caption, text);
+                else
+                    UITextControl.LabelEllipses(caption, text, face, GameFont.Tiny);
             }
             finally
             {
@@ -91,8 +103,15 @@ namespace Gideon.UIOverhaul.Shared
             }
         }
 
-        /// <summary>One line of text at a given weight, ellipsed rather than wrapped.</summary>
-        internal static float Line(Rect rect, float y, string text, Color color, GameFont font = GameFont.Small)
+        /// <summary>
+        /// One line of text at a given weight, ellipsed rather than wrapped.
+        /// </summary>
+        /// <param name="face">
+        /// Which typeface to set it in. Defaults to the game's own, so every existing caller is unchanged and a
+        /// caller opts in by naming a face, exactly as <see cref="RowLabel"/> does.
+        /// </param>
+        internal static float Line(Rect rect, float y, string text, Color color, GameFont font = GameFont.Small,
+            UIFace face = UIFace.Game)
         {
             if (text == null)
                 text = string.Empty;
@@ -109,7 +128,10 @@ namespace Gideon.UIOverhaul.Shared
                 Text.WordWrap = false;
                 GUI.color = color;
 
-                UIRichText.Label(new Rect(rect.x, y, rect.width, height), text);
+                if (face == UIFace.Game)
+                    UIRichText.Label(new Rect(rect.x, y, rect.width, height), text);
+                else
+                    UITextControl.LabelEllipses(new Rect(rect.x, y, rect.width, height), text, face, font);
             }
             finally
             {
@@ -389,7 +411,7 @@ namespace Gideon.UIOverhaul.Shared
             }
         }
 
-        internal static float PillWidth(string text, float ceiling = 9999f)
+        internal static float PillWidth(string text, float ceiling = 9999f, UIFace face = UIFace.Game)
         {
             GameFont previousFont = Text.Font;
 
@@ -400,7 +422,13 @@ namespace Gideon.UIOverhaul.Shared
                 // Through WidthOf rather than off CalcSize, because that is the figure the drawing side judges it
                 // against: LabelEllipses holds thirteen pixels back for the dots, so a pill sized to the bare
                 // text ellipses at every size however much room it has. The six on top is the visible padding.
-                return Mathf.Min(ceiling, UIRichText.WidthOf(text ?? string.Empty) + 6f);
+                //
+                // Measured in the same face Pill will draw it in, for the same reason.
+                float measured = face == UIFace.Game
+                    ? UIRichText.WidthOf(text ?? string.Empty)
+                    : UITextControl.Width(text ?? string.Empty, face, GameFont.Tiny);
+
+                return Mathf.Min(ceiling, measured + 6f);
             }
             finally
             {
@@ -449,8 +477,10 @@ namespace Gideon.UIOverhaul.Shared
         ///
         /// Returns the rect it took so a caller laying several across a line knows where the next one starts.
         /// </summary>
+        /// <paramref name="face"/> sizes the pill as well as setting it: measuring in one face and drawing in
+        /// another is how a pill ends up either padded with air or ellipsing a word that would have fitted.
         internal static Rect Pill(Rect view, float x, float y, string text, Color color, UIColorPaletteDef palette,
-            float ceiling = 9999f, Color? behind = null)
+            float ceiling = 9999f, Color? behind = null, UIFace face = UIFace.Game)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -462,7 +492,11 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = GameFont.Tiny;
                 Text.WordWrap = false;
 
-                float width = Mathf.Min(ceiling, UIRichText.WidthOf(text) + 6f);
+                float measured = face == UIFace.Game
+                    ? UIRichText.WidthOf(text)
+                    : UITextControl.Width(text, face, GameFont.Tiny);
+
+                float width = Mathf.Min(ceiling, measured + 6f);
                 float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
 
                 Rect pill = new Rect(x, y, width, height);
@@ -479,7 +513,10 @@ namespace Gideon.UIOverhaul.Shared
                 // whose text does not fit would read as the middle of a word with no sign anything was lost.
                 // Given the whole pill, since LabelEllipses already holds back the thirteen pixels that serve
                 // as its padding; insetting on top of that reserve ellipses every pill whatever its size.
-                UIRichText.Label(pill, text);
+                if (face == UIFace.Game)
+                    UIRichText.Label(pill, text);
+                else
+                    UITextControl.LabelEllipses(pill, text, face, GameFont.Tiny);
 
                 return pill;
             }
