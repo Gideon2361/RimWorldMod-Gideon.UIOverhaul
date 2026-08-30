@@ -35,6 +35,9 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>GDI's flag for a registration visible to this process alone.</summary>
         private const uint FrPrivate = 0x10;
 
+        [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+        private static extern int RemoveFontResourceEx(string lpszFilename, uint fl, IntPtr pdv);
+
         private static readonly Dictionary<string, Font> Fonts = new Dictionary<string, Font>();
 
         private static readonly HashSet<string> Registered = new HashSet<string>();
@@ -61,6 +64,17 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>One file with GDI, once. False means no GDI here or a file it refused.</summary>
+        ///
+        /// <b>Public rather than FR_PRIVATE, which is the second attempt.</b> The private registration was
+        /// accepted by GDI and invisible to Unity: the engine's installed-font list did not contain the family
+        /// even when registration ran at startup, and the OS route silently substituted Arial -- caught on
+        /// 2026-08-30 by the Cyrillic test, since real Barlow has none. A private font lives in a per-process
+        /// GDI table that DirectWrite never consults; a public one lands in the session-wide table DirectWrite
+        /// can see. If the engine's list still ignores this, it is a snapshot taken at engine init and no
+        /// registration from mod code can ever reach it.
+        ///
+        /// Public means other applications can see the font for as long as it is registered, which is why every
+        /// registration is undone when the game quits.
         private static bool Register(string path)
         {
             if (Registered.Contains(path))
@@ -68,7 +82,7 @@ namespace Gideon.UIFramework.Helpers
 
             try
             {
-                if (AddFontResourceEx(path, FrPrivate, IntPtr.Zero) == 0)
+                if (AddFontResourceEx(path, 0, IntPtr.Zero) == 0)
                     return false;
             }
             catch (DllNotFoundException)
@@ -80,9 +94,32 @@ namespace Gideon.UIFramework.Helpers
                 return false;
             }
 
+            if (Registered.Count == 0)
+                Application.quitting += Unregister;
+
             Registered.Add(path);
 
             return true;
+        }
+
+        /// <summary>Takes the public registrations back out of the session's font table on the way out.</summary>
+        private static void Unregister()
+        {
+            foreach (string path in Registered)
+            {
+                try
+                {
+                    RemoveFontResourceEx(path, 0, IntPtr.Zero);
+                }
+                catch (DllNotFoundException)
+                {
+                    return;
+                }
+                catch (EntryPointNotFoundException)
+                {
+                    return;
+                }
+            }
         }
 
         /// <summary>
