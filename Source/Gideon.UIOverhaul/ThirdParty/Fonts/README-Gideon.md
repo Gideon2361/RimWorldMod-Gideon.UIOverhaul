@@ -43,14 +43,14 @@ TTF with the OS is invisible to an engine whose font list is sealed before mod c
 **Everything below concerns the baker and the baked atlases, which now serve only the floor labels and the
 research scripts.**
 
-Ten families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
+Eleven families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
 actually draw. Two are for the floor labels; three are the scripts the research tab writes undiscovered Anomaly
 projects in; one is a display face kept as a candidate; the rest are interface text.
 
 **What ships depends on the face.** The interface faces ship as real font files inside the AssetBundle; the
 floor label and research faces ship only as rasterized atlases. Either way no font is modified, and the OFL
 permits both bundling and rasterizing. The attributions live in `Gideon.UIOverhaul/THIRD-PARTY-NOTICES.txt`
-with the license reproduced once, since it is byte for byte identical in all ten.
+with the license reproduced once, since it is byte for byte identical in all eleven.
 
 **The baker no longer bakes interface text.** It did until 2026-08-30, over everything a face covered and at
 32 rather than 64. That work moved to the bundle, and those sheets are deleted; what the baker still produces
@@ -66,6 +66,7 @@ is the floor labels and the research masks, each over a fixed set of code points
 | `SlacksideOne/` | Slackside One | Regular | nothing yet | OFL 1.1 |
 | `Barlow/` | Barlow | Regular, SemiBold, Italic, SemiBold Italic | interface | OFL 1.1 |
 | `BarlowCondensed/` | Barlow Condensed | Regular, SemiBold, Bold, Italic, SemiBold Italic, Thin, Thin Italic | interface | OFL 1.1 |
+| `IBMPlexSans/` | IBM Plex Sans | Regular, SemiBold, Italic, SemiBold Italic | interface | OFL 1.1, Reserved Font Name "Plex" |
 | `CascadiaMono/` | Cascadia Mono | Regular, from the variable font's default instance | interface, monospaced | OFL 1.1 |
 | `IBMPlexMono/` | IBM Plex Mono | Regular, SemiBold | interface, monospaced | OFL 1.1, Reserved Font Name "Plex" |
 
