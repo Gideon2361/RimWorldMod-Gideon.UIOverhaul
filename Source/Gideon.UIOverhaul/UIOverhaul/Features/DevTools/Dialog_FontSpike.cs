@@ -236,15 +236,15 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// </summary>
         private float Ttf(Rect inRect, float y)
         {
-            Font font = UIDynamicFont.FromFile("BarlowCondensed-Regular");
+            Font font = UIDynamicFont.FromFile("BarlowCondensed-Regular", "Barlow Condensed");
 
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(1f, 1f, 1f, 0.6f);
 
             Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), font == null
-                ? "TTF from disk: did not load. Internal_CreateFontFromPath is a stub in this player."
+                ? "TTF via OS registration: did not load. AddFontResourceEx or the OS font lookup failed here."
                 : string.Format(
-                    "TTF from disk: dynamic={0} lineHeight={1} ascent={2} fontSize={3} hasA={4}",
+                    "TTF via OS registration: dynamic={0} lineHeight={1} ascent={2} fontSize={3} hasA={4}",
                     font.dynamic, font.lineHeight, font.ascent, font.fontSize, font.HasCharacter('A')));
 
             GUI.color = Color.white;
@@ -470,7 +470,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
                     }
                     else
                     {
-                        Font ttf = UIDynamicFont.FromFile("BarlowCondensed-Regular");
+                        Font ttf = UIDynamicFont.FromFile("BarlowCondensed-Regular", "Barlow Condensed");
 
                         if (ttf != null)
                             GUI.Label(cell, text, TtfStyle(ttf, GameFont.Tiny));

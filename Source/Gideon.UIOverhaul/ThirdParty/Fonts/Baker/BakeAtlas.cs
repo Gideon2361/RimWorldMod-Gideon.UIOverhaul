@@ -367,7 +367,12 @@ internal static class BakeAtlas
             float[] ascents = new float[families.Count];
 
             for (int s = 0; s < families.Count; s++)
-                ascents[s] = families[s].GetCellAscent(gdiStyles[s])
+                // The cast is the whole line. GetCellAscent and GetEmHeight are both ints, and integer division
+                // truncates their ratio to zero for any face whose ascent is smaller than its em -- which baked
+                // Cascadia and Hammersmith with every glyph placed as if the ascent were nothing, put B's ink
+                // below the baseline, and left IBM Plex and Oswald quietly 0.4 and 2.3 pixels low. Barlow alone
+                // survived, because its ratio is exactly 1. Found from the metrics on 2026-08-30.
+                ascents[s] = (float) families[s].GetCellAscent(gdiStyles[s])
                              / families[s].GetEmHeight(gdiStyles[s]) * EmSize;
 
             List<int> wanted;
