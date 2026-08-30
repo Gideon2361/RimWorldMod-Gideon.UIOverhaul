@@ -623,7 +623,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 tint = palette.Success;
             }
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(chip), 9999f, IdeoFaces.Mono) + 6f, band.width * 0.5f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(chip), 9999f, IdeoFaces.Mono), band.width * 0.5f);
 
             TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(chip), tint, palette, chipWidth, null, IdeoFaces.Mono);
 
@@ -745,7 +745,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Color tint = row.met ? palette.Success : row.disrespected ? palette.Warning : palette.Danger;
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(row.state), 9999f, IdeoFaces.Mono) + 6f, 160f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(row.state), 9999f, IdeoFaces.Mono), 160f);
 
             TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(row.state), tint, palette, chipWidth, null, IdeoFaces.Mono);
 

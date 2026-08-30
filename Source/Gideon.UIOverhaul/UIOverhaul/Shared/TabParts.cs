@@ -34,7 +34,18 @@ namespace Gideon.UIOverhaul.Shared
         /// A bundled face is drawn at a point size rather than chosen from a fixed set, so it can go below Tiny
         /// where the game font cannot -- which is why this only applies when a face is given.
         /// </summary>
-        private const float ChipScale = 0.82f;
+        private const float ChipScale = 0.76f;
+
+        /// <summary>
+        /// Air either side of a chip's word, for a chip set in a bundled face.
+        ///
+        /// The game-font path adds six and that is right for it, because UIRichText measures with the thirteen
+        /// pixel ellipsis reserve already in the figure and that reserve reads as padding once drawn. A bundled
+        /// face is measured through the style that draws it, bare, so the same six became three pixels a side --
+        /// less than half the mockup's seven -- and the word crowded the border hard enough to read as oversized
+        /// whatever point size it was really set at.
+        /// </summary>
+        private const float ChipPad = 14f;
 
         /// <summary>
         /// A section heading: a hairline, then a small dim caption under it.
@@ -438,7 +449,7 @@ namespace Gideon.UIOverhaul.Shared
                     ? UIRichText.WidthOf(text ?? string.Empty)
                     : UITextControl.Width(text ?? string.Empty, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
 
-                return Mathf.Min(ceiling, measured + 6f);
+                return Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
             }
             finally
             {
@@ -506,7 +517,7 @@ namespace Gideon.UIOverhaul.Shared
                     ? UIRichText.WidthOf(text)
                     : UITextControl.Width(text, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
 
-                float width = Mathf.Min(ceiling, measured + 6f);
+                float width = Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
                 float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
 
                 Rect pill = new Rect(x, y, width, height);
