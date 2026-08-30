@@ -27,6 +27,12 @@ namespace Gideon.UIFramework.Helpers
         /// <summary>RimWorld's own interface font, at whatever size was asked for.</summary>
         Game,
 
+        /// <summary>
+        /// Barlow. The upright sibling of the condensed face, at normal width, for a label with room to
+        /// breathe. Bold and italic are real files here, not synthesis.
+        /// </summary>
+        Barlow,
+
         /// <summary>Barlow Condensed. Narrow, so a long label fits where the game's font would not.</summary>
         BarlowCondensed,
 
@@ -81,6 +87,15 @@ namespace Gideon.UIFramework.Helpers
 
             switch (face)
             {
+                case UIFace.Barlow:
+                    switch (weight)
+                    {
+                        case FontStyle.Bold: return "Barlow-SemiBold";
+                        case FontStyle.Italic: return "Barlow-Italic";
+                        case FontStyle.BoldAndItalic: return "Barlow-SemiBoldItalic";
+                        default: return "Barlow-Regular";
+                    }
+
                 case UIFace.BarlowCondensed:
                     switch (weight)
                     {
@@ -177,6 +192,7 @@ namespace Gideon.UIFramework.Helpers
         {
             switch (face)
             {
+                case UIFace.Barlow: return "Barlow";
                 case UIFace.BarlowCondensed: return "Barlow Condensed";
                 case UIFace.BarlowCondensedThin: return "Barlow Condensed Thin";
                 case UIFace.CascadiaMono: return "Cascadia Mono";
