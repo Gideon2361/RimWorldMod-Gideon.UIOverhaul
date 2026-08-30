@@ -20,7 +20,7 @@ public static class BundleVerify
     {
         try
         {
-            string path = Path.Combine("AssetBundles", "gideon_uioverhaul_textures");
+            string path = Path.Combine("AssetBundles", "textures");
 
             AssetBundle bundle = AssetBundle.LoadFromFile(path);
 
