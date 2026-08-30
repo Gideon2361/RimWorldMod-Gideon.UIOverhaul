@@ -679,8 +679,10 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             TooltipHandler.TipRegion(row, (TipSignal) ("With this on, changing a meme leaves every precept, "
                 + "role, ritual and demanded building exactly as you built it. RimWorld would otherwise "
                 + "reconcile them against the new memes, dropping the ones it forbids and adding the ones it "
-                + "demands.\n\nThis is read by this window and nowhere else. It cannot affect a new game's "
-                + "starting ideoligion."));
+                + "demands.\n\nIt applies at world generation too, so an ideoligion loaded from a file keeps its "
+                + "doctrine when you change a meme in it. Never to one that has no doctrine yet: an ideoligion "
+                + "still being generated is always generated in full, so this cannot leave a faction believing "
+                + "nothing."));
 
             if (on != was && UIOverhaulSettingsFile.Current != null)
             {
