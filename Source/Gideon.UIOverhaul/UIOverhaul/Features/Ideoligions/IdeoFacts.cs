@@ -209,6 +209,23 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         /// roles, then held roles whose holder no longer qualifies, then the rest. That is rate of change again --
         /// a vacancy and a lapsed holder are both things to do something about today.
         /// </summary>
+        /// <summary>
+        /// Whether a precept belongs on this screen at all.
+        ///
+        /// <b>The game keeps precepts on an ideoligion that are not part of its doctrine.</b> Childbirth, anima
+        /// tree linking, the gravship launch, a trial, a conversion, a role change -- every ideoligion carries
+        /// these so the mechanic behind them has somewhere to live, whatever the faith actually believes. They
+        /// are marked <c>visible false</c>, and vanilla checks that flag everywhere it lists precepts.
+        ///
+        /// We were not checking it in the obligations block, which is why a colony was told its faith owed it a
+        /// childbirth and an anima tree linking. Reported on 2026-08-30. The doctrine block had the check from
+        /// the start; this puts the other three on the same footing rather than repeating the condition.
+        /// </summary>
+        private static bool Listed(Precept precept)
+        {
+            return precept?.def != null && precept.def.visible;
+        }
+
         internal static List<RoleRow> Roles(Ideo ideo)
         {
             List<RoleRow> rows = new List<RoleRow>();
@@ -222,7 +239,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             {
                 Precept_Role role = roles[i];
 
-                if (role == null)
+                if (role == null || !Listed(role))
                     continue;
 
                 RoleRow row = new RoleRow { role = role };
@@ -356,7 +373,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             {
                 Precept_Ritual ritual = precepts[i] as Precept_Ritual;
 
-                if (ritual == null)
+                if (ritual == null || !Listed(ritual))
                     continue;
 
                 rows.Add(Row(ritual));
@@ -441,7 +458,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 Precept_Building building = precepts[i] as Precept_Building;
                 IdeoBuildingPresenceDemand demand = building?.presenceDemand;
 
-                if (demand == null)
+                if (demand == null || !Listed(building))
                     continue;
 
                 DemandRow row = new DemandRow { precept = building };
