@@ -45,9 +45,11 @@
     <mode>Maximize</mode>
   </entry>
 
-  <!-- Ideology. Skipped without the expansion. -->
+  <!-- This mod's, standing where Ideology's own button did. Skipped without the expansion, which is what
+       IdeoTabs.Available answers: with no Ideology this entry is suppressed and vanilla's is too, so the bar
+       simply has no ideoligions button, exactly as it would without the mod. -->
   <entry>
-    <tab>Ideos</tab>
+    <tab>Gideon_Ideoligions</tab>
     <mode>Maximize</mode>
   </entry>
 

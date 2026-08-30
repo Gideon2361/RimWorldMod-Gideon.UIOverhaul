@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The ideoligions tab, ordered by rate of change rather than by structure: conviction first because it
+    moves hourly and can lose you a colonist, then roles and obligations, then what the faith demands be
+    built, and the doctrine last because it only changes at a reform.
+
+    order 100 is where vanilla's Ideos button sits, so the bar reads the way it always did for a player who
+    has not rearranged it. Vanilla's button is suppressed from our bar in UIButtonBarConfig.Suppressed and
+    its hotkey is redirected here by Patch_MainTabsRoot_ToggleTab_Ideoligions.
+
+    No defaultHotKey of our own, deliberately, for the reason the animals tab has none: vanilla's binding
+    already reaches this tab through the redirect, and a second one on the same key would be a conflict the
+    player has to go and resolve for no gain.
+
+    Four fields are copied from vanilla's own def rather than chosen, so the button behaves exactly where it
+    used to: minimized, so it arrives as a bare icon like Factions and History; validWithoutMap, since the
+    tab is worth reading from the world view and the demands block says so when there is no map to judge
+    against; validWithClassicIdeo false, because RimWorld hides this screen in classic mode and it is not
+    this mod's place to decide otherwise; and the icon, which is the same texture the button has always had.
+
+    That icon lives in the Ideology expansion. It is never fetched without it, because the button is
+    suppressed off the bar when IdeoTabs.Available is false -- which is also what makes this tab absent
+    rather than empty in an install with no Ideology. A MainButtonDef cannot be conditionally undefined, so
+    that check is the whole of the gate.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Ideoligions</defName>
+    <label>ideoligions</label>
+    <description>Every faith in the colony and what is happening to it: how settled each believer is and which way they are drifting, which roles are empty or held by somebody who no longer qualifies, what rituals are owed, which demanded buildings are missing or blocked, and what the doctrine actually says. The precept list is still here, at the bottom, where a thing that only changes at a reform belongs.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Ideoligions.MainTabWindow_Ideoligions</tabWindowClass>
+    <order>100</order>
+    <validWithoutMap>true</validWithoutMap>
+    <minimized>True</minimized>
+    <validWithClassicIdeo>false</validWithClassicIdeo>
+    <iconPath>UI/Buttons/MainButtons/Ideoligions</iconPath>
+  </MainButtonDef>
+
+</Defs>
