@@ -43,17 +43,18 @@ TTF with the OS is invisible to an engine whose font list is sealed before mod c
 **Everything below concerns the baker and the baked atlases, which now serve only the floor labels and the
 research scripts.**
 
-Nine families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
+Ten families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
 actually draw. Two are for the floor labels; three are the scripts the research tab writes undiscovered Anomaly
 projects in; one is a display face kept as a candidate; the rest are interface text.
 
-**Only the atlases ship.** No TTF is in the mod folder and none is modified, so what a subscriber downloads is a
-rasterization rather than a redistribution. The attributions live in `Gideon.UIOverhaul/THIRD-PARTY-NOTICES.txt`
-with the license reproduced once, since it is byte for byte identical in all nine.
+**What ships depends on the face.** The interface faces ship as real font files inside the AssetBundle; the
+floor label and research faces ship only as rasterized atlases. Either way no font is modified, and the OFL
+permits both bundling and rasterizing. The attributions live in `Gideon.UIOverhaul/THIRD-PARTY-NOTICES.txt`
+with the license reproduced once, since it is byte for byte identical in all ten.
 
-**The interface faces are the reason the baker grew.** A floor label or a research mask is baked over a fixed
-set of code points -- printable ASCII and Latin-1, or one script block. Interface text is baked over everything
-the face covers, and at 32 rather than 64. Asked for on 2026-08-25: "I really dislike the stock RimWorld font."
+**The baker no longer bakes interface text.** It did until 2026-08-30, over everything a face covered and at
+32 rather than 64. That work moved to the bundle, and those sheets are deleted; what the baker still produces
+is the floor labels and the research masks, each over a fixed set of code points.
 
 | Folder | Face | Shipped weight | Used for | License |
 |---|---|---|---|---|
@@ -63,13 +64,14 @@ the face covers, and at 32 rather than 64. Asked for on 2026-08-25: "I really di
 | `NotoSansMendeKikakui/` | Noto Sans Mende Kikakui | Regular | research mask | OFL 1.1 |
 | `NotoSansSiddham/` | Noto Sans Siddham | Regular | research mask | OFL 1.1 |
 | `SlacksideOne/` | Slackside One | Regular | nothing yet | OFL 1.1 |
+| `Barlow/` | Barlow | Regular, SemiBold, Italic, SemiBold Italic | interface | OFL 1.1 |
 | `BarlowCondensed/` | Barlow Condensed | Regular, SemiBold, Bold, Italic, SemiBold Italic, Thin, Thin Italic | interface | OFL 1.1 |
 | `CascadiaMono/` | Cascadia Mono | Regular, from the variable font's default instance | interface, monospaced | OFL 1.1 |
 | `IBMPlexMono/` | IBM Plex Mono | Regular, SemiBold | interface, monospaced | OFL 1.1, Reserved Font Name "Plex" |
 
-Oswald and Hammersmith One appear twice in `Fonts/`: once at 64 for the floor labels, and once more at 32 under
-`OswaldRegular` and `HammersmithOneRegular` for interface text. Same typeface, different bake, different job --
-and they must stay separate, because re-baking the floor sheets at 32 would soften labels drawn across a room.
+Oswald and Hammersmith One once appeared twice in `Fonts/`, at 64 for the floor labels and at 32 for interface
+text. Only the 64 bake remains. Re-baking the floor sheets smaller would soften labels drawn across a room, so
+if a second size is ever wanted again it must be a separate sheet rather than a replacement.
 
 **A variable font bakes as its default instance and nothing else.** GDI+ has no axis control, so
 `Oswald-VariableFont_wght.ttf` yields Regular and the weight axis is unreachable. To ship a second weight of one,
