@@ -131,6 +131,26 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
         }
 
         /// <summary>
+        /// How wide a title will actually draw, for anything sharing its line.
+        ///
+        /// Exposed because the title's font lives here and the callers sharing that line should not have to know
+        /// it. The standing line beside the trade title used to take a flat share of the row instead of what the
+        /// title left behind, which truncated it while empty space sat between the two. Reported 2026-08-29.
+        /// </summary>
+        internal static float TitleWidth(string title)
+        {
+            GameFont previous = Text.Font;
+
+            Text.Font = GameFont.Medium;
+
+            float width = Text.CalcSize(title ?? string.Empty).x;
+
+            Text.Font = previous;
+
+            return width;
+        }
+
+        /// <summary>
         /// The title block: who you are dealing with, and one line of context under it.
         /// </summary>
         /// <param name="detail">

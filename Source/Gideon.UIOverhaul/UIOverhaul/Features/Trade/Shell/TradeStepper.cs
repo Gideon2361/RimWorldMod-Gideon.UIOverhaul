@@ -177,9 +177,57 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
         /// </summary>
         internal static int Ceiling(Transferable transferable, int sign)
         {
-            return sign > 0
-                ? Mathf.Max(0, transferable.GetMaximumToTransfer())
-                : Mathf.Max(0, -transferable.GetMinimumToTransfer());
+            if (sign > 0)
+                return Mathf.Max(0, transferable.GetMaximumToTransfer());
+
+            int stock = Mathf.Max(0, -transferable.GetMinimumToTransfer());
+
+            return Mathf.Min(stock, Affordable(transferable));
+        }
+
+        /// <summary>
+        /// How many of this the trader still has the silver to buy.
+        ///
+        /// <b>Because the jump-to-end arrow was writing deals nobody could complete.</b> Vanilla's limit for a
+        /// sale is the colony's stock and nothing else, so pressing it on a full larder queued four thousand
+        /// silver of meat at a trader carrying four thousand two hundred, and then again on the next row, and the
+        /// next. The window said "after this deal -37" in red and the accept button refused, with no indication
+        /// of which of thirty filled rows to cut. Reported 2026-08-28.
+        ///
+        /// <b>The trader's own money is a limit on the deal, not on the row,</b> so it is measured against what
+        /// is left after everything else already queued. This row's own contribution is added back first --
+        /// without that, a row already at the trader's limit would report a ceiling of zero and could never be
+        /// lowered, only cleared.
+        ///
+        /// <b>Buying is deliberately not capped the same way.</b> A colony that overspends is refused at accept
+        /// with "colony cannot afford", which is vanilla's own message and names the problem; the trader running
+        /// dry was the case that failed silently. Free rows and gifts have no price to divide by and are left
+        /// alone.
+        /// </summary>
+        private static int Affordable(Transferable transferable)
+        {
+            return UIGuard.Try("Trade.Affordable", () =>
+            {
+                Tradeable tradeable = transferable as Tradeable;
+
+                if (tradeable == null || !TradeSession.Active || TradeSession.giftMode)
+                    return int.MaxValue;
+
+                TradeDeal deal = TradeSession.deal;
+
+                if (deal == null || deal.CurrencyTradeable == null || tradeable.IsCurrency)
+                    return int.MaxValue;
+
+                float price = tradeable.GetPriceFor(TradeAction.PlayerSells);
+
+                if (price <= 0f)
+                    return int.MaxValue;
+
+                float purse = deal.CurrencyTradeable.CountPostDealFor(Transactor.Trader)
+                              + Mathf.Max(0, -tradeable.CountToTransfer) * price;
+
+                return Mathf.Max(0, Mathf.FloorToInt(purse / price));
+            }, int.MaxValue, null);
         }
 
         /// <summary>

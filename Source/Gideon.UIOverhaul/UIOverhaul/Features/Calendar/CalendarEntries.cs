@@ -96,16 +96,22 @@ namespace Gideon.UIOverhaul.Features.Calendar
             if (map == null)
                 return byDay;
 
-            float longitude = Find.WorldGrid.LongLatOf(map.Tile).x;
+            float longitude = Shared.MapTile.LongitudeOf(map);
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
             UIGuard.Try("Calendar.Archive",
                 () => GatherArchive(byDay, longitude, firstDay, lastDay, palette),
                 "The calendar shows no past events.");
 
-            UIGuard.Try("Calendar.Birthdays",
-                () => GatherBirthdays(byDay, map, longitude, firstDay, lastDay, palette),
-                "The calendar shows no birthdays.");
+            // Skipped rather than gathered and filtered later. A hidden birthday still costs a pass over every
+            // colonist and an entry object per one, and the colony this switch exists for is exactly the colony
+            // where that is the expensive part.
+            if (!Options.UIOverhaulSettingsFile.Current.hideCalendarBirthdays)
+            {
+                UIGuard.Try("Calendar.Birthdays",
+                    () => GatherBirthdays(byDay, map, longitude, firstDay, lastDay, palette),
+                    "The calendar shows no birthdays.");
+            }
 
             UIGuard.Try("Calendar.Quests",
                 () => GatherQuests(byDay, longitude, firstDay, lastDay, palette),

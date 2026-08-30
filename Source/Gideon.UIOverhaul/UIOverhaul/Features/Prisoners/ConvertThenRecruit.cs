@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
@@ -125,11 +126,114 @@ namespace Gideon.UIOverhaul.Features.Prisoners
 
             UIGuard.Try("Prisoners.ConvertTarget", () =>
             {
-                if (__instance.ideoForConversion != null || Faction.OfPlayer?.ideos == null)
-                    return;
+                if (__instance.ideoForConversion == null && Faction.OfPlayer?.ideos != null)
+                    __instance.ideoForConversion = Faction.OfPlayer.ideos.PrimaryIdeo;
 
-                __instance.ideoForConversion = Faction.OfPlayer.ideos.PrimaryIdeo;
+                ConvertThenRecruitHandover.Apply(__instance, true);
             }, "This prisoner has no ideoligion to be converted to, so no warden will come.");
+        }
+    }
+
+    /// <summary>
+    /// Hands a prisoner over to recruitment when there is no conversion left to do.
+    ///
+    /// <b>Three moments need this, and the first version only had one.</b> The mode being chosen, an ideoligion
+    /// changing, and a save being loaded. Picking the mode on a prisoner who already believes handed over
+    /// correctly; loading a save in exactly that state did not, because nothing had happened to notice --
+    /// the prisoner sat in a converted-and-unrecruited state that no warden will work on, and only toggling the
+    /// mode by hand woke it up. Reported 2026-08-29.
+    ///
+    /// <b>Why the mode is switched rather than made to behave like Recruit.</b> <c>WorkGiver_Warden_Chat</c>
+    /// compares <c>ExclusiveInteractionMode</c> against Recruit and Reduce resistance by reference, not through
+    /// <c>IsInteractionEnabled</c>, so the trick that makes conversion work here cannot be repeated for
+    /// recruitment. The only way to satisfy that comparison is to patch the property itself -- and the prisoner
+    /// tab picks its radio button with the same property, so a prisoner would silently show Recruit selected
+    /// instead of the mode the player chose. Switching the mode for real is the honest version of the same
+    /// outcome, and it leaves the tab telling the truth.
+    /// </summary>
+    internal static class ConvertThenRecruitHandover
+    {
+        /// <summary>
+        /// Switches one prisoner to recruitment if their ideoligion already matches the target.
+        /// </summary>
+        /// <param name="announce">
+        /// Whether to say so. True when the player just picked the mode, because the radio button moves under
+        /// their cursor and a control that changes itself without a word looks like a misclick. False on load,
+        /// where a colony holding six such prisoners would open on six messages about a state that was already
+        /// true when they saved.
+        /// </param>
+        internal static void Apply(Pawn_GuestTracker tracker, bool announce)
+        {
+            Pawn pawn = PrisonerReflection.Of(tracker);
+
+            if (pawn == null || tracker.ideoForConversion == null || pawn.Ideo != tracker.ideoForConversion)
+                return;
+
+            tracker.SetExclusiveInteraction(PrisonerInteractionModeDefOf.AttemptRecruit);
+
+            if (!announce)
+                return;
+
+            Messages.Message(
+                pawn.LabelShortCap + " already follows your ideoligion, so wardens will go straight to recruiting.",
+                new LookTargets(pawn), MessageTypeDefOf.NeutralEvent, false);
+        }
+
+        /// <summary>
+        /// Walks every prisoner the colony holds and hands over the ones with nothing left to convert.
+        ///
+        /// <b>Spawned prisoners on loaded maps only.</b> A prisoner in a caravan has no warden working on them
+        /// wherever their mode points, so correcting it there would be tidying a state nobody can act on -- and
+        /// they pass through a map again before anyone can.
+        /// </summary>
+        internal static void Sweep()
+        {
+            UIGuard.Try("Prisoners.ConvertSweep", () =>
+            {
+                List<Map> maps = Find.Maps;
+
+                for (int i = 0; maps != null && i < maps.Count; i++)
+                {
+                    List<Pawn> prisoners = maps[i]?.mapPawns?.PrisonersOfColonySpawned;
+
+                    for (int j = 0; prisoners != null && j < prisoners.Count; j++)
+                    {
+                        Pawn pawn = prisoners[j];
+
+                        if (pawn?.guest == null)
+                            continue;
+
+                        if (pawn.guest.ExclusiveInteractionMode
+                            == ConvertThenRecruitDefOf.Gideon_ConvertThenRecruit)
+                            Apply(pawn.guest, false);
+                    }
+                }
+            }, "Prisoners set to convert then recruit may need setting to recruit by hand.");
+        }
+    }
+
+    /// <summary>
+    /// Runs the handover sweep once the game is up.
+    ///
+    /// <b><c>FinalizeInit</c> rather than a load hook,</b> because it fires for a loaded save and a new game
+    /// alike and runs after references are resolved -- <c>ideoForConversion</c> is one, and reading it earlier
+    /// would compare against a null that means "not yet" rather than "none".
+    ///
+    /// A <c>GameComponent</c> needs no def and is constructed automatically for every game, which is why this
+    /// costs nothing to add and nothing to remove.
+    /// </summary>
+    public class ConvertThenRecruitLoad : GameComponent
+    {
+        /// <summary>Required by RimWorld: every GameComponent is constructed with the game it belongs to.</summary>
+        public ConvertThenRecruitLoad(Game game)
+        {
+        }
+
+        public override void FinalizeInit()
+        {
+            base.FinalizeInit();
+
+            ConvertThenRecruitHandover.Sweep();
         }
     }
 

@@ -3,6 +3,7 @@ using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Notifications;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
@@ -73,7 +74,9 @@ namespace Gideon.UIOverhaul.Features.Calendar
         {
             EnsureGrowing(map);
 
-            float longitude = Find.WorldGrid.LongLatOf(map.Tile).x;
+            // Asked through MapTile rather than off the map, because a pocket map has no tile and reading one
+            // throws -- which took the whole widget with it, not just the growing season below.
+            float longitude = Shared.MapTile.LongitudeOf(map);
             long ticks = GenTicks.TicksAbs;
 
             Rect header = new Rect(rect.x, rect.y, rect.width, HeaderHeight);
@@ -245,10 +248,17 @@ namespace Gideon.UIOverhaul.Features.Calendar
             cachedForMap = map.uniqueID;
             growingTwelfths.Clear();
 
+            PlanetTile tile = Shared.MapTile.Of(map);
+
+            // Nothing grows to a schedule where there is no sky, so an empty set is the honest answer rather
+            // than a failure. The header already reads "none" for it.
+            if (!tile.Valid)
+                return;
+
             UIGuard.Try("Calendar.GrowingSeason", () =>
                 {
                     List<Twelfth> twelfths = GenTemperature.TwelfthsInAverageTemperatureRange(
-                        map.Tile, MinGrowthTemp, MaxGrowthTemp);
+                        tile, MinGrowthTemp, MaxGrowthTemp);
 
                     if (twelfths == null)
                         return;

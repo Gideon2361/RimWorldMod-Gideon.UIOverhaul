@@ -407,6 +407,91 @@ namespace Gideon.UIOverhaul.Features.Trade
             return into;
         }
 
+        /// <summary>
+        /// How many rows each view would hold, counted in one pass and never sorted.
+        ///
+        /// <b>This exists because the pills used to be counted by building every view.</b> The rail asks only
+        /// whether a category has anything behind it, and it was answering that by calling <see cref="Rows"/>
+        /// once per category -- eight full scans of the deal, each one sorting a list that was then thrown away
+        /// after reading its <c>Count</c>. With the table's own build that came to nine scans and nine sorts of
+        /// several hundred rows, every frame, and IMGUI runs the layout twice per frame.
+        ///
+        /// <b>The sort was the expensive half.</b> Every comparison falls through to a culture-aware compare of
+        /// two labels, so a four hundred row sell list is some three thousand of those per sort. Sorting to
+        /// learn whether a count is above zero is work with no reader.
+        ///
+        /// <b>A row lands in every view it belongs to, which is what a single pass has to get right.</b> An item
+        /// is in All and in its own category, and may also be a favourite and a want; a refused row is in the
+        /// refused view and in nothing else. Those are exactly the rules <see cref="Rows"/> applies through
+        /// <see cref="Belongs"/> and <see cref="Matches"/>, restated here as one walk rather than one per view.
+        /// If the two ever disagree, a pill will show a view that opens empty.
+        /// </summary>
+        internal static void Tally(TradeDeal deal, TradeSide side, string search, Dictionary<string, int> into)
+        {
+            into.Clear();
+
+            if (deal == null)
+                return;
+
+            UIGuard.Try("Trade.Tally", () =>
+            {
+                List<Tradeable> all = deal.AllTradeables;
+
+                for (int i = 0; all != null && i < all.Count; i++)
+                {
+                    Tradeable tradeable = all[i];
+
+                    if (!Belongs(tradeable, side))
+                        continue;
+
+                    if (!search.NullOrEmpty()
+                        && tradeable.Label.IndexOf(search, System.StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+
+                    // Refused rows are in their own view and in no other, so this is an early exit rather than
+                    // one more count. That is the rule Rows keeps with its wantRefused test.
+                    if (!tradeable.TraderWillTrade)
+                    {
+                        Count(into, Refused);
+
+                        continue;
+                    }
+
+                    Count(into, All);
+                    Count(into, CategoryOf(tradeable));
+
+                    ThingDef def = tradeable.ThingDef;
+
+                    if (def == null)
+                        continue;
+
+                    if (TradeWants.IsFavourite(def))
+                        Count(into, Favourites);
+
+                    if (TradeWants.Wanted(def) > 0)
+                        Count(into, Wants);
+                }
+            }, null);
+        }
+
+        /// <summary>How many rows a view holds, from a tally. Absent means none rather than unknown.</summary>
+        internal static int CountIn(Dictionary<string, int> tally, string category)
+        {
+            int count;
+
+            return tally != null && tally.TryGetValue(category, out count) ? count : 0;
+        }
+
+        private static void Count(Dictionary<string, int> into, string category)
+        {
+            if (category.NullOrEmpty())
+                return;
+
+            int existing;
+
+            into[category] = into.TryGetValue(category, out existing) ? existing + 1 : 1;
+        }
+
         private static bool Matches(Tradeable tradeable, string category)
         {
             // The refused view's filtering is done by the willing-to-trade test in Rows, so everything reaching

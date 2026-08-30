@@ -57,7 +57,87 @@ namespace Gideon.UIOverhaul.Features.Trade
         };
 
         private readonly List<Tradeable> rows = new List<Tradeable>();
-        private readonly List<Tradeable> scratch = new List<Tradeable>();
+
+        /// <summary>How many rows each pill stands for, rebuilt once a layout rather than once a pill.</summary>
+        private readonly Dictionary<string, int> tally = new Dictionary<string, int>();
+
+        /// <summary>
+        /// What the cached table and tally were built against.
+        ///
+        /// <b>The list is rebuilt when the view changes and at no other time.</b> Aaron's call on 2026-08-28:
+        /// stock does not move fast enough during a deal to be worth re-reading every frame. What a change of
+        /// view means is exactly these four things -- which side, which category, what was searched for, and how
+        /// it is ordered. Everything else redraws from what is already sorted.
+        ///
+        /// <b>A count changing is deliberately not a rebuild, and that is a behaviour change worth naming.</b>
+        /// <c>Rank</c> promotes any row with a count on it above the rest, so re-sorting every frame meant a row
+        /// jumped to the top of the list the instant you pressed its own button -- sliding a different item under
+        /// the cursor mid-click. Committed rows still gather at the top, but now when you next change view
+        /// rather than while you are working in one.
+        ///
+        /// <b><c>deal.Reset()</c> is what these must not survive.</b> It rebuilds <c>AllTradeables</c>, so every
+        /// row held here becomes an object the deal has never heard of -- the same reason
+        /// <c>TradeStepper.Forget</c> is called at both reset sites, and <see cref="ForgetLists"/> goes with it.
+        /// </summary>
+        private bool built;
+
+        private TradeSide builtSide;
+        private string builtCategory;
+        private string builtSearch;
+        private TradeCatalog.TradeSort builtSort;
+
+        private bool tallied;
+
+        private TradeSide talliedSide;
+        private string talliedSearch;
+
+        /// <summary>The rows for the current view, sorted, rebuilt only when that view changes.</summary>
+        private List<Tradeable> Rows()
+        {
+            if (built && builtSide == side && builtCategory == category && builtSearch == Search.Text
+                && builtSort == TradeCatalog.Sort)
+                return rows;
+
+            TradeCatalog.Rows(TradeSession.deal, side, category, Search.Text, rows);
+
+            built = true;
+            builtSide = side;
+            builtCategory = category;
+            builtSearch = Search.Text;
+            builtSort = TradeCatalog.Sort;
+
+            return rows;
+        }
+
+        /// <summary>
+        /// Which pills have anything behind them.
+        ///
+        /// Keyed on less than the table is, because a pill's presence does not depend on which pill is chosen or
+        /// on how the rows are ordered. Switching category therefore costs one sort and no rescan.
+        /// </summary>
+        private Dictionary<string, int> Tally()
+        {
+            if (tallied && talliedSide == side && talliedSearch == Search.Text)
+                return tally;
+
+            TradeCatalog.Tally(TradeSession.deal, side, Search.Text, tally);
+
+            tallied = true;
+            talliedSide = side;
+            talliedSearch = Search.Text;
+
+            return tally;
+        }
+
+        /// <summary>Drops both caches. Goes wherever <c>TradeStepper.Forget</c> goes, and for the same reason.</summary>
+        private void ForgetLists()
+        {
+            built = false;
+            tallied = false;
+
+            rows.Clear();
+            tally.Clear();
+        }
         private readonly List<TradeRailEntry> rail = new List<TradeRailEntry>();
         private readonly List<TradeRailEntry> sides = new List<TradeRailEntry>();
 
@@ -147,6 +227,7 @@ namespace Gideon.UIOverhaul.Features.Trade
             Search.Clear();
 
             TradeStepper.Forget();
+            ForgetLists();
 
             UIGuard.Try("Trade.Open", () =>
             {
@@ -203,6 +284,11 @@ namespace Gideon.UIOverhaul.Features.Trade
             base.Close(doCloseSound);
 
             TradeStepper.Forget();
+
+            // Dropped on the way out rather than left to the window being collected. The lists hold a Tradeable
+            // for every row of a deal that is now over, and this window is reachable from the stack for as long
+            // as anything still holds it.
+            ForgetLists();
 
             // The quest a visiting trader was carrying is handed over when the window shuts, not when the deal
             // executes -- so it must happen on every exit including cancel, exactly as vanilla does it.
@@ -373,6 +459,7 @@ namespace Gideon.UIOverhaul.Features.Trade
                     TradeSession.deal.Reset();
 
                     TradeStepper.Forget();
+                    ForgetLists();
 
                     prefilled = wantGift
                         ? new HashSet<Tradeable>()
@@ -484,17 +571,19 @@ namespace Gideon.UIOverhaul.Features.Trade
 
             string[] categories = TradeCatalog.Categories;
 
+            // One pass for every pill, rather than building and sorting each category's whole list to read its
+            // count and discard it. That was nine scans and nine sorts of the deal per layout, and it is why the
+            // sell view cost far more frame time than the buy view: the sell list is the colony's entire
+            // inventory where the buy list is one ship's hold.
+            Dictionary<string, int> counts = Tally();
+
             for (int i = 0; i < categories.Length; i++)
             {
-                TradeCatalog.Rows(TradeSession.deal, side, categories[i], Search.Text, scratch);
-
-                if (scratch.Count > 0)
+                if (TradeCatalog.CountIn(counts, categories[i]) > 0)
                     rail.Add(TradeRailEntry.Of(categories[i], TradeCatalog.NameOf(categories[i]), -1));
             }
 
-            TradeCatalog.Rows(TradeSession.deal, side, TradeCatalog.Refused, Search.Text, scratch);
-
-            if (scratch.Count > 0)
+            if (TradeCatalog.CountIn(counts, TradeCatalog.Refused) > 0)
                 rail.Add(TradeRailEntry.Of(TradeCatalog.Refused, "Not accepted", -1));
 
             float left = rect.x + searchWidth + 12f;
@@ -729,7 +818,7 @@ namespace Gideon.UIOverhaul.Features.Trade
                 top += TradeShell.RowHeight;
             }
 
-            TradeCatalog.Rows(TradeSession.deal, side, category, Search.Text, rows);
+            Rows();
 
             Rect list = new Rect(rect.x, top, rect.width, Mathf.Max(0f, rect.yMax - top));
             Rect view = new Rect(0f, 0f, width, rows.Count * TradeShell.RowHeight + 2f);
@@ -1088,10 +1177,18 @@ namespace Gideon.UIOverhaul.Features.Trade
                             ? palette.Danger
                             : palette.TextSecondary;
 
-                // Ends where the switch begins. The caller measures that, because it is the one that knows how
-                // many segments there are and whether there are any at all.
+                // <b>Ends where the switch begins and starts where the trader's name actually ends.</b> It used
+                // to take a flat 55% of the row, which truncated a perfectly ordinary standing line -- "Bulk
+                // goods trader, The Green Cobra Gubo, +100, Aaron" came out ending in an ellipsis -- while empty
+                // space sat between it and a short trader name. Reported 2026-08-29.
+                //
+                // The name's width is measured rather than assumed, through the same control that draws it, so
+                // this claims exactly what the title left behind. The floor stays: a very long trader name gives
+                // the standing line no room at all otherwise, and half a fact is worse than an ellipsis.
                 float right = rect.xMax - reserved;
-                float width = Mathf.Max(160f, (right - rect.x) * 0.55f);
+
+                float taken = TradeShell.TitleWidth(TraderName()) + 24f;
+                float width = Mathf.Max(160f, right - rect.x - taken);
 
                 Widgets.LabelEllipses(new Rect(right - width, rect.y + 4f, width,
                     UIFonts.LineHeightOf(GameFont.Small)), detail);
@@ -1458,8 +1555,10 @@ namespace Gideon.UIOverhaul.Features.Trade
                 TradeSession.deal.Reset();
 
                 // Dropped with the deal: every Tradeable is a new object now, so a box keyed on an old one would
-                // be a box nothing can reach, and the memory would be the least of it.
+                // be a box nothing can reach, and the memory would be the least of it. The cached table is the
+                // same problem one level up -- it would go on drawing rows the deal has never heard of.
                 TradeStepper.Forget();
+                ForgetLists();
 
                 // Reset means empty, not "back to what the standing wants suggested". A player pressing this is
                 // clearing the board, and re-filling it would leave them no way to reach a genuinely empty deal.

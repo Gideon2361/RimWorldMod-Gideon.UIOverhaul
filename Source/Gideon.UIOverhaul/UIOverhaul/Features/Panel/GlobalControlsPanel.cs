@@ -337,7 +337,7 @@ namespace Gideon.UIOverhaul.Features.Panel
                 Rect date = new Rect(block.x + Pad, cursor, block.width - Pad * 2f, dateHeight);
 
                 UIGuard.Try("Panel.DateReadout",
-                    () => DrawDate(date, Find.WorldGrid.LongLatOf(map.Tile), palette),
+                    () => DrawDate(date, Shared.MapTile.LongLatOf(map), palette),
                     "The date is missing from the corner.");
 
                 cursor -= RowGap;

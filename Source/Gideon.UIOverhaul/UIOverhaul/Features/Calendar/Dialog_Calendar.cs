@@ -79,7 +79,7 @@ namespace Gideon.UIOverhaul.Features.Calendar
             if (map == null)
                 return;
 
-            float longitude = Find.WorldGrid.LongLatOf(map.Tile).x;
+            float longitude = Shared.MapTile.LongitudeOf(map);
             int today = CalendarEntries.DayIndex(GenTicks.TicksAbs, longitude);
             int first = today - Radius;
             int last = today + Radius;

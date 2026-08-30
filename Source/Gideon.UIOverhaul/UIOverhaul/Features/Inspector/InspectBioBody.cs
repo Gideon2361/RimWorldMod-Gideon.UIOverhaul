@@ -75,7 +75,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// </summary>
         private static float Workout(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
         {
-            if (!Integrations.RimbodyIntegration.Available)
+            if (!Integrations.RimbodyIntegration.Available || !OfColony(pawn))
                 return y;
 
             ThingComp comp = Integrations.RimbodyIntegration.Physique(pawn);
@@ -89,6 +89,25 @@ namespace Gideon.UIOverhaul.Features.Inspector
             y = Goal(view, y, comp, palette, false);
 
             return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// Whether these goals are the player's to set.
+        ///
+        /// <b>A workout goal is an order, not a fact,</b> and the only people who take orders here are the
+        /// colony's own, its prisoners and its slaves. The block was drawn for anything Rimbody had measured,
+        /// which meant a raider's corpse on the other side of the map offered two goal controls that command
+        /// nobody. Reported 2026-08-28 against a dead pawn of another faction.
+        ///
+        /// <b>The three tests are not one test.</b> A prisoner keeps the faction they were captured from, so
+        /// asking about the faction alone misses every prisoner; a slave who is not yet secure fails
+        /// <c>IsColonist</c> and needs its own question. <c>IsColonist</c> also excludes subhumans, which is
+        /// vanilla's rule rather than ours and costs nothing here -- Rimbody has no physique for one, so the
+        /// comp test above would have stopped it anyway.
+        /// </summary>
+        private static bool OfColony(Pawn pawn)
+        {
+            return pawn.IsColonist || pawn.IsPrisonerOfColony || pawn.IsSlaveOfColony;
         }
 
         /// <summary>

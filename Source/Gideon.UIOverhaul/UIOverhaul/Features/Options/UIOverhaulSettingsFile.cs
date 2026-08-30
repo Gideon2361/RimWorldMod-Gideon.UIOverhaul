@@ -883,6 +883,47 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showExplicitStoryEvents;
 
         /// <summary>
+        /// Whether the calendar leaves colonist birthdays out.
+        ///
+        /// <b>Phrased as hiding rather than showing, because that is what it is for.</b> Birthdays are on by
+        /// default and should stay that way: they are the entries most players opened the calendar to find. This
+        /// exists for the colony where they have stopped being information -- past a few dozen colonists every
+        /// day carries one, and a fifteen day view becomes a wall of them with the quest deadline that mattered
+        /// buried somewhere inside. Asked for on 2026-08-28.
+        ///
+        /// <b>It hides them rather than capping them per day.</b> A cap would have to choose whose birthday to
+        /// drop, and there is no defensible answer -- a player who wants fewer birthdays wants none, not an
+        /// arbitrary three.
+        /// </summary>
+        public bool hideCalendarBirthdays;
+
+        /// <summary>
+        /// The strip of common orders in the bottom left when nothing is selected.
+        ///
+        /// Claim, deconstruct, mine, mine vein, allow and forbid are each four clicks deep in the Architect
+        /// menu and are given dozens of times an hour. On by default, because the corner it uses is empty
+        /// whenever it is shown -- select anything and the inspect pane takes that space back.
+        /// </summary>
+        public bool showQuickOrders = true;
+
+        /// <summary>
+        /// Whether frames wait for the monitor.
+        ///
+        /// <b>Ours to store because RimWorld does not have one.</b> There is no vsync field anywhere in
+        /// <c>Prefs</c>, <c>PrefsData</c> or <c>ResolutionUtility</c> -- it is set once by Unity from the quality
+        /// level and never written back, so a change made at runtime is gone at the next launch. Keeping it here
+        /// is what makes the switch stay where it was put.
+        ///
+        /// <b>On by default, which is what the game already does.</b> Installing this mod must not change how
+        /// anybody's game renders; the default exists to match the state we found, not to express a preference.
+        ///
+        /// <b>Off means uncapped, not faster.</b> Nothing else in RimWorld limits the frame rate, so switching
+        /// this off lets the card draw as many frames as it can -- useful for measuring, and a way to make a
+        /// quiet machine loud for no visible gain.
+        /// </summary>
+        public bool vsync = true;
+
+        /// <summary>
         /// The real time clock: vanilla's HH:mm line, drawn by <c>DoRealtimeClock</c>.
         ///
         /// <b>This switch governs, in both directions.</b> Ticked shows the clock even when vanilla's own
@@ -1617,6 +1658,21 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.showCalendarWidget = !value.EqualsIgnoreCase("false");
                             break;
 
+                        case "vsync":
+                            settings.vsync = !value.EqualsIgnoreCase("false");
+
+                            break;
+
+                        case "showQuickOrders":
+                            settings.showQuickOrders = !value.EqualsIgnoreCase("false");
+
+                            break;
+
+                        case "hideCalendarBirthdays":
+                            settings.hideCalendarBirthdays = value.EqualsIgnoreCase("true");
+
+                            break;
+
                         case "showExplicitStoryEvents":
                             settings.showExplicitStoryEvents = value.EqualsIgnoreCase("true");
                             break;
@@ -1795,6 +1851,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("showCalendarWidget", showCalendarWidget ? "true" : "false");
                     writer.WriteElementString("showExplicitStoryEvents",
                         showExplicitStoryEvents ? "true" : "false");
+                    writer.WriteElementString("vsync", vsync ? "true" : "false");
+                    writer.WriteElementString("showQuickOrders", showQuickOrders ? "true" : "false");
+                    writer.WriteElementString("hideCalendarBirthdays",
+                        hideCalendarBirthdays ? "true" : "false");
                     writer.WriteElementString("showTimeWidget", showTimeWidget ? "true" : "false");
                     writer.WriteElementString("showTemperatureWidget", showTemperatureWidget ? "true" : "false");
                     writer.WriteElementString("showSpeedControlsWidget",

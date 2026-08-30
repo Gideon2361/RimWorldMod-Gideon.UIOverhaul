@@ -196,7 +196,7 @@ namespace Gideon.UIOverhaul.Features.Panel
                     return Find.WorldGrid.LongLatOf(selector.FirstSelectedObject.Tile);
 
                 return Find.CurrentMap != null
-                    ? Find.WorldGrid.LongLatOf(Find.CurrentMap.Tile)
+                    ? Shared.MapTile.LongLatOf(Find.CurrentMap)
                     : Vector2.zero;
             }, Vector2.zero, null);
         }

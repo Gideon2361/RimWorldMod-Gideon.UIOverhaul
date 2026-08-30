@@ -1586,6 +1586,21 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "storyteller only ever fires one, and the category otherwise. Some players will consider that "
                 + "a spoiler, which is why it is off.");
 
+            WidgetToggle(view, ref y, palette, settings, indent * 2f, "Hide birthdays",
+                settings.hideCalendarBirthdays, value => settings.hideCalendarBirthdays = value,
+                "Leaves colonist birthdays out of the calendar.\n\nBirthdays are shown by default and are worth "
+                + "keeping in a colony of any ordinary size. Past a few dozen colonists every day carries one, "
+                + "and the fifteen day view fills with them until a quest deadline is hard to find.\n\nEverything "
+                + "else on the calendar is unaffected.");
+
+            WidgetToggle(view, ref y, palette, settings, indent, "Quick orders",
+                settings.showQuickOrders, value => settings.showQuickOrders = value,
+                "A strip of six common orders in the bottom left corner: claim, deconstruct, mine, mine vein, "
+                + "allow and forbid.\n\nEach of them is otherwise four clicks deep in the Architect menu, and "
+                + "each is something you give dozens of times an hour.\n\nOnly shown when nothing is selected, "
+                + "since that corner belongs to the inspect pane the moment you select anything. It sits to the "
+                + "right of the terrain readout rather than over it.");
+
             WidgetToggle(view, ref y, palette, settings, indent, "Minimap",
                 settings.showMinimapWidget, value =>
                 {
@@ -2091,6 +2106,22 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 y += RowHeight + 2f;
             }
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Vertical sync",
+                settings.vsync, value =>
+                {
+                    settings.vsync = value;
+
+                    // Applied now rather than at the next launch, because a graphics switch you cannot see take
+                    // effect is one you cannot judge.
+                    GraphicsPreferences.Apply();
+                },
+                "Waits for the monitor before showing each frame, which is what stops the tearing you see when "
+                + "the picture updates halfway down the screen.\n\nRimWorld has no setting of its own for this: "
+                + "the engine picks it at startup and forgets any change, so this mod remembers it for "
+                + "you.\n\nSwitching it off does not make the game faster. Nothing else here limits the frame "
+                + "rate, so your card will draw as many frames as it can and run hot doing it. It is on by "
+                + "default because that is what the game already does.");
 
             // Here rather than with the colonist bar's options, where it started and where it no longer belongs.
             // It began as a portrait setting for the bar; it now takes hats off the map, the portraits and the

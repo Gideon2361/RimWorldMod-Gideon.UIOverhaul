@@ -143,7 +143,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 
                 Map map = Find.CurrentMap;
                 if (map != null)
-                    return grid.LongLatOf(map.Tile);
+                    return Shared.MapTile.LongLatOf(map);
 
                 WorldSelector selector = Find.WorldSelector;
                 if (selector != null && selector.SelectedTile.Valid)
