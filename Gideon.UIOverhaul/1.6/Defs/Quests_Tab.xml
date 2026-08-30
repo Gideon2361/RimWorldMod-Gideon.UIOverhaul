@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The quests tab, with the decision moved into the list. Vanilla spends its list on the quest's name and
+    puts what a decision turns on into a pane that shows one quest at a time, so comparing two offers means
+    clicking back and forth. Here a card carries what you get, what it costs and how long you have, in the
+    same order every time.
+
+    order 65 and F7 are vanilla's own, so the button sits where it always did and the key still reaches a
+    quests screen for a player who has not rearranged the bar. The hotkey is on vanilla's def rather than
+    ours; Patch_MainTabsRoot_ToggleTab_Quests catches the toggle and sends it here, which is also how the
+    letter announcing a new quest arrives at our tab. A second binding on F7 would be a conflict the player
+    has to resolve for no gain.
+
+    validWithoutMap, copied from vanilla, because the tab is worth reading from the world view: an offer's
+    deadline runs whether or not a map is loaded.
+
+    No icon, and not minimized, again matching vanilla's def, so the button reads as a labelled one beside
+    Research and Menu rather than as a bare glyph.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Quests</defName>
+    <label>quests</label>
+    <description>Every quest on offer, running, or finished. An offer says what it pays, what it will cost you and how long you have to decide, so two of them can be compared without opening either. Where a quest offers a choice of rewards, all of them are shown; where one of those rewards is a person, their skills, traits and health can be read before you take them.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Quests.MainTabWindow_Quests</tabWindowClass>
+    <order>65</order>
+    <validWithoutMap>true</validWithoutMap>
+  </MainButtonDef>
+
+</Defs>

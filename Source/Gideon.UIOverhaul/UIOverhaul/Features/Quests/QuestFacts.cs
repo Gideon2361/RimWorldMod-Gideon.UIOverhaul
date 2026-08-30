@@ -1,0 +1,473 @@
+using System.Collections.Generic;
+using Gideon.UIFramework.Helpers;
+using RimWorld;
+using Verse;
+
+namespace Gideon.UIOverhaul.Features.Quests
+{
+    /// <summary>One reward a quest is offering, as a line the panel can draw.</summary>
+    internal struct RewardRow
+    {
+        /// <summary>The game's own wording for it.</summary>
+        internal string text;
+
+        /// <summary>
+        /// The person being offered, when this reward is a person and the quest is willing to say who.
+        ///
+        /// Null for every other kind of reward, and null for a pawn whose <c>detailsHidden</c> is set: that
+        /// flag is the quest declining to introduce them, and a screen that opens their skills anyway is
+        /// overriding a decision the content made on purpose.
+        /// </summary>
+        internal Pawn pawn;
+    }
+
+    /// <summary>One of the alternatives a quest asks you to pick between.</summary>
+    internal struct ChoiceRow
+    {
+        internal List<RewardRow> rewards;
+    }
+
+    /// <summary>A quest on offer, judged against the colony that would accept it.</summary>
+    internal struct OfferRow
+    {
+        internal Quest quest;
+        internal string name;
+
+        /// <summary>Challenge rating, or zero when the quest does not carry one.</summary>
+        internal int rating;
+
+        internal string factions;
+        internal bool charity;
+
+        /// <summary>Ticks until the offer lapses, or int.MaxValue when it does not.</summary>
+        internal int expires;
+
+        /// <summary>The alternatives, when there are two or more. Empty when the reward is not a choice.</summary>
+        internal List<ChoiceRow> choices;
+
+        /// <summary>Everything paid whichever alternative is taken.</summary>
+        internal List<RewardRow> rewards;
+    }
+
+    /// <summary>A quest already running.</summary>
+    internal struct ActiveRow
+    {
+        internal Quest quest;
+        internal string name;
+        internal string factions;
+
+        /// <summary>Ticks until it ends, or int.MaxValue when nothing about it is on a clock.</summary>
+        internal int ends;
+
+        /// <summary>Colonists this quest is holding, which is what makes it cost something today.</summary>
+        internal List<Pawn> reserved;
+    }
+
+    /// <summary>A quest that has finished, and how.</summary>
+    internal struct HistoryRow
+    {
+        internal Quest quest;
+        internal string name;
+        internal string outcome;
+
+        /// <summary>Which of the ended states it is in, for the colour.</summary>
+        internal QuestState state;
+
+        /// <summary>Ticks since it was cleaned up.</summary>
+        internal int ago;
+    }
+
+    /// <summary>
+    /// The read side of the quests tab. Everything here is already computed by the game.
+    ///
+    /// <b>Nothing is invented and nothing is written.</b> <c>Quest.State</c>, <c>TicksUntilExpiry</c>,
+    /// <c>challengeRating</c>, <c>charity</c> and <c>QuestReserves</c> are all public and maintained whether
+    /// anything reads them or not. The rewards come from the quest's own <c>QuestPart_Choice</c> parts, and the
+    /// wording of each one is <c>Reward.GetDescription</c>, so a reward this mod has never heard of still
+    /// describes itself correctly.
+    ///
+    /// <b>Every read is guarded.</b> A quest is a bag of parts contributed by content, including content from
+    /// other mods, and any one of them can throw on a property this screen touches. A quest that cannot be read
+    /// is left out of the list rather than taking the tab down with it.
+    /// </summary>
+    internal static class QuestFacts
+    {
+        /// <summary>The quest the panel is showing, kept across frames.</summary>
+        internal static Quest Selected;
+
+        /// <summary>Which of the three lists the rail is on.</summary>
+        internal static QuestList Showing = QuestList.Offers;
+
+        private static readonly List<Quest> Scratch = new List<Quest>();
+
+        private static List<Quest> All()
+        {
+            return UIGuard.Try("Quests.List", () => Find.QuestManager?.QuestsListForReading, null, null);
+        }
+
+        /// <summary>
+        /// Whether a quest belongs on this screen at all.
+        ///
+        /// <b>Hidden and dismissed are two different refusals and both are honoured.</b> <c>hidden</c> is the
+        /// content saying this quest is machinery rather than an offer; <c>dismissed</c> is the player saying
+        /// they have decided. Vanilla keeps dismissed quests reachable behind a dev toggle and so does the
+        /// rail, which lists them separately rather than mixing them back in.
+        /// </summary>
+        private static bool Listed(Quest quest)
+        {
+            return quest != null && !quest.hidden && !quest.hiddenInUI;
+        }
+
+        /// <summary>Which of the four lists a quest belongs to, if any.</summary>
+        private static bool Belongs(Quest quest, QuestList which)
+        {
+            if (!Listed(quest))
+                return false;
+
+            if (which == QuestList.History)
+                return UIGuard.Try("Quests.Historical", () => quest.Historical, false, null);
+
+            QuestState state = UIGuard.Try("Quests.State", () => quest.State, QuestState.EndedInvalid, null);
+
+            switch (which)
+            {
+                case QuestList.Offers:
+                    return state == QuestState.NotYetAccepted && !quest.dismissed;
+
+                case QuestList.Active:
+                    return state == QuestState.Ongoing;
+
+                default:
+                    return state == QuestState.NotYetAccepted && quest.dismissed;
+            }
+        }
+
+        /// <summary>
+        /// One list, into a buffer this type owns.
+        ///
+        /// <b>The buffer is shared, so a caller must finish with it before asking again.</b> The three list
+        /// builders below each copy what they need out of it before returning, which is what makes that safe;
+        /// <see cref="Count"/> deliberately does not go through here for the same reason.
+        /// </summary>
+        internal static List<Quest> Of(QuestList which)
+        {
+            Scratch.Clear();
+
+            List<Quest> all = All();
+
+            for (int i = 0; all != null && i < all.Count; i++)
+            {
+                if (Belongs(all[i], which))
+                    Scratch.Add(all[i]);
+            }
+
+            return Scratch;
+        }
+
+        /// <summary>
+        /// How many are in one list, for the rail's counts.
+        ///
+        /// <b>Counted rather than measured off <see cref="Of"/>.</b> That method hands back a buffer it shares
+        /// with every other caller, so counting through it in the middle of walking it would empty the list
+        /// being walked. The rail asks four times a frame while the panel is drawing from the same buffer,
+        /// which is exactly that case.
+        /// </summary>
+        internal static int Count(QuestList which)
+        {
+            List<Quest> all = All();
+            int count = 0;
+
+            for (int i = 0; all != null && i < all.Count; i++)
+            {
+                if (Belongs(all[i], which))
+                    count++;
+            }
+
+            return count;
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // Offers
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>Every offer, soonest to lapse first, which is the order a decision has to be made in.</summary>
+        internal static List<OfferRow> Offers(List<OfferRow> into)
+        {
+            into.Clear();
+
+            List<Quest> quests = Of(QuestList.Offers);
+
+            for (int i = 0; i < quests.Count; i++)
+                into.Add(Offer(quests[i]));
+
+            into.Sort((a, b) => a.expires.CompareTo(b.expires));
+
+            return into;
+        }
+
+        internal static OfferRow Offer(Quest quest)
+        {
+            OfferRow row = new OfferRow
+            {
+                quest = quest,
+                name = Name(quest),
+                factions = Factions(quest),
+                charity = quest.charity,
+                rating = quest.challengeRating > 0 ? quest.challengeRating : 0,
+                expires = UIGuard.Try("Quests.Expiry", () => quest.TicksUntilExpiry, int.MaxValue, null),
+                choices = new List<ChoiceRow>(),
+                rewards = new List<RewardRow>()
+            };
+
+            Rewards(quest, row.choices, row.rewards);
+
+            return row;
+        }
+
+        /// <summary>
+        /// The reward stack, split into the alternatives and the part paid regardless.
+        ///
+        /// <b>A quest usually offers a choice, and drawing one reward is the thing this screen exists to stop
+        /// doing.</b> The alternatives live on <c>QuestPart_Choice</c>: a part with two or more choices is the
+        /// pick, and a part with exactly one is a reward the quest pays whichever pick is made. Vanilla's own
+        /// <c>PreventsAutoAccept</c> draws the line in the same place, at two.
+        /// </summary>
+        private static void Rewards(Quest quest, List<ChoiceRow> choices, List<RewardRow> fixedRewards)
+        {
+            List<QuestPart> parts = UIGuard.Try("Quests.Parts", () => quest.PartsListForReading, null, null);
+
+            for (int i = 0; parts != null && i < parts.Count; i++)
+            {
+                QuestPart_Choice choice = parts[i] as QuestPart_Choice;
+
+                if (choice == null || choice.choices == null || choice.choices.Count == 0)
+                    continue;
+
+                if (choice.choices.Count == 1)
+                {
+                    Collect(choice.choices[0], fixedRewards);
+
+                    continue;
+                }
+
+                for (int c = 0; c < choice.choices.Count; c++)
+                {
+                    ChoiceRow row = new ChoiceRow { rewards = new List<RewardRow>() };
+
+                    Collect(choice.choices[c], row.rewards);
+
+                    if (row.rewards.Count > 0)
+                        choices.Add(row);
+                }
+            }
+        }
+
+        private static void Collect(QuestPart_Choice.Choice choice, List<RewardRow> into)
+        {
+            if (choice == null || choice.rewards == null)
+                return;
+
+            for (int i = 0; i < choice.rewards.Count; i++)
+            {
+                Reward reward = choice.rewards[i];
+
+                if (reward == null)
+                    continue;
+
+                // The default generator params are what the normal wording is written against: giveToCaravan
+                // false and no chosen-pawn signal. They only ever select between phrasings of the same reward,
+                // so a default here reads as the reward reads on RimWorld's own pane.
+                string text = UIGuard.Try("Quests.RewardText",
+                    () => reward.GetDescription(default(RewardsGeneratorParams)), null, null);
+
+                if (text.NullOrEmpty())
+                    continue;
+
+                Reward_Pawn offered = reward as Reward_Pawn;
+
+                into.Add(new RewardRow
+                {
+                    text = text.StripTags().TrimEnd('.'),
+                    pawn = offered != null && !offered.detailsHidden ? offered.pawn : null
+                });
+            }
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // Active
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>Every running quest, soonest to end first.</summary>
+        internal static List<ActiveRow> Active(List<ActiveRow> into)
+        {
+            into.Clear();
+
+            List<Quest> quests = Of(QuestList.Active);
+
+            for (int i = 0; i < quests.Count; i++)
+            {
+                Quest quest = quests[i];
+
+                ActiveRow row = new ActiveRow
+                {
+                    quest = quest,
+                    name = Name(quest),
+                    factions = Factions(quest),
+                    ends = int.MaxValue,
+                    reserved = new List<Pawn>()
+                };
+
+                Reserved(quest, row.reserved);
+
+                into.Add(row);
+            }
+
+            into.Sort((a, b) => a.ends.CompareTo(b.ends));
+
+            return into;
+        }
+
+        /// <summary>
+        /// The colonists a running quest is holding.
+        ///
+        /// <b>Asked of the quest rather than worked out from the map.</b> <c>QuestReserves</c> exists so the
+        /// game can stop you sending somebody it has already promised elsewhere, which makes it the same
+        /// question this row is asking and the only answer guaranteed to agree with the game's.
+        /// </summary>
+        private static void Reserved(Quest quest, List<Pawn> into)
+        {
+            List<Pawn> colonists = UIGuard.Try("Quests.Colonists",
+                () => PawnsFinder.AllMapsCaravansAndTravellingTransporters_Alive_FreeColonists, null, null);
+
+            for (int i = 0; colonists != null && i < colonists.Count; i++)
+            {
+                Pawn pawn = colonists[i];
+
+                if (pawn == null)
+                    continue;
+
+                if (UIGuard.Try("Quests.Reserves", () => quest.QuestReserves(pawn), false, null))
+                    into.Add(pawn);
+            }
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // History
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>Every finished quest, most recently finished first.</summary>
+        internal static List<HistoryRow> History(List<HistoryRow> into)
+        {
+            into.Clear();
+
+            List<Quest> quests = Of(QuestList.History);
+
+            for (int i = 0; i < quests.Count; i++)
+            {
+                Quest quest = quests[i];
+
+                QuestState state = UIGuard.Try("Quests.State", () => quest.State, QuestState.EndedInvalid, null);
+
+                into.Add(new HistoryRow
+                {
+                    quest = quest,
+                    name = Name(quest),
+                    state = state,
+                    outcome = Outcome(state),
+                    ago = UIGuard.Try("Quests.Cleanup", () => quest.TicksSinceCleanup, 0, null)
+                });
+            }
+
+            into.Sort((a, b) => a.ago.CompareTo(b.ago));
+
+            return into;
+        }
+
+        private static string Outcome(QuestState state)
+        {
+            switch (state)
+            {
+                case QuestState.EndedSuccess: return "completed";
+                case QuestState.EndedFailed: return "failed";
+                case QuestState.EndedOfferExpired: return "expired";
+                case QuestState.EndedInvalid: return "no longer valid";
+                default: return "ended";
+            }
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // Shared reads
+        // -------------------------------------------------------------------------------------------
+
+        internal static string Name(Quest quest)
+        {
+            string name = UIGuard.Try("Quests.Name", () => quest.name, null, null);
+
+            return name.NullOrEmpty() ? "Unnamed quest" : name;
+        }
+
+        /// <summary>
+        /// Who the quest is with, as one line.
+        ///
+        /// <b>Suppressed when the quest asks for it.</b> <c>QuestScriptDef.hideInvolvedFactionsInfo</c> is
+        /// content saying the parties are not the player's business yet, and vanilla's own pane checks it
+        /// before drawing the faction block.
+        /// </summary>
+        internal static string Factions(Quest quest)
+        {
+            return UIGuard.Try("Quests.Factions", () =>
+            {
+                if (quest.root != null && quest.root.hideInvolvedFactionsInfo)
+                    return null;
+
+                string joined = null;
+
+                List<QuestPart> parts = quest.PartsListForReading;
+
+                for (int i = 0; parts != null && i < parts.Count; i++)
+                {
+                    QuestPart part = parts[i];
+
+                    if (part == null || part.InvolvedFactions == null)
+                        continue;
+
+                    foreach (Faction faction in part.InvolvedFactions)
+                    {
+                        if (faction == null || faction.IsPlayer || faction.Hidden)
+                            continue;
+
+                        string label = faction.Name;
+
+                        if (label.NullOrEmpty())
+                            continue;
+
+                        if (joined == null)
+                            joined = label;
+                        else if (joined.IndexOf(label, System.StringComparison.Ordinal) < 0)
+                            joined += ", " + label;
+                    }
+                }
+
+                return joined;
+            }, null, null);
+        }
+
+        /// <summary>A tick count as a period, or a dash when there is no clock on it.</summary>
+        internal static string Period(int ticks)
+        {
+            if (ticks == int.MaxValue || ticks < 0)
+                return "--";
+
+            return UIGuard.Try("Quests.Period", () => ticks.ToStringTicksToPeriod(), "--", null);
+        }
+    }
+
+    /// <summary>The four lists the rail switches between.</summary>
+    internal enum QuestList
+    {
+        Offers,
+        Active,
+        History,
+        Dismissed
+    }
+}
