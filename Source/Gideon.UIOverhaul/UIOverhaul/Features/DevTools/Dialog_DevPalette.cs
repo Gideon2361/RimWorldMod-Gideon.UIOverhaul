@@ -59,6 +59,11 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// <summary>The artwork on a card. Large enough to tell a rifle from a pistol at a glance.</summary>
         private const float IconSize = 44f;
 
+        /// <summary>Height of a row in a branch that picks things, sized to hold the icon with air around it.</summary>
+        private const float ThingRowHeight = 40f;
+
+        private const float ThingIconSize = 30f;
+
         private static readonly List<DebugActionNode> Recent = new List<DebugActionNode>();
 
         private readonly UITextBoxControl search = new UITextBoxControl
@@ -533,8 +538,13 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
             if (cards)
             {
-                columns = Mathf.Max(1, Mathf.FloorToInt((inner.width - 18f) / CardWidth));
-                cellHeight = CardHeight;
+                // <b>One column of wide rows, not a grid of cards.</b> Asked for on 2026-08-29 against Spawn
+                // thing, and the reason is that a card carries a picture and a name while these lists need a
+                // third fact: which mod a thing came from. Five hundred defs from a dozen mods produce names
+                // that repeat and names that mean nothing on their own, and the mod is what tells them apart.
+                // A card is too narrow for that line; a row has the width going spare.
+                columns = 1;
+                cellHeight = ThingRowHeight;
             }
             else
             {
@@ -594,7 +604,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
                         columnWidth, cellHeight);
 
                     if (cards)
-                        DrawCard(cell, results[i], i, palette);
+                        DrawThingRow(cell, results[i], i, palette);
                     else
                         DrawResult(cell, results[i], i, palette);
                 }
@@ -620,6 +630,79 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// a card with the wrong picture still does the right thing. See <see cref="DevActionArt"/> for why the
         /// match can be wrong at all.
         /// </summary>
+        /// <summary>
+        /// One thing in a branch that picks things: its picture, its name, and the mod that added it.
+        ///
+        /// <b>The mod is the column that earns this layout.</b> On a modded game the Spawn thing list runs to
+        /// thousands, and whole runs of it are one mod's content with names that mean nothing without knowing
+        /// whose they are -- AM_AK101A tells you nothing; AM_AK101A from Rimmu-Nation tells you what you are
+        /// looking at. It is drawn dim and right-aligned so a reader scanning names never has to read it, and
+        /// a reader looking for one mod's content can scan that edge alone.
+        ///
+        /// <b>Not the badge <see cref="DrawResult"/> draws.</b> That one says where the action sits in the
+        /// menu tree, which inside a branch is the same answer on every row.
+        /// </summary>
+        private void DrawThingRow(Rect rect, DevAction action, int index, UIColorPaletteDef palette)
+        {
+            bool chosen = index == highlighted;
+            Rect row = rect.ContractedBy(2f);
+
+            if (chosen)
+                UIElementPainter.FillRounded(row, palette.Accent);
+            else if (Mouse.IsOver(row))
+                Widgets.DrawBoxSolid(row, palette.HoverOverlay);
+
+            ThingDef art = DevActionArt.Resolve(action.Label);
+
+            float x = row.x + 8f;
+
+            if (art != null)
+            {
+                Rect icon = new Rect(x, row.y + (row.height - ThingIconSize) * 0.5f, ThingIconSize,
+                    ThingIconSize);
+
+                UIGuard.Try("DevTools.RowIcon", () => Widgets.DefIcon(icon, art), null);
+            }
+
+            // Indented whether or not the picture resolved, so the names stay in one column when a few of them
+            // have no art. A ragged left edge is harder to scan than a gap is to notice.
+            x += ThingIconSize + 10f;
+
+            Color previousColor = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+            bool previousWrap = Text.WordWrap;
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+            Text.WordWrap = false;
+
+            string mod = art != null ? DevActionArt.Mod(art) : null;
+
+            float modWidth = mod.NullOrEmpty() ? 0f : Mathf.Min(200f, row.width * 0.32f);
+
+            GUI.color = chosen ? palette.WindowBackground : palette.TextPrimary;
+
+            Widgets.Label(new Rect(x, row.y, Mathf.Max(0f, row.xMax - 8f - modWidth - x), row.height),
+                action.Label ?? Name(action.Node));
+
+            if (!mod.NullOrEmpty())
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = chosen ? palette.WindowBackground : palette.TextDisabled;
+
+                Widgets.Label(new Rect(row.xMax - 8f - modWidth, row.y, modWidth, row.height), mod);
+            }
+
+            Text.WordWrap = previousWrap;
+            Text.Anchor = previousAnchor;
+            GUI.color = previousColor;
+
+            if (Widgets.ButtonInvisible(row))
+            {
+                highlighted = index;
+                Choose(index);
+            }
+        }
+
         private void DrawCard(Rect rect, DevAction action, int index, UIColorPaletteDef palette)
         {
             bool chosen = index == highlighted;

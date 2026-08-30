@@ -6,6 +6,7 @@ using Gideon.UIOverhaul.Features.Inspector;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.AI;
 
 namespace Gideon.UIOverhaul.Features.Editor
 {
@@ -453,6 +454,8 @@ namespace Gideon.UIOverhaul.Features.Editor
 
             float y = EditorParts.Heading(view, view.y, "Needs", palette);
 
+            y = Break(view, y, context, palette);
+
             List<Need> needs = UIGuard.Try("Editor.NeedList",
                 () => pawn.needs != null ? pawn.needs.AllNeeds : null, null, null);
 
@@ -470,6 +473,83 @@ namespace Gideon.UIOverhaul.Features.Editor
             }
 
             return y + EditorParts.BlockGap - view.y;
+        }
+
+        /// <summary>
+        /// The mental break this pawn is in, and the one control that ends it.
+        ///
+        /// <b>On the Needs panel rather than on Health, because a break is what mood does when it runs out.</b>
+        /// The row sits directly above the mood bar and its three break-point ticks, so the state and the number
+        /// that caused it are read together -- and clearing a break without raising the mood that produced it
+        /// only buys the six hours below. Both controls being in one place is the point.
+        ///
+        /// <b>Drawn as a removable row, like a hediff or a memory.</b> Every other thing in this window that a
+        /// pawn <em>has</em> and can stop having is a row with a cross on it, and a break is one more of those.
+        /// A button reading "Clear mental break" would have been a second idiom for the same gesture.
+        ///
+        /// <b>Absent, not disabled, on a pawn who is fine.</b> A greyed row saying "no mental break" is a line of
+        /// furniture on every calm colonist in the colony, which is nearly all of them.
+        /// </summary>
+        private static float Break(Rect view, float y, EditorContext context, UIColorPaletteDef palette)
+        {
+            Pawn pawn = context.Pawn;
+
+            MentalState state = UIGuard.Try("Editor.BreakState",
+                () => pawn != null && pawn.InMentalState ? pawn.MentalState : null, null, null);
+
+            if (state == null)
+                return y;
+
+            string label = UIGuard.Try("Editor.BreakLabel",
+                () => state.def != null ? state.def.LabelCap.ToString() : "Mental break", "Mental break", null);
+
+            Rect row;
+
+            bool clear = EditorParts.Row(view, y, label, Cause(state), palette.Warning, palette, out row,
+                "Ends this break now, the same way it would end on its own: the pawn's traits are told, any "
+                + "hostility is dropped, and RimWorld will not pick another random break for about six hours.\n\n"
+                + "Their mood is not touched. If it is still under the line the break came from, they can break "
+                + "again once that grace is up.");
+
+            y = row.yMax + EditorParts.RowGap;
+
+            if (!clear)
+                return y;
+
+            // Vanilla's own recovery rather than ClearMentalStateDirect, which is the shorter call and the wrong
+            // one: it drops the state and tells nothing. RecoverFromState notifies the traits, resets the break
+            // cooldown, clears an aggro state's target and stops the jobs the break was driving.
+            if (UIGuard.Try("Editor.ClearBreak", () => state.RecoverFromState(),
+                    "The mental break could not be cleared."))
+                context.Changes.RecordPermanent("cleared " + label.ToLowerInvariant());
+
+            return y;
+        }
+
+        /// <summary>
+        /// Why this pawn broke, in the two words the row has space for.
+        ///
+        /// Worth saying because it decides what to do next. A break from mood is a mood problem and clearing it
+        /// alone fixes nothing; one caused by damage, a psycast or another pawn is an event that has already
+        /// happened and clearing it really is the whole repair.
+        /// </summary>
+        private static string Cause(MentalState state)
+        {
+            return UIGuard.Try("Editor.BreakCause", () =>
+            {
+                if (state.causedByMood)
+                    return "from mood";
+
+                if (state.causedByDamage)
+                    return "from damage";
+
+                if (state.causedByPsycast)
+                    return "from a psycast";
+
+                return state.causedByPawn != null
+                    ? "caused by " + state.causedByPawn.LabelShortCap
+                    : string.Empty;
+            }, string.Empty, null);
         }
 
         /// <summary>Which need is being dragged, by def name, or null. One at a time by definition.</summary>

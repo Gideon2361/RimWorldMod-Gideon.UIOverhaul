@@ -171,6 +171,33 @@ namespace Gideon.UIFramework.Controls
         public string SectionSuffix;
 
         /// <summary>
+        /// How deeply this heading is nested: 0 is a top-level group, 1 a group inside the one above it.
+        ///
+        /// Folding a heading hides every row under it <i>and</i> every deeper heading, down to the next heading
+        /// at the same depth or shallower. So collapsing a map takes its categories with it, which is the only
+        /// behaviour that makes a fold mean "hide this group".
+        /// </summary>
+        public int SectionDepth;
+
+        /// <summary>
+        /// What this heading's fold is remembered under, when <see cref="SectionLabel"/> is not unique.
+        ///
+        /// Folds are keyed by string so they survive the rows being rebuilt every frame. That works while every
+        /// heading reads differently, and breaks the moment two of them do not: "Colonists" under one map and
+        /// "Colonists" under another are one key, so folding either folds both. Set this to something unique --
+        /// the map's name and the category together -- and keep the label short for reading.
+        ///
+        /// Empty falls back to the label, which is right for every list whose headings are already distinct.
+        /// </summary>
+        public string SectionKey;
+
+        /// <summary>The string this heading's fold is stored under. See <see cref="SectionKey"/>.</summary>
+        internal string FoldKey
+        {
+            get { return SectionKey.NullOrEmpty() ? SectionLabel : SectionKey; }
+        }
+
+        /// <summary>
         /// Draws the row's background, before any cell. Card chrome, status washes, a selection highlight.
         ///
         /// Separate from the cells because it spans all of them, and because the control has to paint its
@@ -472,7 +499,28 @@ namespace Gideon.UIFramework.Controls
         public bool IsCollapsed(UIDesignatorTabRow section)
         {
             return CollapsibleSections && !SuppressCollapse && section.IsSection
-                   && CollapsedSections.Contains(section.SectionLabel);
+                   && CollapsedSections.Contains(section.FoldKey);
+        }
+
+        /// <summary>
+        /// Walks the fold state across one heading, and answers whether that heading is itself hidden.
+        ///
+        /// <b>One method because the row loop is written three times</b> -- once to measure, once to draw a
+        /// single region and once to draw a split one -- and three copies of a nesting rule is three chances for
+        /// them to disagree about what is on screen.
+        ///
+        /// <paramref name="hiddenDepth"/> is the depth of the shallowest folded heading currently in force, or
+        /// -1 when nothing is folded. A heading deeper than that is inside the fold and is skipped whole; a
+        /// heading at that depth or shallower ends the fold and then starts its own, if it is folded too.
+        /// </summary>
+        private bool SectionHidden(UIDesignatorTabRow row, ref int hiddenDepth)
+        {
+            if (hiddenDepth >= 0 && row.SectionDepth > hiddenDepth)
+                return true;
+
+            hiddenDepth = IsCollapsed(row) ? row.SectionDepth : -1;
+
+            return false;
         }
 
         /// <summary>Total height of the rows, including section headings and the gaps between rows.</summary>
@@ -481,21 +529,24 @@ namespace Gideon.UIFramework.Controls
             get
             {
                 float total = 0f;
-                bool hidden = false;
+                int hiddenDepth = -1;
 
                 for (int i = 0; i < Rows.Count; i++)
                 {
                     UIDesignatorTabRow row = Rows[i];
 
-                    // A section heading is always laid out; it is what a collapsed group is collapsed to.
+                    // A section heading is laid out unless it is nested inside a folded one; it is what a
+                    // collapsed group is collapsed to.
                     if (row.IsSection)
                     {
-                        hidden = IsCollapsed(row);
+                        if (SectionHidden(row, ref hiddenDepth))
+                            continue;
+
                         total += HeightOf(row);
                         continue;
                     }
 
-                    if (hidden)
+                    if (hiddenDepth >= 0)
                         continue;
 
                     total += HeightOf(row) + RowGap;
@@ -716,7 +767,7 @@ namespace Gideon.UIFramework.Controls
             Widgets.BeginScrollView(body, ref Scroll, view);
 
             float y = 0f;
-            bool hidden = false;
+            int hiddenDepth = -1;
 
             foreach (UIDesignatorTabRow row in Rows)
             {
@@ -725,7 +776,8 @@ namespace Gideon.UIFramework.Controls
 
                 if (row.IsSection)
                 {
-                    hidden = IsCollapsed(row);
+                    if (SectionHidden(row, ref hiddenDepth))
+                        continue;
 
                     // One region, so this heading carries both halves.
                     DrawSectionHeader(rect, row, palette, showLabel: true, showSuffix: true);
@@ -733,7 +785,7 @@ namespace Gideon.UIFramework.Controls
                     continue;
                 }
 
-                if (hidden)
+                if (hiddenDepth >= 0)
                     continue;
 
                 DrawRow(rect, row, palette, 0, Columns.Count);
@@ -825,7 +877,7 @@ namespace Gideon.UIFramework.Controls
             UIColorPaletteDef palette, bool sectionLabels, bool sectionSuffixes)
         {
             float y = scrolled ? 0f : -Scroll.y;
-            bool hidden = false;
+            int hiddenDepth = -1;
 
             foreach (UIDesignatorTabRow row in Rows)
             {
@@ -833,7 +885,8 @@ namespace Gideon.UIFramework.Controls
 
                 if (row.IsSection)
                 {
-                    hidden = IsCollapsed(row);
+                    if (SectionHidden(row, ref hiddenDepth))
+                        continue;
 
                     // Spans the region rather than the row, so the heading's background reaches the edge in both
                     // passes. Its label is at the left, which is why the pinned strip keeps it legible.
@@ -843,7 +896,7 @@ namespace Gideon.UIFramework.Controls
                     continue;
                 }
 
-                if (hidden)
+                if (hiddenDepth >= 0)
                     continue;
 
                 DrawRow(new Rect(rowX, y, ColumnsWidth, height), row, palette, firstColumn, lastColumn);
@@ -963,35 +1016,46 @@ namespace Gideon.UIFramework.Controls
             bool pointerHere = collapsible && Mouse.IsOver(rect);
 
             if (pointerHere)
-                hoverSection = row.SectionLabel;
+                hoverSection = row.FoldKey;
 
             bool over = collapsible
                         && (pointerHere
-                            || (!row.SectionLabel.NullOrEmpty() && row.SectionLabel == hoverSectionDrawn));
+                            || (!row.FoldKey.NullOrEmpty() && row.FoldKey == hoverSectionDrawn));
 
-            Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
+            // A nested heading is indented and left on the panel's own ground rather than the sunken bar, so the
+            // two levels read as a group and its parts instead of as two groups of equal weight.
+            float indent = row.SectionDepth * NestIndent;
+
+            Rect band = new Rect(rect.x + indent, rect.y, Mathf.Max(0f, rect.width - indent), rect.height);
+
+            if (row.SectionDepth <= 0)
+                Widgets.DrawBoxSolid(band, palette.SurfaceSunken);
 
             if (over)
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
+                Widgets.DrawBoxSolid(band, palette.HoverOverlay);
 
             // Only on the half carrying the label. Drawn in both passes it put a second stripe partway along
             // the bar, at the seam where the pinned strip ends -- which is most of what made one heading look
             // like two containers side by side.
+            //
+            // The accent belongs to the top level. A nested heading takes the border colour, which is enough to
+            // mark where it starts without competing with the group it sits inside.
             if (showLabel)
-                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, 3f, rect.height), palette.Accent);
+                Widgets.DrawBoxSolid(new Rect(band.x, rect.y, 3f, rect.height),
+                    row.SectionDepth <= 0 ? palette.Accent : palette.Border);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
 
-            float textX = rect.x + 12f;
+            float textX = band.x + 12f;
 
             if (collapsible && showLabel)
             {
                 // Vanilla's own tree arrows, so the affordance is one players already read as foldable rather
                 // than a glyph of our own invention.
                 Texture2D arrow = collapsed ? TexButton.Reveal : TexButton.Collapse;
-                Rect arrowRect = new Rect(rect.x + 10f, rect.y + (rect.height - ArrowSize) * 0.5f,
+                Rect arrowRect = new Rect(band.x + 10f, rect.y + (rect.height - ArrowSize) * 0.5f,
                     ArrowSize, ArrowSize);
 
                 if (arrow != null)
@@ -1013,7 +1077,7 @@ namespace Gideon.UIFramework.Controls
                 float reserved = showSuffix ? 140f : 10f;
 
                 Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = palette.TextPrimary;
+                GUI.color = row.SectionDepth <= 0 ? palette.TextPrimary : palette.TextSecondary;
                 Widgets.Label(new Rect(textX, rect.y, Mathf.Max(0f, rect.xMax - textX - reserved), rect.height),
                     row.SectionLabel);
             }
@@ -1034,15 +1098,18 @@ namespace Gideon.UIFramework.Controls
             if (collapsible && Widgets.ButtonInvisible(rect))
             {
                 if (collapsed)
-                    CollapsedSections.Remove(row.SectionLabel);
+                    CollapsedSections.Remove(row.FoldKey);
                 else
-                    CollapsedSections.Add(row.SectionLabel);
+                    CollapsedSections.Add(row.FoldKey);
 
                 SoundDefOf.Click.PlayOneShotOnCamera();
             }
         }
 
         private const float ArrowSize = 18f;
+
+        /// <summary>How far each nesting level moves a heading in from the one above it.</summary>
+        private const float NestIndent = 16f;
 
         // ---------------------------------------------------------------------------------------
         // The heading row

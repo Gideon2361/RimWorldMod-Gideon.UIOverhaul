@@ -604,6 +604,55 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// Grouped by map, and the group heading is <see cref="MapLabels.NameOf"/> -- which is what makes a
         /// pocket dimension show the name of its entrance box, and keeps showing the right one after a rename.
         /// </summary>
+        /// <summary>
+        /// How many distinct categories are represented in one map's listing.
+        ///
+        /// Counted rather than assumed, because the answer decides whether subgroup headings appear at all and
+        /// it changes with the tabs across the top: filtering down to colonists alone should put the list back
+        /// to a plain alphabetical run under the map, not leave one heading sitting over the whole of it.
+        /// </summary>
+        private static int CategoriesIn(List<Pawn> group)
+        {
+            int found = 0;
+
+            foreach (PawnCategory category in PawnCategories.All)
+            {
+                for (int i = 0; i < group.Count; i++)
+                {
+                    if (PawnCategories.Of(group[i]) != category)
+                        continue;
+
+                    found++;
+
+                    break;
+                }
+            }
+
+            return found;
+        }
+
+        /// <summary>
+        /// Fills in a subgroup heading's count once its members have been laid out.
+        ///
+        /// The heading is written before the run it heads, so its count is not known yet; the row is found again
+        /// by its fold key and finished. Cheaper than walking the group twice per category, and the control reads
+        /// the row object it was handed rather than a copy of it, so writing to it afterwards is enough.
+        /// </summary>
+        private static void Heading(string key, int members)
+        {
+            for (int i = Grid.Rows.Count - 1; i >= 0; i--)
+            {
+                UIDesignatorTabRow row = Grid.Rows[i];
+
+                if (!row.IsSection || row.SectionKey != key)
+                    continue;
+
+                row.SectionSuffix = members == 1 ? "1 person" : members + " people";
+
+                return;
+            }
+        }
+
         private static void Collect()
         {
             Grid.Rows.Clear();
@@ -639,26 +688,63 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 if (group.Count == 0)
                     continue;
 
+                // Sorted once, here, rather than once per category below. Splitting a sorted list by category
+                // keeps each part sorted, so the alphabetical order inside every subgroup is free.
                 group.SortBy(p => p.LabelShortCap);
+
+                string fold = "map:" + map.uniqueID;
 
                 Grid.Rows.Add(new UIDesignatorTabRow
                 {
                     SectionLabel = MapLabels.NameOf(map),
-                    SectionSuffix = group.Count == 1 ? "1 person" : group.Count + " people"
+                    SectionSuffix = group.Count == 1 ? "1 person" : group.Count + " people",
+
+                    // Keyed by the map rather than by its name, so two maps that happen to read alike fold
+                    // separately and renaming one does not lose its fold.
+                    SectionKey = fold
                 });
 
-                foreach (Pawn pawn in group)
-                {
-                    bool open = expandedPawn == pawn;
+                // A subgroup heading is worth its line only when there is something to tell apart. A colony of
+                // nothing but colonists would otherwise get a "Colonists" bar under every map heading, saying
+                // exactly what the tab across the top already says.
+                bool split = CategoriesIn(group) > 1;
 
-                    Grid.Rows.Add(new UIDesignatorTabRow
+                foreach (PawnCategory category in PawnCategories.All)
+                {
+                    int members = 0;
+
+                    for (int i = 0; i < group.Count; i++)
                     {
-                        Payload = pawn,
-                        Height = open ? RowHeight + ExpansionHeightFor(pawn) : (float?) null,
-                        DrawBackground = DrawRowBackground,
-                        DrawOverlay = open ? (System.Action<Rect, UIDesignatorTabRow, UIColorPaletteDef>)
-                            DrawExpansion : null
-                    });
+                        if (PawnCategories.Of(group[i]) != category)
+                            continue;
+
+                        if (members == 0 && split)
+                            Grid.Rows.Add(new UIDesignatorTabRow
+                            {
+                                SectionLabel = PawnCategories.Label(category),
+                                SectionDepth = 1,
+                                SectionKey = fold + "/" + category
+                            });
+
+                        members++;
+
+                        Pawn pawn = group[i];
+                        bool open = expandedPawn == pawn;
+
+                        Grid.Rows.Add(new UIDesignatorTabRow
+                        {
+                            Payload = pawn,
+                            Height = open ? RowHeight + ExpansionHeightFor(pawn) : (float?) null,
+                            DrawBackground = DrawRowBackground,
+                            DrawOverlay = open ? (System.Action<Rect, UIDesignatorTabRow, UIColorPaletteDef>)
+                                DrawExpansion : null
+                        });
+                    }
+
+                    // Written after the members are counted, since the heading goes in before the count is
+                    // known and the control reads the row it was given rather than a copy.
+                    if (members > 0 && split)
+                        Heading(fold + "/" + category, members);
                 }
             }
 

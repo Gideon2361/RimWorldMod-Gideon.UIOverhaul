@@ -28,14 +28,20 @@ namespace Gideon.UIOverhaul.Features.DevTools
     internal static class DevActionArt
     {
         /// <summary>
-        /// How much of a branch has to resolve before it is drawn as cards.
+        /// How much of a branch has to resolve before it is drawn as thing rows.
         ///
-        /// <b>A proportion, because a partial match is worse than either extreme.</b> A grid where two cards in
-        /// twenty carry art reads as broken art rather than as a grid of names, so the choice is made for the
-        /// branch as a whole. Three quarters is high enough that the odd unmatched name looks like a gap in the
-        /// game's own data and low enough that one renamed def does not cost a whole branch its pictures.
+        /// <b>A quarter, where the card grid this replaced wanted three quarters.</b> That bar was set because a
+        /// grid with two pictures in twenty reads as broken art rather than as a grid of names -- a card is
+        /// mostly picture, so a card without one is a hole. A row is mostly text: the name sits in the same
+        /// column either way and an unresolved row simply has space where its icon would be, which reads as a
+        /// gap in the game's data rather than as a fault in the list.
+        ///
+        /// Low enough, too, that a branch of modded things still gets the layout when only some of their defs
+        /// carry labels this can match -- which is the common case and the reason the layout was asked for. It
+        /// stays above zero so that a branch of things that are not <c>ThingDef</c>s at all, weathers and
+        /// factions among them, keeps the plain name list it has always had.
         /// </summary>
-        private const float CardThreshold = 0.75f;
+        private const float CardThreshold = 0.25f;
 
         /// <summary>
         /// Fewest children a branch needs before cards are worth it.
@@ -46,6 +52,14 @@ namespace Gideon.UIOverhaul.Features.DevTools
         private const int CardMinimum = 8;
 
         private static Dictionary<string, ThingDef> byLabel;
+
+        /// <summary>
+        /// The same defs again, keyed by <c>defName</c>, for the mods that never gave theirs a label.
+        ///
+        /// A defName is unique by definition, so unlike <see cref="byLabel"/> this one has no ambiguity to
+        /// poison an entry with.
+        /// </summary>
+        private static Dictionary<string, ThingDef> byDefName;
 
         private static bool failed;
 
@@ -65,7 +79,37 @@ namespace Gideon.UIOverhaul.Features.DevTools
             if (byLabel == null)
                 return null;
 
-            return byLabel.TryGetValue(label.Trim(), out ThingDef found) ? found : null;
+            string key = label.Trim();
+
+            if (byLabel.TryGetValue(key, out ThingDef found) && found != null)
+                return found;
+
+            // <b>The defName is the second guess, and on a modded game it is most of them.</b> The game names
+            // these nodes after the def's label, but a great many mods never set one -- so the node is called
+            // AM_AK101A or AEXP_EggAnaconda, which is a defName wearing a label's place. Vanilla content mostly
+            // has real labels and resolves on the first lookup; without this fallback a heavily modded Spawn
+            // thing list is a wall of names with no pictures, which is the case that needed it.
+            //
+            // Second rather than first, because a label is what a reader sees and a defName collision with some
+            // other def's label should lose to the label.
+            return byDefName != null && byDefName.TryGetValue(key, out ThingDef named) ? named : null;
+        }
+
+        /// <summary>
+        /// Which mod a def came from, in the words the mod list uses.
+        ///
+        /// Core content answers "RimWorld" rather than an empty string: the question a reader is asking is "is
+        /// this vanilla or is this something I installed", and a blank reads as missing data instead of as an
+        /// answer.
+        /// </summary>
+        internal static string Mod(ThingDef def)
+        {
+            return UIGuard.Try("DevTools.ArtMod", () =>
+            {
+                string name = def != null && def.modContentPack != null ? def.modContentPack.Name : null;
+
+                return name.NullOrEmpty() ? "RimWorld" : name;
+            }, "RimWorld", null);
         }
 
         /// <summary>
@@ -99,6 +143,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
             if (byLabel != null || failed)
                 return;
 
+            Dictionary<string, ThingDef> names =
+                new Dictionary<string, ThingDef>(StringComparer.OrdinalIgnoreCase);
+
             Dictionary<string, ThingDef> map = UIGuard.Try("DevTools.IndexArt", () =>
             {
                 Dictionary<string, ThingDef> built =
@@ -106,7 +153,13 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
                 foreach (ThingDef def in DefDatabase<ThingDef>.AllDefsListForReading)
                 {
-                    if (def == null || def.label.NullOrEmpty())
+                    if (def == null)
+                        continue;
+
+                    if (!def.defName.NullOrEmpty())
+                        names[def.defName] = def;
+
+                    if (def.label.NullOrEmpty())
                         continue;
 
                     string key = def.label.Trim();
@@ -134,6 +187,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
             }
 
             byLabel = map;
+            byDefName = names;
         }
     }
 }

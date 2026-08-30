@@ -323,4 +323,157 @@ namespace Gideon.UIOverhaul.Features.Beds
             };
         }
     }
+
+    /// <summary>
+    /// Gives a non-owner lying in a communal bed the slot they are actually in.
+    ///
+    /// <b>This is the fix for a pawn who lies in a communal bed awake while their sleep drains.</b> Reported on
+    /// 2026-08-29. <c>CanUseBedNow</c> asks two ownership questions, not one, and widening
+    /// <c>BedOwnerWillShare</c> only answers the first:
+    ///
+    /// <code>
+    /// bool flag  = bed.IsOwner(sleeper, out var assignedSleepingSlot);
+    /// bool flag2 = sleeper.CurrentBed(out var sleepingSlot) == bed;
+    /// ...
+    /// if (!flag &amp;&amp; !BedOwnerWillShare(...)) return false;      // our other postfix passes this
+    /// if (flag2 &amp;&amp; sleepingSlot != assignedSleepingSlot) return false;
+    /// </code>
+    ///
+    /// Both are <c>int?</c>. A non-owner gets <c>null</c> from <c>IsOwner</c>, and the moment they lie down
+    /// <c>CurrentBed</c> gives <c>0</c> -- so <c>0 != null</c> and the bed becomes unusable <i>because they got
+    /// into it</i>. <c>JobDriver_LayDown</c> carries <c>FailOnBedNoLongerUsable</c>, so the job ends, the rest
+    /// job giver hands it straight back (out of the bed, <c>flag2</c> is false again and the test passes), and
+    /// the pawn loops between lying down and failing. Reported as "Resting", never reaching asleep.
+    ///
+    /// <b>The slot is filled in but the answer stays no.</b> Returning true would make <c>flag</c> true, which
+    /// skips <c>BedOwnerWillShare</c> altogether and would tell the rest of the game this pawn owns a bed they
+    /// do not -- the label, the bedroom thoughts and the assign list all read that. Only the out parameter is
+    /// touched, which is the one thing the slot test looks at.
+    ///
+    /// <b>Nothing else reads it on a false answer.</b> The other caller,
+    /// <c>RestUtility.GetBedSleepingSlotPosFor</c>, uses the slot only inside its <c>if (IsOwner(...))</c>
+    /// branch, so a filled-in slot beside a false return reaches nothing but the test this exists for.
+    ///
+    /// <b>Only while they are in this bed.</b> Away from it the slot stays null, because <c>flag2</c> is false
+    /// then and the test does not run -- inventing a slot for a pawn who is elsewhere would be answering a
+    /// question nobody asked.
+    ///
+    /// <b>The argument types are not optional.</b> <c>IsOwner</c> has two overloads and a name alone throws
+    /// <c>AmbiguousMatchException</c>; the out parameter needs <c>ArgumentType.Out</c> beside its type, since an
+    /// attribute cannot call <c>MakeByRefType</c>.
+    /// </summary>
+    [HarmonyPatch(typeof(Building_Bed), nameof(Building_Bed.IsOwner),
+        new[] { typeof(Pawn), typeof(int?) },
+        new[] { ArgumentType.Normal, ArgumentType.Out })]
+    internal static class Patch_CommunalBedSlot
+    {
+        [HarmonyPostfix]
+        public static void Postfix(Building_Bed __instance, Pawn p, ref int? assignedSleepingSlot, bool __result)
+        {
+            // A real owner already has the right answer, and a slot that came back filled is not ours to move.
+            if (__result || assignedSleepingSlot.HasValue || p == null)
+                return;
+
+            // <b>Two cheap tests before any of the expensive ones,</b> because this runs for every bed a search
+            // walks past rather than once per sleeper. A pawn not lying in a bed cannot be the case this exists
+            // for -- the slot test in CanUseBedNow is behind flag2, which is false for them -- and finding that
+            // out costs an enum read. Reading the setting and the map's mark both allocate a closure apiece, so
+            // the order here is what keeps a bed search from paying for this feature on every candidate.
+            if (!p.Spawned || !p.GetPosture().InBed())
+                return;
+
+            if (!CommunalBeds.Enabled || !CommunalBeds.IsCommunal(__instance))
+                return;
+
+            int? occupied = null;
+
+            if (UIGuard.Try("Beds.OccupiedSlot", () =>
+                {
+                    int? slot;
+
+                    if (p.CurrentBed(out slot) == __instance)
+                        occupied = slot;
+                }))
+                assignedSleepingSlot = occupied;
+        }
+    }
+
+    /// <summary>
+    /// The claim a pawn never makes for themselves, made for them by whoever carried them.
+    ///
+    /// <b><c>JobGiver_DeliverPawnToBed</c> claims directly, before the job exists,</b> so the wrap on
+    /// <c>Toils_Bed.ClaimBedIfNonMedical</c> never sees it:
+    ///
+    /// <code>
+    /// pawn2.ownership.ClaimBedIfNonMedical(building_Bed);
+    /// Job job = JobMaker.MakeJob(JobDefOf.DeliverToBed, pawn2, building_Bed);
+    /// </code>
+    ///
+    /// That is the route for somebody <i>carried</i> to bed -- rescued while downed, hauled to a medical bed,
+    /// put there by a ritual. It was left alone deliberately at first, on the reasoning that a duty putting
+    /// somebody in a bed should grant the ownership that keeps them there. <b>Aaron reversed that on
+    /// 2026-08-29 for communal beds specifically:</b> the mark exists so nobody takes the bed permanently, and
+    /// being carried into one is no more a claim than walking into it.
+    ///
+    /// <b>Scoped by a flag rather than by patching the claim outright.</b> <c>Pawn_Ownership</c> is the choke
+    /// point every claim goes through, and two of the things going through it are meant to: the Assign button
+    /// and the post-load repair that re-adds a pawn whose bed lost them. Refusing there unconditionally would
+    /// break assigning a communal bed and would silently drop an assignment on load. The flag is up only inside
+    /// this one method, so nothing else can be caught by it.
+    ///
+    /// <b>Cleared by a finalizer, not a postfix.</b> A postfix does not run when the original throws, and a
+    /// flag stuck up would go on refusing claims the player did ask for -- for the rest of the session.
+    ///
+    /// Only the claim is refused. The delivery job is untouched, so they are still carried there and still
+    /// sleep in it.
+    /// </summary>
+    [HarmonyPatch(typeof(JobGiver_DeliverPawnToBed), "TryGiveJob")]
+    internal static class Patch_CommunalBedDelivery
+    {
+        /// <summary>True only while <c>TryGiveJob</c> is on the stack. Single-threaded, and it does not recurse.</summary>
+        internal static bool Delivering;
+
+        [HarmonyPrefix]
+        public static void Prefix()
+        {
+            Delivering = true;
+        }
+
+        [HarmonyFinalizer]
+        public static void Finalizer()
+        {
+            Delivering = false;
+        }
+    }
+
+    /// <summary>
+    /// Refuses the delivery claim on a communal bed, and only that one.
+    ///
+    /// See <see cref="Patch_CommunalBedDelivery"/> for why this is gated on a flag rather than applied to every
+    /// claim. <c>false</c> is what vanilla itself returns when a claim does not happen, so the caller is being
+    /// told something it already knows how to hear.
+    /// </summary>
+    [HarmonyPatch(typeof(Pawn_Ownership), nameof(Pawn_Ownership.ClaimBedIfNonMedical))]
+    internal static class Patch_CommunalBedDeliveryClaim
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(Building_Bed newBed, ref bool __result)
+        {
+            if (!Patch_CommunalBedDelivery.Delivering)
+                return true;
+
+            bool communal = false;
+
+            if (!UIGuard.Try("Beds.DeliveryClaim",
+                    () => communal = CommunalBeds.Enabled && CommunalBeds.IsCommunal(newBed)))
+                return true;
+
+            if (!communal)
+                return true;
+
+            __result = false;
+
+            return false;
+        }
+    }
 }

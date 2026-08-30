@@ -279,7 +279,15 @@ namespace Gideon.UIOverhaul.Features.Bills
             if (Button(templates, "Templates", palette))
                 Find.WindowStack.Add(new Dialog_BillTemplates(selected));
 
-            Rect add = new Rect(templates.x - 118f, bar.y + 2f, 110f, 26f);
+            // Between Templates and Add bill, because it belongs to the same question as Add bill and is
+            // usually the step before it: you look a thing up, learn which bench makes it, and then go and add
+            // the bill. It asks for nothing, so it sits in the plain style rather than the primary one.
+            Rect lookup = new Rect(templates.x - 108f, bar.y + 2f, 100f, 26f);
+
+            if (Button(lookup, "Lookup", palette))
+                Find.WindowStack.Add(new Dialog_RecipeLookup());
+
+            Rect add = new Rect(lookup.x - 118f, bar.y + 2f, 110f, 26f);
 
             // Into the wizard, which asks for the bench itself as its first step. This window is the colony, so
             // there is no bench in view to assume, and the two float menus this replaced were sixty bare names
