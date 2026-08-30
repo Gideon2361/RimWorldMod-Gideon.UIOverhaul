@@ -284,6 +284,42 @@ namespace Gideon.UIOverhaul.Features.Quests
             }
         }
 
+        /// <summary>
+        /// A reward description flattened to something that fits on one row.
+        ///
+        /// <b>Reward wording is written for a paragraph, not a line.</b> Several kinds return two or three
+        /// lines, and a multi-line string drawn into a one-line rect centres the whole block on that line:
+        /// the middle line lands where the text belongs and the others render above and below it, clipped to
+        /// slivers. That is what the empty GET row with marks floating over it was. Reported on 2026-08-30.
+        ///
+        /// Joined with a separator rather than truncated at the first break, because the lines after the
+        /// first are usually the part that says what you actually receive.
+        /// </summary>
+        private static string OneLine(string text)
+        {
+            if (text.NullOrEmpty())
+                return text;
+
+            string flat = text.StripTags().Replace("\r", string.Empty);
+
+            string[] lines = flat.Split('\n');
+            string joined = null;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].Trim();
+
+                if (line.NullOrEmpty())
+                    continue;
+
+                line = line.TrimEnd('.');
+
+                joined = joined == null ? line : joined + "  -  " + line;
+            }
+
+            return joined ?? string.Empty;
+        }
+
         private static void Collect(QuestPart_Choice.Choice choice, List<RewardRow> into)
         {
             if (choice == null || choice.rewards == null)
@@ -309,7 +345,7 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 into.Add(new RewardRow
                 {
-                    text = text.StripTags().TrimEnd('.'),
+                    text = OneLine(text),
                     pawn = offered != null && !offered.detailsHidden ? offered.pawn : null
                 });
             }
