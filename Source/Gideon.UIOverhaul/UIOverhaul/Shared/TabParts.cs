@@ -75,11 +75,20 @@ namespace Gideon.UIOverhaul.Shared
         /// above to separate from and the line only doubles up on the panel's own edge.
         /// </summary>
         /// <paramref name="face"/> defaults to the game's own, so existing callers are unchanged.
+        /// <param name="points">
+        /// An absolute point size for the caption, or zero to take it from Tiny the way every caller written
+        /// before point sizes existed does. The row height follows it, so a heading set smaller closes up
+        /// rather than leaving the gap a larger one needed.
+        /// </param>
         internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette, bool rule = true,
-            UIFace face = UIFace.Game)
+            UIFace face = UIFace.Game, float points = 0f)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
+
+            float line = points > 0f && face != UIFace.Game
+                ? UITextControl.LineHeight(face, points)
+                : UIFonts.LineHeightOf(GameFont.Tiny);
 
             try
             {
@@ -91,10 +100,12 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
 
-                Rect caption = new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(GameFont.Tiny));
+                Rect caption = new Rect(rect.x, y + 4f, rect.width, line);
 
                 if (face == UIFace.Game)
                     Widgets.Label(caption, text);
+                else if (points > 0f)
+                    UITextControl.LabelEllipses(caption, text, face, points);
                 else
                     UITextControl.LabelEllipses(caption, text, face, GameFont.Tiny);
             }
@@ -104,7 +115,7 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = previousFont;
             }
 
-            return y + UIFonts.LineHeightOf(GameFont.Tiny) + 8f;
+            return y + line + 8f;
         }
 
         /// <summary>
