@@ -2706,6 +2706,16 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "This carries the same rule to everyone else it applies to.\n\nSlaves still count. A slave "
                 + "with nothing to do is the same problem as a colonist with nothing to do.");
 
+            GroupLabel(view, ref y, palette, "Bills");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Point out bills nobody can work",
+                settings.warnStalledBills, value => settings.warnStalledBills = value,
+                "Marks a bill red in the bills window when no colonist is allowed to start it, whether because "
+                + "of its skill range, its worker restriction, or the work type being switched off for "
+                + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
+
+            y += 8f;
+
             GroupLabel(view, ref y, palette, "Plants");
 
             WidgetToggle(view, ref y, palette, settings, Indent, "Mark blighted crops for cutting",
@@ -2830,12 +2840,6 @@ namespace Gideon.UIOverhaul.Features.Options
 
             DrawBillCap(view, ref y, palette, settings);
             DrawIngredientRadius(view, ref y, palette, settings);
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Point out bills nobody can work",
-                settings.warnStalledBills, value => settings.warnStalledBills = value,
-                "Marks a bill red in the bills window when no colonist is allowed to start it, whether because "
-                + "of its skill range, its worker restriction, or the work type being switched off for "
-                + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
 
             y += 8f;
 
