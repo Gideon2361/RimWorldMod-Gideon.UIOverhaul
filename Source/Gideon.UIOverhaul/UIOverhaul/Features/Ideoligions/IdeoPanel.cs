@@ -254,7 +254,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect view = rect.ContractedBy(6f);
             float y = view.y + 2f;
 
-            y = TabParts.Heading(view, y, "In this colony", palette, false, IdeoFaces.Mono);
+            y = TabParts.Heading(view, y, IdeoFaces.Caps("In this colony"), palette, false, IdeoFaces.Mono);
 
             for (int i = 0; i < here.Count; i++)
                 y = Entry(view, y, here[i], selected, palette, true);
@@ -263,7 +263,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 return;
 
             y += 8f;
-            y = TabParts.Heading(view, y, "Known elsewhere", palette, true, IdeoFaces.Mono);
+            y = TabParts.Heading(view, y, IdeoFaces.Caps("Known elsewhere"), palette, true, IdeoFaces.Mono);
 
             for (int i = 0; i < elsewhere.Count; i++)
                 y = Entry(view, y, elsewhere[i], selected, palette, false);
@@ -299,11 +299,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float countWidth = 24f;
 
             TabParts.RowLabel(new Rect(row.xMax - countWidth - 4f, row.y, countWidth, height), count,
-                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Small);
+                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.RailCount);
 
             TabParts.RowLabel(new Rect(swatch.xMax + 6f, row.y, row.width - 20f - countWidth - 12f, height),
                 ideo.name, on ? ideo.TextColor : present ? palette.TextPrimary : palette.TextDisabled,
-                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.Name);
+                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.RailName);
 
             if (Widgets.ButtonInvisible(row))
             {

@@ -75,8 +75,19 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             /// <summary>A block's own heading, and the suffix on the right of it.</summary>
             internal const float BlockHead = 10.5f;
 
-            /// <summary>A name in a column: a believer, a role, a ritual, a faith in the rail.</summary>
+            /// <summary>A name in a column: a believer, a role, a ritual.</summary>
             internal const float Name = 15f;
+
+            /// <summary>
+            /// A faith in the rail, and the believer count beside it. Two points over the block rows.
+            ///
+            /// The rail is navigation, not data. It is the one control on the screen that changes what every
+            /// block behind it is showing, and at the same size as a role name it read as a fifth list rather
+            /// than as the thing choosing between them.
+            /// </summary>
+            internal const float RailName = 17f;
+
+            internal const float RailCount = 13f;
 
             /// <summary>A sentence: a demand, a stance, a holder's name.</summary>
             internal const float Body = 14f;
