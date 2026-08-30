@@ -63,6 +63,13 @@ namespace Gideon.UIOverhaul.Features.Quests
         internal List<Pawn> reserved;
     }
 
+    /// <summary>One clock running on a quest: how long is left, and the game's own wording for it.</summary>
+    internal struct DeadlineRow
+    {
+        internal int ticks;
+        internal string text;
+    }
+
     /// <summary>A quest that has finished, and how.</summary>
     internal struct HistoryRow
     {
@@ -313,7 +320,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     quest = quest,
                     name = Name(quest),
                     factions = Factions(quest),
-                    ends = int.MaxValue,
+                    ends = Soonest(quest),
                     reserved = new List<Pawn>()
                 };
 
@@ -350,6 +357,74 @@ namespace Gideon.UIOverhaul.Features.Quests
                     into.Add(pawn);
             }
         }
+
+        // -------------------------------------------------------------------------------------------
+        // Deadlines
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Every clock actually running on a quest, soonest first.
+        ///
+        /// <b>A quest does not have an end tick; its parts do.</b> The date a quest finishes lives on
+        /// <c>QuestPart_Delay</c> as <c>enableTick + delayTicks</c>, and a quest can carry none, one or several
+        /// of them: a lodger leaving and a raid arriving are two separate delays on the same quest.
+        ///
+        /// <b>Only enabled ones count.</b> <c>TicksLeft</c> answers zero when the part is not
+        /// <c>QuestPartState.Enabled</c>, because <c>enableTick</c> is not set until the part starts. A delay
+        /// waiting on a signal has no date yet, and reading one out of it would put a deadline of "now" on a
+        /// bar for something that has not begun.
+        ///
+        /// <b>Only bad ones are shown,</b> which is the filter vanilla's own readout uses. A delay that is not
+        /// <c>isBad</c> is internal pacing rather than a deadline the player is running against, and
+        /// <c>expiryInfoPart</c> being empty is the content saying this one has no player-facing wording.
+        ///
+        /// <b>Where this goes further than vanilla is in taking all of them.</b> <c>GetShortTimeInfo</c> returns
+        /// the first match and stops, which is right for one line in a narrow column and wrong for a chart whose
+        /// whole purpose is showing that two clocks overlap.
+        /// </summary>
+        internal static List<DeadlineRow> Deadlines(Quest quest, List<DeadlineRow> into)
+        {
+            into.Clear();
+
+            List<QuestPart> parts = UIGuard.Try("Quests.Parts", () => quest.PartsListForReading, null, null);
+
+            for (int i = 0; parts != null && i < parts.Count; i++)
+            {
+                QuestPart_Delay delay = parts[i] as QuestPart_Delay;
+
+                if (delay == null || delay.isBad == false || delay.expiryInfoPart.NullOrEmpty())
+                    continue;
+
+                if (UIGuard.Try("Quests.DelayState", () => delay.State, QuestPartState.Disabled, null)
+                    != QuestPartState.Enabled)
+                    continue;
+
+                int left = UIGuard.Try("Quests.DelayLeft", () => delay.TicksLeft, 0, null);
+
+                if (left <= 0)
+                    continue;
+
+                into.Add(new DeadlineRow
+                {
+                    ticks = left,
+                    text = UIGuard.Try("Quests.DelayText", () => delay.ExpiryInfoPart, null, null)
+                });
+            }
+
+            into.Sort((a, b) => a.ticks.CompareTo(b.ticks));
+
+            return into;
+        }
+
+        /// <summary>The soonest clock on a quest, or int.MaxValue when it is running to no date at all.</summary>
+        internal static int Soonest(Quest quest)
+        {
+            List<DeadlineRow> found = Deadlines(quest, Clocks);
+
+            return found.Count == 0 ? int.MaxValue : found[0].ticks;
+        }
+
+        private static readonly List<DeadlineRow> Clocks = new List<DeadlineRow>();
 
         // -------------------------------------------------------------------------------------------
         // History
