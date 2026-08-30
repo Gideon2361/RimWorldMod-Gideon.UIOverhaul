@@ -21,7 +21,7 @@
     this mod's place to decide otherwise; and the icon, which is the same texture the button has always had.
 
     That icon lives in the Ideology expansion. It is never fetched without it, because the button is
-    suppressed off the bar when IdeoTabs.Available is false -- which is also what makes this tab absent
+    suppressed off the bar when IdeoTabs.Available is false, which is also what makes this tab absent
     rather than empty in an install with no Ideology. A MainButtonDef cannot be conditionally undefined, so
     that check is the whole of the gate.
   -->
