@@ -254,7 +254,10 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             Rect view = rect.ContractedBy(6f);
             float y = view.y + 2f;
 
-            y = TabParts.Heading(view, y, IdeoFaces.Caps("In this colony"), palette, false, IdeoFaces.Mono);
+            // The two leading spaces are deliberate. The rail's rule runs the full width of the panel and the
+            // heading under it is drawn from the same x, so without them the first letter sits on the border.
+            // Spaces rather than an inset rect, because insetting the rect would carry the rule in with it.
+            y = TabParts.Heading(view, y, IdeoFaces.Caps("  In this colony"), palette, false, IdeoFaces.Mono);
 
             for (int i = 0; i < here.Count; i++)
                 y = Entry(view, y, here[i], selected, palette, true);
@@ -263,7 +266,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 return;
 
             y += 8f;
-            y = TabParts.Heading(view, y, IdeoFaces.Caps("Known elsewhere"), palette, true, IdeoFaces.Mono);
+            y = TabParts.Heading(view, y, IdeoFaces.Caps("  Known elsewhere"), palette, true, IdeoFaces.Mono);
 
             for (int i = 0; i < elsewhere.Count; i++)
                 y = Entry(view, y, elsewhere[i], selected, palette, false);
