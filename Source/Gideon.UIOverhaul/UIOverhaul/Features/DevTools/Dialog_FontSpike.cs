@@ -132,7 +132,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
             x = Toggle(row, x, "font", path == 2, () => path = 2);
 
-            Toggle(row, x, "ttf", path == 3, () => path = 3);
+            x = Toggle(row, x, "ttf", path == 3, () => path = 3);
+
+            Toggle(row, x, "bundle", path == 4, () => path = 4);
 
             return y + 36f;
         }
@@ -216,7 +218,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 y += cellHeight + 4f;
             }
 
-            return Ttf(inRect, Widths(inRect, y)) + 10f;
+            return Bundle(inRect, Ttf(inRect, Widths(inRect, y))) + 10f;
         }
 
         /// <summary>
@@ -294,6 +296,99 @@ namespace Gideon.UIOverhaul.Features.DevTools
             }
 
             return y + tallest + 4f;
+        }
+
+        /// <summary>
+        /// The same sample through the font AssetBundle, which is the route Aaron chose: the same way RimWorld
+        /// itself gets a font, an asset built with the game's own editor version, carrying the TTF inside.
+        ///
+        /// A bundled dynamic font needs none of the workarounds the other paths grew. Real lineHeight and
+        /// ascent, so vertical alignment is Unity's; FreeType hinting at each requested size, so no waviness by
+        /// construction; the file's whole character map; bold and italic from tags. If this section renders
+        /// correctly, it becomes the renderer and everything else here becomes history.
+        /// </summary>
+        private float Bundle(Rect inRect, float y)
+        {
+            Font font = UIBundledFonts.Get("BarlowCondensed-Regular");
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = new Color(1f, 1f, 1f, 0.6f);
+
+            string diag;
+
+            if (font == null)
+            {
+                diag = "Bundle: no font. Either the AssetBundles folder is missing or the bundle did not load.";
+            }
+            else
+            {
+                float bundleWidth = BundleStyle(font, GameFont.Small).CalcSize(new GUIContent(Sample)).x;
+                float bakedWidth = UITextControl.Width(Sample, UIFace.BarlowCondensed, GameFont.Small);
+
+                diag = string.Format(
+                    "Bundle: dynamic={0} lineHeight={1} ascent={2} hasA={3} cyrillic={4} (False = real "
+                    + "Barlow)   sample at Small: bundle {5:0}px vs baked {6:0}px",
+                    font.dynamic, font.lineHeight, font.ascent, font.HasCharacter('A'),
+                    font.HasCharacter((char) 0x042F), bundleWidth, bakedWidth);
+            }
+
+            Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), diag);
+
+            GUI.color = Color.white;
+            Text.Font = GameFont.Small;
+
+            y += 20f;
+
+            if (font == null)
+                return y;
+
+            float x = inRect.x;
+            float tallest = 0f;
+
+            foreach (GameFont each in new[] { GameFont.Tiny, GameFont.Small, GameFont.Medium })
+            {
+                Rect cell = new Rect(x, y, 300f, UIFonts.LineHeightOf(each) + 8f);
+
+                Widgets.DrawBox(cell);
+
+                GUI.Label(cell.ContractedBy(4f), Sample + " <b>bold</b> <i>italic</i>",
+                    BundleStyle(font, each));
+
+                tallest = Mathf.Max(tallest, cell.height);
+                x += 308f;
+            }
+
+            return y + tallest + 4f;
+        }
+
+        private static readonly Dictionary<int, GUIStyle> BundleStyles = new Dictionary<int, GUIStyle>();
+
+        /// <summary>
+        /// A style asking the bundled dynamic font for one size. The 1.2 divisor is Barlow's line ratio, hard
+        /// coded because this is a spike; the real wiring reads it from the face.
+        /// </summary>
+        private static GUIStyle BundleStyle(Font font, GameFont size)
+        {
+            GUIStyle style;
+
+            if (BundleStyles.TryGetValue((int) size, out style))
+                return style;
+
+            style = new GUIStyle
+            {
+                font = font,
+                fontSize = Mathf.RoundToInt(UIFonts.LineHeightOf(size) / 1.2f),
+                alignment = TextAnchor.MiddleLeft,
+                richText = true,
+                wordWrap = false,
+                clipping = TextClipping.Clip
+            };
+
+            style.normal.textColor = Color.white;
+
+            BundleStyles[(int) size] = style;
+
+            return style;
         }
 
         private static readonly Dictionary<int, GUIStyle> TtfStyles = new Dictionary<int, GUIStyle>();
@@ -490,12 +585,19 @@ namespace Gideon.UIOverhaul.Features.DevTools
                         if (style != null)
                             GUI.Label(cell, text, style);
                     }
-                    else
+                    else if (path == 3)
                     {
                         Font ttf = UIDynamicFont.FromFile("BarlowCondensed-Regular", "Barlow Condensed");
 
                         if (ttf != null)
                             GUI.Label(cell, text, TtfStyle(ttf, GameFont.Tiny));
+                    }
+                    else
+                    {
+                        Font bundled = UIBundledFonts.Get("BarlowCondensed-Regular");
+
+                        if (bundled != null)
+                            GUI.Label(cell, text, BundleStyle(bundled, GameFont.Tiny));
                     }
                 }
             });
@@ -507,7 +609,10 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
         private string PathName()
         {
-            return path == 0 ? "RimWorld" : path == 1 ? "glyph by glyph" : path == 2 ? "runtime font" : "ttf from disk";
+            return path == 0 ? "RimWorld"
+                : path == 1 ? "glyph by glyph"
+                : path == 2 ? "runtime font"
+                : path == 3 ? "ttf from disk" : "asset bundle";
         }
 
         private static float Heading(Rect inRect, float y, string text)
