@@ -89,6 +89,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             internal const float RailCount = 13f;
 
+            /// <summary>
+            /// The two headings that split the rail. Larger than a block header, unlike everything else in the
+            /// mono small caps, because these two head the whole panel rather than one box inside it.
+            /// </summary>
+            internal const float RailHead = 12.5f;
+
             /// <summary>A sentence: a demand, a stance, a holder's name.</summary>
             internal const float Body = 14f;
 

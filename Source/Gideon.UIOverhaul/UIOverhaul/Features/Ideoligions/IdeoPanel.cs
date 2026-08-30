@@ -52,6 +52,15 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         private const float RowGap = 2f;
 
         /// <summary>
+        /// Air between the rail's divider and the heading under it.
+        ///
+        /// Matched to the distance the first heading sits from the panel border, so the two headings are set
+        /// off from the line above them by the same amount and read as a pair. At the shared default of four
+        /// the second one hung off its rule instead.
+        /// </summary>
+        private const float RuleGap = 12f;
+
+        /// <summary>
         /// Whether the conviction block is sorted by name rather than by devotion.
         ///
         /// Kept here, not saved, because it is a way of looking at the list rather than a preference about it:
@@ -258,7 +267,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             // heading under it is drawn from the same x, so without them the first letter sits on the border.
             // Spaces rather than an inset rect, because insetting the rect would carry the rule in with it.
             y = TabParts.Heading(view, y, IdeoFaces.Caps("  In this colony"), palette, false, IdeoFaces.Mono,
-                IdeoFaces.Size.BlockHead);
+                IdeoFaces.Size.RailHead);
 
             for (int i = 0; i < here.Count; i++)
                 y = Entry(view, y, here[i], selected, palette, true);
@@ -268,7 +277,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             y += 8f;
             y = TabParts.Heading(view, y, IdeoFaces.Caps("  Known elsewhere"), palette, true, IdeoFaces.Mono,
-                IdeoFaces.Size.BlockHead);
+                IdeoFaces.Size.RailHead, RuleGap);
 
             for (int i = 0; i < elsewhere.Count; i++)
                 y = Entry(view, y, elsewhere[i], selected, palette, false);

@@ -80,8 +80,13 @@ namespace Gideon.UIOverhaul.Shared
         /// before point sizes existed does. The row height follows it, so a heading set smaller closes up
         /// rather than leaving the gap a larger one needed.
         /// </param>
+        /// <param name="gap">
+        /// Air between the rule and the caption under it. The default is what an unruled heading needs to sit
+        /// clear of whatever is above it; a heading that draws a rule wants more, because four pixels under a
+        /// line reads as the caption hanging off it rather than as a section starting below it.
+        /// </param>
         internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette, bool rule = true,
-            UIFace face = UIFace.Game, float points = 0f)
+            UIFace face = UIFace.Game, float points = 0f, float gap = 4f)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -100,7 +105,7 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
 
-                Rect caption = new Rect(rect.x, y + 4f, rect.width, line);
+                Rect caption = new Rect(rect.x, y + gap, rect.width, line);
 
                 if (face == UIFace.Game)
                     Widgets.Label(caption, text);
@@ -115,7 +120,9 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = previousFont;
             }
 
-            return y + line + 8f;
+            // The gap is part of the row, not an offset inside it: leaving it out of the total put the caption
+            // below the y the next row starts at as soon as the gap grew past four.
+            return y + gap + line + 4f;
         }
 
         /// <summary>
