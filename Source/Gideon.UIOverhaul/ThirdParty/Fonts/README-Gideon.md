@@ -1,5 +1,24 @@
 # Typefaces
 
+**Interface text no longer uses baked atlases -- it ships as a Unity AssetBundle.** The headless project in
+`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/gideonfonts` as dynamic fonts, which the
+engine renders itself: FreeType hinting at every size, bold and italic from tags, per-glyph fallback for
+characters a face lacks. That file must stay extensionless; RimWorld's bundle loader only accepts files with no
+extension. To rebake after adding a TTF to `BundleProject/Assets/Fonts/`:
+
+```
+"C:\Program Files\Unity\Hub\Editor\2022.3.35f1\Editor\Unity.exe" -batchmode -nographics -projectPath BundleProject -executeMethod BundleBuilder.Build -logFile bake.log
+```
+
+The editor version must be exactly the game's own (2022.3.35f1 for RimWorld 1.6; read it from
+`globalgamemanagers` after a game update). Three other roads were tried and are closed: drawing glyphs
+ourselves from baked sheets reimplemented a font engine and showed it; `Font(path)` routes to a native call
+that is a stub in the shipped player; registering a TTF with the OS is invisible to an engine whose font list
+is sealed before mod code runs.
+
+**Everything below concerns the baker and the baked atlases, which now serve only the floor labels and the
+research scripts.**
+
 Nine families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
 actually draw. Two are for the floor labels; three are the scripts the research tab writes undiscovered Anomaly
 projects in; one is a display face kept as a candidate; the rest are interface text.
