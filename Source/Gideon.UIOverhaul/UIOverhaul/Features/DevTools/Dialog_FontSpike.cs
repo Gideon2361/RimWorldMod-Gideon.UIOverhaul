@@ -241,11 +241,32 @@ namespace Gideon.UIOverhaul.Features.DevTools
             Text.Font = GameFont.Tiny;
             GUI.color = new Color(1f, 1f, 1f, 0.6f);
 
-            Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), font == null
-                ? "TTF via OS registration: did not load. AddFontResourceEx or the OS font lookup failed here."
-                : string.Format(
-                    "TTF via OS registration: dynamic={0} lineHeight={1} ascent={2} fontSize={3} hasA={4}",
-                    font.dynamic, font.lineHeight, font.ascent, font.fontSize, font.HasCharacter('A')));
+            string diag;
+
+            if (font == null)
+            {
+                diag = "TTF via OS registration: did not load. AddFontResourceEx or the OS font lookup failed.";
+            }
+            else
+            {
+                // <b>Substitution is the silent failure this line exists to catch.</b> Asking the OS route for
+                // a family the engine's font list never heard of does not fail -- it hands back a default face,
+                // and HasCharacter('A') cannot tell the two apart because every face has an A. Two things can:
+                // Barlow Condensed has no Cyrillic, so a true answer for that letter means this is not Barlow;
+                // and the sample's measured width against the baked sheets' known width -- equal means the real
+                // face, half again wider means the OS substituted something.
+                float ttfWidth = TtfStyle(font, GameFont.Small).CalcSize(new GUIContent(Sample)).x;
+                float bakedWidth = UITextControl.Width(Sample, UIFace.BarlowCondensed, GameFont.Small);
+
+                diag = string.Format(
+                    "TTF via OS registration: dynamic={0} lineHeight={1} ascent={2} hasA={3} "
+                    + "cyrillic={4} (must be False for real Barlow)   sample at Small: ttf {5:0}px vs "
+                    + "baked Barlow {6:0}px (equal = real face, wider = substituted)",
+                    font.dynamic, font.lineHeight, font.ascent, font.HasCharacter('A'),
+                    font.HasCharacter((char) 0x042F), ttfWidth, bakedWidth);
+            }
+
+            Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), diag);
 
             GUI.color = Color.white;
             Text.Font = GameFont.Small;
