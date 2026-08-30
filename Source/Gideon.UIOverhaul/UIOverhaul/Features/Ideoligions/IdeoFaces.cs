@@ -1,4 +1,5 @@
 using Gideon.UIFramework.Helpers;
+using Verse;
 
 namespace Gideon.UIOverhaul.Features.Ideoligions
 {
@@ -42,5 +43,25 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
         /// <summary>IBM Plex Mono. Figures, small-caps labels and chips.</summary>
         internal const UIFace Mono = UIFace.IBMPlexMono;
+
+        /// <summary>
+        /// Upper case, for the labels the mockup sets as small caps: block suffixes, chips, and the issue
+        /// column on the doctrine list.
+        ///
+        /// <b>This is what makes the mono columns work, and leaving it out is why they looked wrong.</b> Mono at
+        /// a dim brightness reads as a deliberate label when it is short and upper case, and as a mistake when
+        /// it is mixed case -- the eye takes it for body text that has been set in the wrong font. Every one of
+        /// those columns in the mockup is upper case; ours were not, which is the whole of the difference.
+        ///
+        /// <b>Invariant rather than culture-aware, with one known cost.</b> A Turkish or Azeri locale wants a
+        /// dotted capital I from a dotted lower case i, and this will produce an undotted one. Culture-aware
+        /// upper-casing would need RimWorld's active language mapped onto a CultureInfo, which the game does not
+        /// hand out; and every other language this mod is likely to see -- including German, whose nouns are the
+        /// usual worry -- upper-cases identically either way. RimWorld's own UI takes the same shortcut.
+        /// </summary>
+        internal static string Caps(string text)
+        {
+            return text.NullOrEmpty() ? text : text.ToUpperInvariant();
+        }
     }
 }

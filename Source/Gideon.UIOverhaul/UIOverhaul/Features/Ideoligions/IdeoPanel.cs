@@ -408,7 +408,11 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                     Text.Anchor = TextAnchor.MiddleRight;
                     GUI.color = palette.TextSecondary;
 
-                    Widgets.Label(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight), suffix);
+                    // Mono and upper case, matching the header on the other side of the cap. This one was still
+                    // in the game's own font: it was the only label on the block that never got a face, so a
+                    // row of blocks had mono headers on the left and RimWorld's face on the right.
+                    UITextControl.LabelEllipses(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
+                        IdeoFaces.Caps(suffix), IdeoFaces.Mono, GameFont.Tiny);
                 }
                 finally
                 {
@@ -516,7 +520,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                         ? "devout"
                         : "settled";
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, word, tint, palette, 9999f, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(word), tint, palette, 9999f, null, IdeoFaces.Mono);
 
             TooltipHandler.TipRegion(band, (TipSignal) (row.pawn.LabelShortCap + " is " + word
                 + " at " + row.certainty.ToStringPercent("0") + " certainty.\n\nCertainty falls when they see "
@@ -592,9 +596,9 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 tint = palette.Success;
             }
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(chip, 9999f, IdeoFaces.Mono) + 6f, band.width * 0.5f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(chip), 9999f, IdeoFaces.Mono) + 6f, band.width * 0.5f);
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, chip, tint, palette, chipWidth, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(chip), tint, palette, chipWidth, null, IdeoFaces.Mono);
 
             TabParts.RowLabel(new Rect(band.x + column + 4f, band.y,
                     Mathf.Max(20f, band.width - column - 4f - chipWidth - 6f), height),
@@ -714,9 +718,9 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Color tint = row.met ? palette.Success : row.disrespected ? palette.Warning : palette.Danger;
 
-            float chipWidth = Mathf.Min(TabParts.PillWidth(row.state, 9999f, IdeoFaces.Mono) + 6f, 160f);
+            float chipWidth = Mathf.Min(TabParts.PillWidth(IdeoFaces.Caps(row.state), 9999f, IdeoFaces.Mono) + 6f, 160f);
 
-            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, row.state, tint, palette, chipWidth, null, IdeoFaces.Mono);
+            TabParts.Pill(band, band.xMax - chipWidth, band.y + 2f, IdeoFaces.Caps(row.state), tint, palette, chipWidth, null, IdeoFaces.Mono);
 
             TabParts.RowLabel(new Rect(band.x, band.y, band.width - chipWidth - 8f, height),
                 row.precept.LabelCap, palette.TextPrimary, GameFont.Small, IdeoFaces.Body);
@@ -741,8 +745,9 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 List<string> issues = new List<string>();
 
+                // Capitalised as they go in, so the column is measured against what will actually be drawn.
                 for (int i = 0; i < rows.Count; i++)
-                    issues.Add(rows[i].issue);
+                    issues.Add(IdeoFaces.Caps(rows[i].issue));
 
                 // Measured against the issue names in this faith, so "Diversity of thought" is not cut down to
                 // make room for a stance that had the width to spare. Half again the room it used to get.
@@ -802,7 +807,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 GUI.color = previous;
             }, null);
 
-            TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), row.issue, palette.TextSecondary,
+            TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), IdeoFaces.Caps(row.issue), palette.TextSecondary,
                 GameFont.Tiny, IdeoFaces.Mono);
 
             // The stance is the answer to the issue and is the thing worth reading, so it takes the primary
