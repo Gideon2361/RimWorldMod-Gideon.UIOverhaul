@@ -34,8 +34,23 @@ using System.Text;
 
 internal static class BakeAtlas
 {
-    /// <summary>Em size the glyphs are rasterized at. Resolution, not display size.</summary>
-    private const int EmSize = 64;
+    /// <summary>
+    /// Em size the glyphs are rasterized at. Resolution, not display size -- but not unrelated to it either.
+    ///
+    /// <b>Bake near the size it will be drawn at.</b> The atlas is sampled bilinearly with mipmaps off, and
+    /// bilinear reads four texels however far it is reducing. Drawing a 64 px master at 18 px means a footprint
+    /// of about twelve texels, so two thirds of the coverage is discarded -- and which two thirds depends on
+    /// where the glyph lands. On a condensed face that shows up as stems that vary in weight letter to letter
+    /// and hairlines that partly disappear.
+    ///
+    /// So 64 suits a floor label, which is drawn large in world space, and is too big for interface text.
+    /// Barlow Condensed is baked at 32 for that reason, on Aaron's word 2026-08-28, which also happens to fit
+    /// its 523 glyphs in a 1024 square sheet rather than a 2048 one.
+    ///
+    /// It is per face rather than global because the two uses genuinely differ. Each metrics file records the
+    /// size it was baked at, and every reader scales from that, so sheets of different sizes mix freely.
+    /// </summary>
+    private static int EmSize = 64;
 
     /// <summary>Transparent margin around each glyph, so bilinear sampling cannot bleed a neighbor in.</summary>
     private const int Padding = 2;
@@ -285,9 +300,14 @@ internal static class BakeAtlas
     {
         if (args.Length < 3)
         {
-            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name> [hexRanges|all]");
+            Console.WriteLine("BakeAtlas <font.ttf> <outputDir> <name> [hexRanges|all] [emSize]");
             Console.WriteLine("  hexRanges: 10840-10855,1E800-1E8C4   (default: ASCII plus Latin-1)");
             Console.WriteLine("  all:       every code point the font's cmap covers");
+            Console.WriteLine("  emSize:    rasterized size, default 64. Use 32 for interface text.");
+            Console.WriteLine("  --bold <ttf> --italic <ttf> --bolditalic <ttf>");
+            Console.WriteLine("             bake these into the same sheet, tagged by style, so that rich text");
+            Console.WriteLine("             tags can switch weight. A Unity Font has one material and so one");
+            Console.WriteLine("             texture: bold can only reach a bold glyph if it is on this sheet.");
 
             return 2;
         }
@@ -296,30 +316,64 @@ internal static class BakeAtlas
         string outDir = args[1];
         string name = args[2];
 
+        if (args.Length >= 5)
+        {
+            int wanted;
+
+            // Bounded rather than trusted. Below twelve a glyph has too few pixels to carry its own shape, and
+            // above two hundred and fifty six a full Latin sheet stops fitting a texture the hardware will take.
+            if (!int.TryParse(args[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out wanted)
+                || wanted < 12 || wanted > 256)
+            {
+                Console.WriteLine("emSize must be a whole number between 12 and 256.");
+
+                return 2;
+            }
+
+            EmSize = wanted;
+        }
+
         Directory.CreateDirectory(outDir);
 
-        // Loaded rather than installed. PrivateFontCollection reads the file directly, so baking needs no
-        // changes to the machine and works the same on a build agent.
-        using (PrivateFontCollection collection = new PrivateFontCollection())
+        // <b>One sheet, several styles.</b> A UnityEngine.Font carries a single material and therefore a single
+        // texture, so a rich text bold tag can only reach a bold glyph if that glyph is on the same sheet as the
+        // regular one. Each style is a separate TTF and a separate collection, all baked into one atlas with the
+        // style recorded per glyph. Asked for on 2026-08-29, for applying the faces across the whole interface.
+        List<PrivateFontCollection> collections = new List<PrivateFontCollection>();
+        List<FontFamily> families = new List<FontFamily>();
+        List<FontStyle> gdiStyles = new List<FontStyle>();
+        List<int> styleCodes = new List<int>();
+
+        try
         {
-            collection.AddFontFile(ttf);
+            AddSource(collections, families, gdiStyles, styleCodes, ttf, 0);
+            AddSource(collections, families, gdiStyles, styleCodes, Flag(args, "--bold"), 1);
+            AddSource(collections, families, gdiStyles, styleCodes, Flag(args, "--italic"), 2);
+            AddSource(collections, families, gdiStyles, styleCodes, Flag(args, "--bolditalic"), 3);
 
-            FontFamily family = collection.Families[0];
+            FontFamily family = families[0];
 
-            // <b>Italic before bold in the fallback chain, which matters for a one-face file.</b> Each weight
-            // ships as its own TTF, so the family in this collection holds exactly one face -- and for
-            // BarlowCondensed-Italic that face is italic, not regular. GDI+ then refuses Regular, and falling
-            // straight to Bold asked it to synthesise a bold italic from an italic: a smeared, wrong-width face
-            // that would have baked without complaining.
-            FontStyle style = family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular
-                : family.IsStyleAvailable(FontStyle.Italic) ? FontStyle.Italic
-                : family.IsStyleAvailable(FontStyle.Bold) ? FontStyle.Bold
-                : FontStyle.Regular;
+            // The regular source sets the vertical metrics for the whole sheet. Bold and italic of the same
+            // family share them by design; taking each style's own would give one sheet several baselines.
+            FontStyle style = gdiStyles[0];
 
             float emHeight = family.GetEmHeight(style);
             float ascent = family.GetCellAscent(style) / emHeight * EmSize;
             float descent = family.GetCellDescent(style) / emHeight * EmSize;
             float lineSpacing = family.GetLineSpacing(style) / emHeight * EmSize;
+
+            // Each source's own baseline position, because the glyph geometry below is anchored to it. The
+            // header still carries style zero's metrics for the sheet as a whole.
+            float[] ascents = new float[families.Count];
+
+            for (int s = 0; s < families.Count; s++)
+                // The cast is the whole line. GetCellAscent and GetEmHeight are both ints, and integer division
+                // truncates their ratio to zero for any face whose ascent is smaller than its em -- which baked
+                // Cascadia and Hammersmith with every glyph placed as if the ascent were nothing, put B's ink
+                // below the baseline, and left IBM Plex and Oswald quietly 0.4 and 2.3 pixels low. Barlow alone
+                // survived, because its ratio is exactly 1. Found from the metrics on 2026-08-30.
+                ascents[s] = (float) families[s].GetCellAscent(gdiStyles[s])
+                             / families[s].GetEmHeight(gdiStyles[s]) * EmSize;
 
             List<int> wanted;
 
@@ -345,10 +399,19 @@ internal static class BakeAtlas
             List<RectangleF> ink = new List<RectangleF>();
             List<float> advances = new List<float>();
 
+            // Which source each entry came from, so the rasterizer below can draw it with the right face and the
+            // metrics can record which style it is.
+            List<int> from = new List<int>();
+
             using (Bitmap probe = new Bitmap(1, 1))
             using (Graphics g = Graphics.FromImage(probe))
-            using (Font font = new Font(family, EmSize, style, GraphicsUnit.Pixel))
             {
+                for (int source = 0; source < families.Count; source++)
+                {
+                FontFamily family2 = families[source];
+                FontStyle style2 = gdiStyles[source];
+
+                using (Font font = new Font(family2, EmSize, style2, GraphicsUnit.Pixel))
                 foreach (int code in wanted)
                 {
                     string text = char.ConvertFromUtf32(code);
@@ -360,7 +423,7 @@ internal static class BakeAtlas
                     {
                         using (GraphicsPath path = new GraphicsPath())
                         {
-                            path.AddString(text, family, (int) style, EmSize, new PointF(0f, 0f),
+                            path.AddString(text, family2, (int) style2, EmSize, new PointF(0f, 0f),
                                 StringFormat.GenericTypographic);
 
                             if (path.PointCount > 0)
@@ -380,7 +443,9 @@ internal static class BakeAtlas
 
                     chars.Add(code);
                     ink.Add(bounds);
+                    from.Add(source);
                     advances.Add(blank && measured.Width <= 0.01f ? EmSize * 0.28f : measured.Width);
+                }
                 }
             }
 
@@ -391,14 +456,42 @@ internal static class BakeAtlas
                 return 1;
             }
 
-            int cellWidth = 0;
-            int cellHeight = 0;
+            // <b>Every cell is anchored on its pen and its baseline, at integer offsets shared by the whole
+            // sheet.</b> The first version snapped each glyph's ink box to the cell corner, which threw the
+            // fractional part of its position away -- and the renderer then had to reinvent it. Drawn at exact
+            // fractional offsets the letters blurred unevenly; drawn at rounded offsets they displaced unevenly,
+            // an F rising 0.4 of a pixel while the o beside it sank 0.25, which is the wave that was underlined
+            // in red on 2026-08-29 after everything downstream had already been fixed.
+            //
+            // Anchoring the rasterization instead bakes each glyph at its true subpixel phase relative to the
+            // baseline and the pen: the fraction is in the antialiasing, where it belongs. Everything the
+            // metrics then say -- bearing, extents, and by rounding, the advance -- is a whole number, so no
+            // renderer has anything left to round and both of ours agree with Unity's integer CharacterInfo to
+            // the pixel.
+            int maxAscent = 0;
+            int maxDescent = 0;
+            int maxLeft = 0;
+            int maxRight = 0;
 
-            foreach (RectangleF r in ink)
+            for (int i = 0; i < chars.Count; i++)
             {
-                cellWidth = Math.Max(cellWidth, (int) Math.Ceiling(r.Width) + Padding * 2);
-                cellHeight = Math.Max(cellHeight, (int) Math.Ceiling(r.Height) + Padding * 2);
+                RectangleF r = ink[i];
+
+                if (r.Width <= 0f)
+                    continue;
+
+                float top = ascents[from[i]] - r.Y;
+
+                maxAscent = Math.Max(maxAscent, (int) Math.Ceiling(top));
+                maxDescent = Math.Max(maxDescent, -(int) Math.Floor(top - r.Height));
+                maxLeft = Math.Max(maxLeft, -(int) Math.Floor(r.X));
+                maxRight = Math.Max(maxRight, (int) Math.Ceiling(r.X + r.Width));
             }
+
+            int penColumn = Padding + maxLeft;
+            int baselineRow = Padding + maxAscent;
+            int cellWidth = penColumn + maxRight + Padding;
+            int cellHeight = baselineRow + maxDescent + Padding;
 
             int width;
             int height;
@@ -427,38 +520,58 @@ internal static class BakeAtlas
                     int cellX = i % columns * cellWidth;
                     int cellY = i / columns * cellHeight;
 
-                    int w = (int) Math.Ceiling(bounds.Width);
-                    int h = (int) Math.Ceiling(bounds.Height);
-
-                    if (w > 0 && h > 0)
+                    if (bounds.Width <= 0f || bounds.Height <= 0f)
                     {
-                        using (GraphicsPath path = new GraphicsPath())
-                        {
-                            path.AddString(char.ConvertFromUtf32(code), family, (int) style, EmSize,
-                                new PointF(0f, 0f), StringFormat.GenericTypographic);
+                        // A space: an advance and nothing else. Rounded like every other advance, so the pen
+                        // stays on whole pixels across it.
+                        metrics.Append("g\t").Append(code).Append('\t')
+                            .Append(cellX + penColumn).Append('\t').Append(cellY + baselineRow).Append('\t')
+                            .Append(0).Append('\t').Append(0).Append('\t')
+                            .Append(0).Append('\t').Append(0).Append('\t').Append(0)
+                            .Append('\t').Append(F((float) Math.Round(advances[i])))
+                            .Append('\t').Append(styleCodes[from[i]]).Append('\n');
 
-                            // Shifted so the glyph's ink lands at the cell's padded corner, which is what makes
-                            // the recorded rectangle exact rather than approximately right.
-                            using (Matrix move = new Matrix())
-                            {
-                                move.Translate(cellX + Padding - bounds.X, cellY + Padding - bounds.Y);
-                                path.Transform(move);
-                            }
-
-                            g.FillPath(Brushes.White, path);
-                        }
+                        continue;
                     }
 
-                    // y up from the baseline. GDI+ measures down from the em box top, and the baseline sits
-                    // `ascent` below that.
-                    float maxY = ascent - bounds.Y;
-                    float minY = maxY - bounds.Height;
+                    // y up from the baseline. GDI+ measures down from the em box top, and this source's
+                    // baseline sits its own ascent below that.
+                    float top = ascents[from[i]] - bounds.Y;
+
+                    // The whole-pixel box that contains the fractionally placed ink. Floor and ceiling rather
+                    // than rounding, so the antialiased fringe on either side is inside the recorded rectangle
+                    // instead of in the neighbouring cell's.
+                    int maxYInt = (int) Math.Ceiling(top);
+                    int minYInt = (int) Math.Floor(top - bounds.Height);
+                    int leftInt = (int) Math.Floor(bounds.X);
+                    int rightInt = (int) Math.Ceiling(bounds.X + bounds.Width);
+
+                    using (GraphicsPath path = new GraphicsPath())
+                    {
+                        path.AddString(char.ConvertFromUtf32(code), families[from[i]],
+                            (int) gdiStyles[from[i]], EmSize, new PointF(0f, 0f),
+                            StringFormat.GenericTypographic);
+
+                        // The pen lands on the cell's pen column and the baseline on its baseline row, both
+                        // integers -- and the ink lands wherever the typeface puts it relative to them, at its
+                        // true fraction of a pixel. That fraction is rasterized into the coverage here, once,
+                        // instead of being reinvented by the renderer every frame.
+                        using (Matrix move = new Matrix())
+                        {
+                            move.Translate(cellX + penColumn, cellY + baselineRow - ascents[from[i]]);
+                            path.Transform(move);
+                        }
+
+                        g.FillPath(Brushes.White, path);
+                    }
 
                     metrics.Append("g\t").Append(code).Append('\t')
-                        .Append(cellX + Padding).Append('\t').Append(cellY + Padding).Append('\t')
-                        .Append(w).Append('\t').Append(h).Append('\t')
-                        .Append(F(bounds.X)).Append('\t').Append(F(minY)).Append('\t').Append(F(maxY))
-                        .Append('\t').Append(F(advances[i])).Append('\n');
+                        .Append(cellX + penColumn + leftInt).Append('\t')
+                        .Append(cellY + baselineRow - maxYInt).Append('\t')
+                        .Append(rightInt - leftInt).Append('\t').Append(maxYInt - minYInt).Append('\t')
+                        .Append(leftInt).Append('\t').Append(minYInt).Append('\t').Append(maxYInt)
+                        .Append('\t').Append(F((float) Math.Round(advances[i])))
+                        .Append('\t').Append(styleCodes[from[i]]).Append('\n');
                 }
 
                 atlas.Save(Path.Combine(outDir, name + ".png"), ImageFormat.Png);
@@ -467,11 +580,64 @@ internal static class BakeAtlas
             File.WriteAllText(Path.Combine(outDir, name + ".txt"), metrics.ToString(), new UTF8Encoding(false));
 
             Console.WriteLine(
-                "{0,-30} {1,5} glyphs  atlas {2}x{3}  {4} cols  cell {5}x{6}  ascent {7:F1}  line {8:F1}",
-                name, chars.Count, width, height, columns, cellWidth, cellHeight, ascent, lineSpacing);
+                "{0,-30} {1,5} glyphs  {9} styles  atlas {2}x{3}  {4} cols  cell {5}x{6}  ascent {7:F1}  "
+                + "line {8:F1}",
+                name, chars.Count, width, height, columns, cellWidth, cellHeight, ascent, lineSpacing,
+                families.Count);
+        }
+        finally
+        {
+            // Disposed only after the last glyph is drawn. A collection freed while a GraphicsPath still refers
+            // to its family takes the face out from under the rasterizer, and GDI+ answers that by drawing the
+            // system default without saying so.
+            for (int i = 0; i < collections.Count; i++)
+                collections[i].Dispose();
         }
 
         return 0;
+    }
+
+    /// <summary>The value after a named flag, or null when it is not there.</summary>
+    private static string Flag(string[] args, string name)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+                return args[i + 1];
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Opens one style's TTF and records it as a source, or does nothing when the path is null.
+    ///
+    /// <b>Italic before bold in the fallback chain, which matters for a one-face file.</b> Each weight ships as
+    /// its own TTF, so the family in a collection holds exactly one face -- and for BarlowCondensed-Italic that
+    /// face is italic, not regular. GDI+ then refuses Regular, and falling straight to Bold asked it to
+    /// synthesise a bold italic from an italic: a smeared, wrong-width face that would have baked without
+    /// complaining.
+    /// </summary>
+    private static void AddSource(List<PrivateFontCollection> collections, List<FontFamily> families,
+        List<FontStyle> gdiStyles, List<int> styleCodes, string ttf, int styleCode)
+    {
+        if (string.IsNullOrEmpty(ttf))
+            return;
+
+        PrivateFontCollection collection = new PrivateFontCollection();
+
+        collection.AddFontFile(ttf);
+        collections.Add(collection);
+
+        FontFamily family = collection.Families[0];
+
+        families.Add(family);
+        styleCodes.Add(styleCode);
+
+        gdiStyles.Add(family.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular
+            : family.IsStyleAvailable(FontStyle.Italic) ? FontStyle.Italic
+            : family.IsStyleAvailable(FontStyle.Bold) ? FontStyle.Bold
+            : FontStyle.Regular);
     }
 
     /// <summary>Rounds up to a power of two, which every GPU is happy with and some older ones require.</summary>

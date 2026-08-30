@@ -179,7 +179,13 @@ namespace Gideon.UIOverhaul.Features.Research
 
             Text.Font = GameFont.Medium;
             GUI.color = palette.TextPrimary;
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 40f, TitleHeight), "Research bands");
+
+            // Oswald for the title. It draws smaller than the other faces at the same GameFont -- its line box is
+            // 1.48 ems against Barlow's 1.20, and every face is scaled to fit RimWorld's line height -- so this is
+            // a title that reads as tall and narrow rather than as large.
+            UITextControl.Label(new Rect(inRect.x, inRect.y, inRect.width - 40f, TitleHeight), "Research bands",
+                UIFace.Oswald, GameFont.Medium);
+
             Text.Font = GameFont.Small;
 
             float y = inRect.y + TitleHeight + Gap;
