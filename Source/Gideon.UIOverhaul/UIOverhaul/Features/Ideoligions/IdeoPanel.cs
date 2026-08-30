@@ -51,6 +51,16 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         private const float BlockGap = 10f;
         private const float RowGap = 2f;
 
+        /// <summary>
+        /// How much smaller the doctrine stance sets than the Small it is measured at.
+        ///
+        /// The stance is the answer to the issue beside it and wants to lead the row, but at full Small in a
+        /// body face it was half again the size of the issue label and read as the only thing on the line.
+        /// Dropping it to Tiny went too far the other way and flattened the pair into one grey column, so it
+        /// sits between the two -- which a bundled face can do and a GameFont cannot.
+        /// </summary>
+        private const float StanceScale = 0.86f;
+
         private static Vector2 scroll;
         private static float viewHeight = 1f;
 
@@ -387,7 +397,24 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
             Rect cap = new Rect(box.x, box.y, box.width, capHeight);
 
-            UIElementPainter.FillRounded(cap, palette.SurfaceRaised);
+            // Lifted off the panel rather than set in surfaceRaised, and the palette's own note says why:
+            // "surfaceRaised is darker than the panel in this theme, which is right for a card and wrong for a
+            // control". A block cap is neither -- it is a band along the top of a panel, and the mockup has it
+            // lighter than what it sits on. Drawn in surfaceRaised it came out darker instead, so every block
+            // read as a recessed strip rather than a heading.
+            //
+            // Composited off the panel so the lift follows the palette: white over a dark theme, black over a
+            // light one, and never the wrong side of whatever the panel happens to be.
+            UIElementPainter.FillRounded(cap,
+                UIElementPainter.Composite(palette.PanelBackground, palette.HoverOverlay));
+
+            // The rule under it, which the mockup has and this did not. Without it the band has no bottom edge
+            // and the header floats on the same field as the first row.
+            Color previousLine = GUI.color;
+
+            GUI.color = palette.Border;
+            Widgets.DrawLineHorizontal(cap.x, cap.yMax, cap.width);
+            GUI.color = previousLine;
 
             // Tiny and upper case, which is what the mockup's block headers are: the smallest thing on the
             // screen rather than the largest. At Small it came out bigger than the rows underneath it, so a
@@ -816,7 +843,7 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float remaining = Mathf.Max(40f, band.xMax - stanceX);
             float stanceWidth = row.effect.NullOrEmpty() ? remaining : remaining * 0.4f;
 
-            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary, GameFont.Small, IdeoFaces.Body);
+            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance, palette.TextPrimary, GameFont.Small, IdeoFaces.Body, StanceScale);
 
             if (!row.effect.NullOrEmpty())
             {

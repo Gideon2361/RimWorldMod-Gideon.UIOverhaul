@@ -27,6 +27,16 @@ namespace Gideon.UIOverhaul.Shared
         internal const float BlockGap = 10f;
 
         /// <summary>
+        /// How much smaller a pill sets its word than the Tiny it is measured at.
+        ///
+        /// Tiny is the smallest GameFont RimWorld has, and a chip wants to be smaller still: it is a label on
+        /// a label, and at the same size as the row it sits beside it competes with the thing it is annotating.
+        /// A bundled face is drawn at a point size rather than chosen from a fixed set, so it can go below Tiny
+        /// where the game font cannot -- which is why this only applies when a face is given.
+        /// </summary>
+        private const float ChipScale = 0.82f;
+
+        /// <summary>
         /// A section heading: a hairline, then a small dim caption under it.
         ///
         /// The same shape the hunting bill dialog uses, so a player moving between the two windows is reading the
@@ -383,7 +393,7 @@ namespace Gideon.UIOverhaul.Shared
         /// unchanged and a caller opts in by naming a face rather than by everything moving at once.
         /// </param>
         internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small,
-            UIFace face = UIFace.Game)
+            UIFace face = UIFace.Game, float scale = 1f)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -400,7 +410,7 @@ namespace Gideon.UIOverhaul.Shared
                 if (face == UIFace.Game)
                     UIRichText.Label(band, text);
                 else
-                    UITextControl.LabelEllipses(band, text, face, font);
+                    UITextControl.LabelEllipses(band, text, face, font, FontStyle.Normal, scale);
             }
             finally
             {
@@ -426,7 +436,7 @@ namespace Gideon.UIOverhaul.Shared
                 // Measured in the same face Pill will draw it in, for the same reason.
                 float measured = face == UIFace.Game
                     ? UIRichText.WidthOf(text ?? string.Empty)
-                    : UITextControl.Width(text ?? string.Empty, face, GameFont.Tiny);
+                    : UITextControl.Width(text ?? string.Empty, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
 
                 return Mathf.Min(ceiling, measured + 6f);
             }
@@ -494,7 +504,7 @@ namespace Gideon.UIOverhaul.Shared
 
                 float measured = face == UIFace.Game
                     ? UIRichText.WidthOf(text)
-                    : UITextControl.Width(text, face, GameFont.Tiny);
+                    : UITextControl.Width(text, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
 
                 float width = Mathf.Min(ceiling, measured + 6f);
                 float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
@@ -516,7 +526,7 @@ namespace Gideon.UIOverhaul.Shared
                 if (face == UIFace.Game)
                     UIRichText.Label(pill, text);
                 else
-                    UITextControl.LabelEllipses(pill, text, face, GameFont.Tiny);
+                    UITextControl.LabelEllipses(pill, text, face, GameFont.Tiny, FontStyle.Normal, ChipScale);
 
                 return pill;
             }
