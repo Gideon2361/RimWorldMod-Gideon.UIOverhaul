@@ -860,13 +860,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
 
                 List<string> issues = new List<string>();
 
-                // Capitalised as they go in, so the column is measured against what will actually be drawn.
                 for (int i = 0; i < rows.Count; i++)
-                    issues.Add(IdeoFaces.Caps(rows[i].issue));
+                    issues.Add(rows[i].issue);
 
                 // Measured against the issue names in this faith, so "Diversity of thought" is not cut down to
                 // make room for a stance that had the width to spare. Half again the room it used to get.
-                float column = Column(issues, IdeoFaces.Size.Issue, 165f, inner.width, 0.45f, IdeoFaces.Mono);
+                float column = Column(issues, IdeoFaces.Size.Body, 165f, inner.width, 0.45f, IdeoFaces.Body);
 
                 for (int i = 0; i < rows.Count; i++)
                     cursor = DoctrineRowDraw(inner, cursor, rows[i], column, palette);
@@ -922,8 +921,16 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 GUI.color = previous;
             }, null);
 
-            TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), IdeoFaces.Caps(row.issue), palette.TextSecondary,
-                GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Issue);
+            // <b>The issue leads and the stance answers it, so the issue is the one set in the reading face.</b>
+            // It was the other way round: the issue small, dim and monospaced, the stance large and bright. That
+            // made the answer the heading and the question the annotation, and a reader scanning for a subject
+            // -- which is the only way anybody uses this list -- had to read the quiet column to find it.
+            //
+            // The case moved with the face rather than staying with the column. Mono at a dim brightness reads
+            // as a deliberate label when it is upper case and as body text set in the wrong font when it is not,
+            // which is the rule IdeoFaces.Caps exists for; so the caps followed the mono across.
+            TabParts.RowLabel(new Rect(icon.xMax + 8f, band.y, column, height), row.issue, palette.TextPrimary,
+                GameFont.Small, IdeoFaces.Body, IdeoFaces.Size.Body);
 
             // The stance is the answer to the issue and is the thing worth reading, so it takes the primary
             // colour and a third of what is left; the effect follows it in the secondary.
@@ -931,8 +938,8 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             float remaining = Mathf.Max(40f, band.xMax - stanceX);
             float stanceWidth = row.effect.NullOrEmpty() ? remaining : remaining * 0.4f;
 
-            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), row.stance,
-                palette.TextPrimary, GameFont.Small, IdeoFaces.Body, IdeoFaces.Size.Body);
+            TabParts.RowLabel(new Rect(stanceX, band.y, stanceWidth, height), IdeoFaces.Caps(row.stance),
+                palette.TextSecondary, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.Issue);
 
             if (!row.effect.NullOrEmpty())
             {
