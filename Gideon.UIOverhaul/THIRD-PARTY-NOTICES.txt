@@ -45,9 +45,12 @@ Typefaces -- nine families, all under the SIL Open Font License 1.1
 
 Used in Gideon's UI Overhaul:
 
-  * The glyph atlases in Fonts/, one PNG and one metrics table per face. Each is
-    rasterized offline from the typeface named below. No font file is modified,
-    and no font file ships with the mod.
+  * The interface typefaces, shipped unmodified inside the AssetBundles/gideonfonts
+    file, from which the game engine renders them directly. The OFL permits
+    bundling and redistribution.
+  * The glyph atlases in Fonts/, one PNG and one metrics table per face, used for
+    the floor labels and the research scripts. Each is rasterized offline from the
+    typeface named below. No font file is modified.
 
   Barlow Condensed        Copyright 2017 The Barlow Project Authors
   Cascadia Mono           Copyright (c) 2019 - Present, Microsoft Corporation

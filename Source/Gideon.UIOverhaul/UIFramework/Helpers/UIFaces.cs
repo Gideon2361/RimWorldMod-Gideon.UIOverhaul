@@ -8,28 +8,19 @@ namespace Gideon.UIFramework.Helpers
     /// Every typeface a control may be told to draw in.
     ///
     /// <b>This enum is the whole registry.</b> A control names a face here and never learns where the glyphs
-    /// came from, which is what lets one be swapped for another without touching the control. Adding a face is
-    /// two steps and no more: bake it into <c>Fonts/</c>, then add a member here and its two lines in
-    /// <see cref="UIFaces"/>. Everything that picks a face from a list is generated from this enum, so a new
-    /// member appears in the options picker on its own.
+    /// came from. The faces live in the mod's font AssetBundle -- built with the game's own editor version,
+    /// carrying the TTFs inside, loaded by RimWorld itself -- so text drawn in them is rasterized by the
+    /// engine's FreeType exactly as vanilla text is: hinted at every size, bold and italic from tags, full
+    /// coverage with per-glyph fallback to system fonts for anything a face lacks.
     ///
-    /// <b>One member per family, and weight is not a member.</b> It was, briefly: a sheet held one weight at one
-    /// slant, so bold and italic had to be faces in their own right. They are not any more, because a sheet now
-    /// carries regular, bold, italic and both together, tagged per glyph -- so a caller asks for Barlow Condensed
-    /// and, separately, for bold. That is what lets a rich text tag switch weight mid-sentence, which a face
-    /// chosen for the whole label never could.
-    ///
-    /// <b>Thin is the exception and has to be.</b> <c>FontStyle</c> offers bold and italic and nothing else, so
-    /// a weight lighter than regular cannot be asked for by style and must be asked for by name.
+    /// <b>This is the fourth architecture and the survivor.</b> Baked glyph sheets drawn by hand reimplemented
+    /// a font engine and showed it; loading a TTF from disk is a stub in the shipped engine; registering one
+    /// with the OS is invisible to an engine whose font list is sealed before mod code runs. The bundle is the
+    /// same road RimWorld's own fonts travel, which is why it behaves like them. Settled with Aaron 2026-08-30.
     ///
     /// <b><see cref="Game"/> is a real option and the default.</b> It means RimWorld's own text, drawn by
-    /// <c>Widgets.Label</c> as it always was. Keeping it in the enum rather than treating a null face as vanilla
-    /// means a control can offer the game's font as one choice among several, and means an unavailable sheet has
-    /// somewhere to fall back to that the caller already understands.
-    ///
-    /// The name is <c>UIFace</c> rather than <c>UIFont</c> because <see cref="UIFonts"/> already answers a
-    /// different question -- how tall a line of RimWorld's text will be -- and two types a letter apart is how
-    /// the wrong one gets called.
+    /// <c>Widgets.Label</c> as it always was, and it is what every face falls back to when the bundle is
+    /// missing or a font fails to load.
     /// </summary>
     internal enum UIFace
     {
@@ -40,172 +31,148 @@ namespace Gideon.UIFramework.Helpers
         BarlowCondensed,
 
         /// <summary>
-        /// Barlow Condensed Thin. Very light, and the one face here that needs judgement about size.
+        /// Barlow Condensed Thin. Very light; reads at Medium and above, worth checking anywhere smaller.
         ///
-        /// A thin condensed stem is well under a pixel at interface sizes, so it survives as a grey suggestion
-        /// of a letter rather than a letter. It reads at Medium and above and is worth looking at before being
-        /// used anywhere smaller.
-        ///
-        /// <b>Its own face rather than a weight of the one above,</b> because no markup or style flag reaches
-        /// Thin -- <c>FontStyle</c> has bold and italic and nothing else. A weight that cannot be asked for by
-        /// style has to be asked for by name.
+        /// Its own face rather than a weight, because <c>FontStyle</c> offers bold and italic and nothing
+        /// else: a weight lighter than regular can only be asked for by name.
         /// </summary>
         BarlowCondensedThin,
 
-        /// <summary>
-        /// Cascadia Mono. Fixed width, so digits and anything tabular line up in a column.
-        ///
-        /// The widest coverage of anything shipped here by a long way -- 2,424 glyphs, which is most of a
-        /// megabyte of sheet before compression. Worth knowing before it is used for one label.
-        /// </summary>
+        /// <summary>Cascadia Mono. Fixed width, so digits and anything tabular line up in a column.</summary>
         CascadiaMono,
 
-        /// <summary>
-        /// Hammersmith One. Wide and geometric, for a heading that wants to be a heading.
-        ///
-        /// Its own sheet rather than the floor labels', which is the same typeface baked at 64 for a mesh drawn
-        /// across a room. This one is baked for text at interface size.
-        /// </summary>
+        /// <summary>Hammersmith One. Wide and geometric, for a heading that wants to be a heading.</summary>
         HammersmithOne,
 
         /// <summary>IBM Plex Mono. Fixed width, and quieter than Cascadia at the same size.</summary>
         IBMPlexMono,
 
-        /// <summary>
-        /// Oswald. Condensed and tall.
-        ///
-        /// <b>It draws smaller than the others at the same <c>GameFont</c>, and that is arithmetic rather than a
-        /// fault.</b> Every face is scaled so one line occupies RimWorld's line height, and Oswald's own line
-        /// box is 1.48 ems against Barlow's 1.20 -- so fitting it into the same height leaves the letters about
-        /// a fifth smaller. Reach for a larger <c>GameFont</c> with this one.
-        /// </summary>
+        /// <summary>Oswald. Condensed and tall; its long line box makes it draw smaller than the others at the
+        /// same <c>GameFont</c>, so reach for a larger size with it.</summary>
         Oswald
     }
 
     /// <summary>
-    /// What each <see cref="UIFace"/> is made of, and what to call it.
+    /// What each <see cref="UIFace"/> is made of: which bundled font serves it, at which weight.
     ///
-    /// <b>The sheets are loaded once and kept.</b> Each atlas reads its PNG and metrics table on first use and
-    /// holds both for the session, so a face costs its files the first time a control asks for it and nothing
-    /// afterwards. A face nobody draws in is never read off disk at all, which is why the four Barlow weights
-    /// are separate atlases rather than one object holding all four.
-    ///
-    /// <b>To add a face:</b> bake it (see <c>ThirdParty/Fonts/README-Gideon.md</c>), add a member to
-    /// <see cref="UIFace"/>, add its atlas field and its <see cref="AtlasFor"/> case here, and give it a display
-    /// name in <see cref="Named"/>. Nothing else needs touching.
+    /// <b>Real files beat synthesis.</b> A dynamic font can fake bold by emboldening and italic by shearing,
+    /// and inline rich text tags get exactly that. But a control that names its weight deserves the letterforms
+    /// the type designer drew, so where a weight's own TTF is in the bundle it is used -- Barlow's semibold and
+    /// italics, IBM Plex's semibold -- and only the faces with no such file fall back to synthesis.
     /// </summary>
     internal static class UIFaces
     {
         /// <summary>
-        /// Every sheet read so far, by file name. A face may have several.
+        /// The bundled font for a face at a weight, and what style the renderer must still apply.
+        ///
+        /// <paramref name="synthesize"/> comes back <c>Normal</c> when the returned font already is the asked
+        /// weight, and the asked weight when the face has no file for it and FreeType has to fake it.
         /// </summary>
-        private static readonly Dictionary<string, UITypefaceAtlas> Sheets =
-            new Dictionary<string, UITypefaceAtlas>();
-
-        /// <summary>
-        /// The size a sheet is baked at for each interface size, so it is drawn one texel to one pixel.
-        ///
-        /// <b>This is the whole sharpness fix, and it is a bake decision rather than a drawing one.</b> A sheet
-        /// baked at one size and drawn at another is resampled, and bilinear at a fractional ratio lands each
-        /// letter's ink at a different subpixel phase -- which is why the same letter came out looking heavier,
-        /// lighter or lower depending on where it fell, and why no amount of rounding at draw time fixed it. A
-        /// monospaced face still looked unevenly spaced, and that was the proof: its advances are provably
-        /// identical, so only the resampling could differ between letters.
-        ///
-        /// <b>The numbers come from RimWorld, measured on screen 2026-08-29.</b> Its line heights are computed
-        /// at run time and were Tiny 18, Small 22, Medium 29 at UI scale 1. Divided by the 1.2 line ratio those
-        /// want ems of 15, 18.33 and 24.17 -- so 15, 18 and 24.
-        ///
-        /// <b>Two of the three are a rounding, and that is the trade.</b> A face at these sizes no longer
-        /// occupies exactly RimWorld's line height: 18 gives 21.6 against 22, and 24 gives 28.8 against 29. Four
-        /// tenths of a pixel is invisible; the resampling was not.
-        ///
-        /// At a UI scale of two the wanted em doubles and these sheets are drawn at 2:1, which is the cleanest
-        /// ratio bilinear has after 1:1 -- every output pixel is exactly four texels.
-        /// </summary>
-        private static int BakedFor(UITypefaceAtlas known, GameFont size)
+        internal static Font FontFor(UIFace face, FontStyle weight, out FontStyle synthesize)
         {
-            if (known == null || !known.Available || known.LineRatio <= 0f)
-                return 0;
+            string asset = AssetFor(face, weight, out synthesize);
 
-            return Mathf.RoundToInt(UIFonts.LineHeightOf(size) / known.LineRatio);
+            return asset == null ? null : UIBundledFonts.Get(asset);
         }
 
-        /// <summary>
-        /// The base sheet name for a face, which is also the stem every sized sheet is named from.
-        ///
-        /// A sized sheet is the stem with the em appended -- <c>BarlowCondensedRegular18</c>. Only the faces the
-        /// interface actually draws in have been baked that way; the rest have their one sheet and are resampled,
-        /// which is fine for a face nothing is set in yet and is what makes all twelve selectable without baking
-        /// thirty-six.
-        /// </summary>
-        private static string FileOf(UIFace face)
+        private static string AssetFor(UIFace face, FontStyle weight, out FontStyle synthesize)
         {
+            synthesize = FontStyle.Normal;
+
             switch (face)
             {
-                case UIFace.BarlowCondensed: return "BarlowCondensedRegular";
-                case UIFace.BarlowCondensedThin: return "BarlowCondensedThin";
-                case UIFace.CascadiaMono: return "CascadiaMonoRegular";
-                case UIFace.HammersmithOne: return "HammersmithOneRegular";
-                case UIFace.IBMPlexMono: return "IBMPlexMonoRegular";
-                case UIFace.Oswald: return "OswaldRegular";
+                case UIFace.BarlowCondensed:
+                    switch (weight)
+                    {
+                        case FontStyle.Bold: return "BarlowCondensed-SemiBold";
+                        case FontStyle.Italic: return "BarlowCondensed-Italic";
+                        case FontStyle.BoldAndItalic: return "BarlowCondensed-SemiBoldItalic";
+                        default: return "BarlowCondensed-Regular";
+                    }
+
+                case UIFace.BarlowCondensedThin:
+                    switch (weight)
+                    {
+                        case FontStyle.Italic: return "BarlowCondensed-ThinItalic";
+
+                        // A bold thin is a contradiction the family has no file for; emboldened thin is the
+                        // nearest true answer.
+                        case FontStyle.Bold:
+                        case FontStyle.BoldAndItalic:
+                            synthesize = weight;
+
+                            return "BarlowCondensed-Thin";
+
+                        default: return "BarlowCondensed-Thin";
+                    }
+
+                case UIFace.CascadiaMono:
+                    synthesize = weight;
+
+                    return "CascadiaMono-VariableFont_wght";
+
+                case UIFace.HammersmithOne:
+                    synthesize = weight;
+
+                    return "HammersmithOne-Regular";
+
+                case UIFace.IBMPlexMono:
+                    switch (weight)
+                    {
+                        case FontStyle.Bold: return "IBMPlexMono-SemiBold";
+
+                        case FontStyle.Italic:
+                            synthesize = FontStyle.Italic;
+
+                            return "IBMPlexMono-Regular";
+
+                        case FontStyle.BoldAndItalic:
+                            synthesize = FontStyle.Italic;
+
+                            return "IBMPlexMono-SemiBold";
+
+                        default: return "IBMPlexMono-Regular";
+                    }
+
+                case UIFace.Oswald:
+                    synthesize = weight;
+
+                    return "Oswald-VariableFont_wght";
+
                 default: return null;
             }
         }
 
-        /// <summary>One sheet by file name, read on first ask and kept. A missing file is cached as broken.</summary>
-        private static UITypefaceAtlas Sheet(string name)
-        {
-            UITypefaceAtlas existing;
-
-            if (Sheets.TryGetValue(name, out existing))
-                return existing;
-
-            existing = new UITypefaceAtlas(name);
-            Sheets[name] = existing;
-
-            return existing;
-        }
-
         /// <summary>
-        /// The sheet to draw this face at this size: the one baked for it, or the general one if there is none.
-        /// </summary>
-        internal static UITypefaceAtlas AtlasFor(UIFace face, GameFont size)
-        {
-            string file = FileOf(face);
-
-            if (file == null)
-                return null;
-
-            UITypefaceAtlas general = Sheet(file);
-
-            // Asked of the face rather than assumed, because the em a size wants depends on the face's own line
-            // ratio and those differ: Barlow is 1.20, IBM Plex 1.30, Oswald 1.48. Baking every face at the same
-            // numbers put two of the three back to being resampled -- the very thing the sizes exist to avoid.
-            int em = BakedFor(general, size);
-
-            if (em <= 0)
-                return general;
-
-            UITypefaceAtlas sized = Sheet(file + em);
-
-            return sized.Available ? sized : general;
-        }
-
-        /// <summary>
-        /// The sheet behind a face, or null for <see cref="UIFace.Game"/>, which has no sheet.
+        /// The <c>GUIStyle.fontSize</c> that makes this font occupy one RimWorld line at this interface size.
         ///
-        /// Null is the answer for the game's own font rather than an error, because that face is drawn by
-        /// <c>Widgets.Label</c> and never by a glyph loop. A caller that gets null draws the vanilla way.
+        /// <b>Read from the font's own metrics rather than tabulated.</b> The imported font knows its line
+        /// height at its import size, so the ratio between them scales any wanted line height to a point size
+        /// -- which is how Oswald's tall line box and Barlow's short one both come out occupying the same row.
+        /// The lesson of a session of hardcoded ratios: the face is the authority on its own geometry.
         /// </summary>
-        internal static UITypefaceAtlas AtlasFor(UIFace face)
+        internal static int PointSizeFor(Font font, GameFont size)
         {
-            string file = FileOf(face);
+            float wanted = UIFonts.LineHeightOf(size);
 
-            return file == null ? null : Sheet(file);
+            if (font == null || font.lineHeight <= 0 || font.fontSize <= 0)
+                return Mathf.Max(1, Mathf.RoundToInt(wanted * 0.8f));
+
+            return Mathf.Max(1, Mathf.RoundToInt(wanted * font.fontSize / font.lineHeight));
         }
 
-        /// <summary>What to call a face in the interface. Not the enum name, which is a file name.</summary>
+        /// <summary>Whether text asked for in this face will really be drawn in it.</summary>
+        internal static bool Available(UIFace face)
+        {
+            if (face == UIFace.Game)
+                return true;
+
+            FontStyle ignored;
+
+            return FontFor(face, FontStyle.Normal, out ignored) != null;
+        }
+
+        /// <summary>What to call a face in the interface. Not the enum name, which is an identifier.</summary>
         internal static string Named(UIFace face)
         {
             switch (face)
@@ -221,24 +188,8 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
-        /// Whether a face can actually be drawn.
-        ///
-        /// <see cref="UIFace.Game"/> is always available, which is what makes it the fallback. Any other face is
-        /// available only if both its files are beside the assembly and parsed, so a deleted or truncated sheet
-        /// costs the look rather than the text.
-        /// </summary>
-        internal static bool Available(UIFace face)
-        {
-            UITypefaceAtlas atlas = AtlasFor(face);
-
-            return atlas == null || atlas.Available;
-        }
-
-        /// <summary>
-        /// A face from its saved name, falling back to <see cref="UIFace.Game"/>.
-        ///
-        /// Unrecognized rather than invalid: a settings file written by a later version can name a face this one
-        /// has never heard of, and the game's own font is the one answer that is always right.
+        /// A face from its saved name, falling back to <see cref="UIFace.Game"/>. Unrecognized rather than
+        /// invalid: a settings file written by a later version can name a face this one has never heard of.
         /// </summary>
         internal static UIFace Parse(string name)
         {
