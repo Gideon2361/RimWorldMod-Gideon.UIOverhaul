@@ -260,10 +260,11 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
                 diag = string.Format(
                     "TTF via OS registration: dynamic={0} lineHeight={1} ascent={2} hasA={3} "
-                    + "cyrillic={4} (must be False for real Barlow)   sample at Small: ttf {5:0}px vs "
-                    + "baked Barlow {6:0}px (equal = real face, wider = substituted)",
+                    + "cyrillic={4} (must be False for real Barlow) osList={5}   sample at Small: ttf {6:0}px "
+                    + "vs baked Barlow {7:0}px (equal = real face, wider = substituted)",
                     font.dynamic, font.lineHeight, font.ascent, font.HasCharacter('A'),
-                    font.HasCharacter((char) 0x042F), ttfWidth, bakedWidth);
+                    font.HasCharacter((char) 0x042F), UIDynamicFont.OsListContains("Barlow Condensed"),
+                    ttfWidth, bakedWidth);
             }
 
             Widgets.Label(new Rect(inRect.x, y, inRect.width, 18f), diag);

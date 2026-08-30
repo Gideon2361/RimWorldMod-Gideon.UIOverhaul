@@ -37,6 +37,54 @@ namespace Gideon.UIFramework.Helpers
 
         private static readonly Dictionary<string, Font> Fonts = new Dictionary<string, Font>();
 
+        private static readonly HashSet<string> Registered = new HashSet<string>();
+
+        /// <summary>
+        /// Registers every TTF the mod ships, called once at startup before anything asks Unity for a font.
+        ///
+        /// <b>Early rather than lazy, because there is no refresh.</b> Unity exposes nothing that rebuilds its
+        /// notion of the installed fonts, so if that notion is a snapshot, the only winning move is to register
+        /// before the snapshot is taken. Vanilla RimWorld ships its fonts as bundled assets and never queries
+        /// the OS for any, so the first OS font query in the whole process is plausibly our own -- registering
+        /// at startup means the engine's first look at the OS already includes our files. Asked about by Aaron
+        /// on 2026-08-30 as "can we force a refresh"; this is the nearest thing that exists.
+        /// </summary>
+        internal static void RegisterShipped()
+        {
+            string folder = OurFontsFolder();
+
+            if (folder == null)
+                return;
+
+            foreach (string path in Directory.GetFiles(folder, "*.ttf"))
+                Register(path);
+        }
+
+        /// <summary>One file with GDI, once. False means no GDI here or a file it refused.</summary>
+        private static bool Register(string path)
+        {
+            if (Registered.Contains(path))
+                return true;
+
+            try
+            {
+                if (AddFontResourceEx(path, FrPrivate, IntPtr.Zero) == 0)
+                    return false;
+            }
+            catch (DllNotFoundException)
+            {
+                return false;
+            }
+            catch (EntryPointNotFoundException)
+            {
+                return false;
+            }
+
+            Registered.Add(path);
+
+            return true;
+        }
+
         /// <summary>
         /// A dynamic font for one shipped TTF: the file name without extension, and the family name written
         /// inside the file, which is what the OS route looks it up by.
@@ -70,21 +118,11 @@ namespace Gideon.UIFramework.Helpers
             if (!File.Exists(path))
                 return null;
 
-            // Zero fonts registered means GDI could not read the file; no GDI at all means not Windows. Both
-            // are ordinary states with a working fallback, not faults.
-            try
-            {
-                if (AddFontResourceEx(path, FrPrivate, IntPtr.Zero) == 0)
-                    return null;
-            }
-            catch (DllNotFoundException)
-            {
+            // Normally already done at startup by RegisterShipped; repeated here so a font dropped into the
+            // folder mid-session still works. Failure means no GDI or a file it refused -- ordinary states
+            // with a working fallback, not faults.
+            if (!Register(path))
                 return null;
-            }
-            catch (EntryPointNotFoundException)
-            {
-                return null;
-            }
 
             // The size is only the default request; a dynamic font rasterizes at whatever size each style asks
             // for, which is the whole point of taking this road.
@@ -102,6 +140,32 @@ namespace Gideon.UIFramework.Helpers
             // registration did not take.
             return font.HasCharacter('A') ? font : null;
         }
+
+        /// <summary>
+        /// Whether Unity's own list of installed fonts contains this family.
+        ///
+        /// The direct question behind every substitution mystery: GDI having the font and Unity seeing it are
+        /// two different facts, and this asks the second one. Cached, because enumerating every installed font
+        /// is not a per-frame activity.
+        /// </summary>
+        internal static bool OsListContains(string familyName)
+        {
+            bool cached;
+
+            if (OsListChecks.TryGetValue(familyName, out cached))
+                return cached;
+
+            bool found = UIGuard.Try(
+                "UIText.OsFontList",
+                () => Array.IndexOf(Font.GetOSInstalledFontNames(), familyName) >= 0,
+                false, null);
+
+            OsListChecks[familyName] = found;
+
+            return found;
+        }
+
+        private static readonly Dictionary<string, bool> OsListChecks = new Dictionary<string, bool>();
 
         /// <summary>
         /// Our own mod folder's Fonts directory, found through the running mod list rather than assumed,
@@ -126,6 +190,23 @@ namespace Gideon.UIFramework.Helpers
             }
 
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Registers the shipped TTFs while the game is still loading.
+    ///
+    /// <c>StaticConstructorOnStartup</c> runs on the main thread during the loading screen, which is before any
+    /// interface has been drawn and therefore before anything can have asked Unity for an OS font. That
+    /// ordering is the entire point; see <see cref="UIDynamicFont.RegisterShipped"/>.
+    /// </summary>
+    [StaticConstructorOnStartup]
+    internal static class UIDynamicFontStartup
+    {
+        static UIDynamicFontStartup()
+        {
+            UIGuard.Try("UIText.RegisterShipped", UIDynamicFont.RegisterShipped,
+                "Shipped TTFs were not registered with the operating system. Text falls back to the baked sheets.");
         }
     }
 }
