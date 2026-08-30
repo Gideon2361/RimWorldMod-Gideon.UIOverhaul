@@ -20,7 +20,7 @@
              Format: RimWorld major.minor, then RimWorld's build number, then this mod's own sequential
              build number. So 1.6.4871.14086 is build 14086 of this mod, against RimWorld 1.6.4871.
              The first three move when the game does; the last increments on every change. -->
-        <Version>1.6.4871.14201</Version>
+        <Version>1.6.4871.14202</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -37,10 +37,22 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- The Unity project that bakes the font AssetBundle. Its editor script compiles inside Unity
-             against UnityEditor, which no mod assembly may reference, so the glob must not see it. -->
+        <!-- Offline tooling, kept in the repo and out of the mod. The glob would otherwise compile both of
+             these into the shipped assembly, where neither can ever run.
+
+             BundleProject is the Unity project that bakes the AssetBundle. Its editor script compiles inside
+             Unity against UnityEditor, which no mod assembly may reference.
+
+             Baker is the GDI+ atlas baker, a console tool with its own Main. It only ever runs on a developer
+             machine, before a build, and its output is the PNG and metrics pairs already committed under
+             Fonts/. Compiled in, it put a System.Drawing reference in the assembly manifest of a RimWorld UI
+             mod: dead weight in every subscriber's download, and a reference the game would have to resolve on
+             Mac and Linux while enumerating our types at startup. Type enumeration that fails to resolve
+             throws ReflectionTypeLoadException and takes the whole assembly with it, not just the one type. -->
         <Compile Remove="ThirdParty\Fonts\BundleProject\**\*.cs" />
         <None Remove="ThirdParty\Fonts\BundleProject\**" />
+        <Compile Remove="ThirdParty\Fonts\Baker\**\*.cs" />
+        <None Remove="ThirdParty\Fonts\Baker\**" />
     </ItemGroup>
 
     <PropertyGroup>
