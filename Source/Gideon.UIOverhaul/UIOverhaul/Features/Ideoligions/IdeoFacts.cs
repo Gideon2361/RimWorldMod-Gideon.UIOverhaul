@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Integrations;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -152,7 +153,14 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         /// the pawn about to leave the faith is the one you act on, and a devout pawn drifting downward is not
         /// yet a problem.
         /// </summary>
-        internal static List<ConvictionRow> Conviction(Ideo ideo)
+        /// <param name="alphabetical">
+        /// Sort by name, A to Z, instead of by how close each believer is to leaving.
+        ///
+        /// Devotion order is the default because it answers the question the block exists for -- who is about
+        /// to convert away -- and it puts that person on the first row. Name order answers a different one:
+        /// where is this particular colonist, in a colony large enough that scanning for them is the slow part.
+        /// </param>
+        internal static List<ConvictionRow> Conviction(Ideo ideo, bool alphabetical = false)
         {
             List<ConvictionRow> rows = new List<ConvictionRow>();
 
@@ -168,6 +176,14 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 if (pawn?.ideo == null || pawn.ideo.Ideo != ideo)
                     continue;
 
+                // The undead carry an ideoligion and a certainty like anybody else, and neither means anything:
+                // One With Death pins their needs at full whatever they believe, so a raised colonist cannot
+                // drift, cannot be converted back, and cannot be lost over a precept. Listing them buries the
+                // colonists the block exists to warn about under a column of rows that will read 100% forever.
+                // Reported on 2026-08-30, with four of eight rows undead.
+                if (OneWithDeathIntegration.IsControlledUndead(pawn))
+                    continue;
+
                 rows.Add(new ConvictionRow
                 {
                     pawn = pawn,
@@ -179,7 +195,15 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 });
             }
 
-            rows.Sort((a, b) => a.certainty.CompareTo(b.certainty));
+            if (alphabetical)
+            {
+                rows.Sort((a, b) => string.Compare(a.pawn.LabelShortCap, b.pawn.LabelShortCap,
+                    System.StringComparison.CurrentCultureIgnoreCase));
+            }
+            else
+            {
+                rows.Sort((a, b) => a.certainty.CompareTo(b.certainty));
+            }
 
             return rows;
         }

@@ -44,6 +44,58 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         /// <summary>IBM Plex Mono. Figures, small-caps labels and chips.</summary>
         internal const UIFace Mono = UIFace.IBMPlexMono;
 
+
+        /// <summary>
+        /// The sizes the mockup sets each of those faces at, in points.
+        ///
+        /// <b>These are the mockup's own numbers, typed in as written.</b> The design is specified in CSS pixels
+        /// on a canvas 1140 wide and the window is 1215, near enough one to one that a size can be carried over
+        /// rather than re-derived -- and re-deriving it is what went wrong for a week. Every size on this screen
+        /// used to be a GameFont, which means "fill the line box RimWorld fills at that font", so a face with
+        /// generous vertical metrics came out visibly larger than the game font at the same nominal size and
+        /// larger again than a condensed face beside it. Three rounds of "make that a bit smaller" were spent
+        /// on scale factors before it was clear that the sizes were never comparable in the first place.
+        ///
+        /// A point size is comparable. Eleven is eleven in Barlow, in Barlow Condensed and in IBM Plex Mono,
+        /// which is what lets a row hold two faces and read as one row.
+        /// </summary>
+        internal static class Size
+        {
+            /// <summary>The faith's name in the header.</summary>
+            internal const float Title = 21f;
+
+            /// <summary>The line under it: memes, or the classic-mode note.</summary>
+            internal const float Subtitle = 14f;
+
+            /// <summary>A header readout's figure, and the caption under it.</summary>
+            internal const float Readout = 17f;
+
+            internal const float Caption = 10f;
+
+            /// <summary>A block's own heading, and the suffix on the right of it.</summary>
+            internal const float BlockHead = 10.5f;
+
+            /// <summary>A name in a column: a believer, a role, a ritual, a faith in the rail.</summary>
+            internal const float Name = 15f;
+
+            /// <summary>A sentence: a demand, a stance, a holder's name.</summary>
+            internal const float Body = 14f;
+
+            /// <summary>A figure that lines up down the screen.</summary>
+            internal const float Figure = 12f;
+
+            /// <summary>The quieter second figure on a row: a drift rate, a requirement, a count.</summary>
+            internal const float Small = 11f;
+
+            /// <summary>Ritual timing, which is the longest of the small figures and gets a half point.</summary>
+            internal const float When = 11.5f;
+
+            /// <summary>The issue column on the doctrine list, set in small caps.</summary>
+            internal const float Issue = 10.5f;
+
+            /// <summary>A chip.</summary>
+            internal const float Chip = 10f;
+        }
         /// <summary>
         /// Upper case, for the labels the mockup sets as small caps: block suffixes, chips, and the issue
         /// column on the doctrine list.
