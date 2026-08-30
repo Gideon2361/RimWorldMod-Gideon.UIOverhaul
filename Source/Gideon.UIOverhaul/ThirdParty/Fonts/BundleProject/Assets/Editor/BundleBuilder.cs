@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -27,13 +28,13 @@ public static class BundleBuilder
     /// The typeface bundle. Nothing in the mod's C# names it: the font loader searches every bundle our mod
     /// has loaded, so this string and the file on disk are the only places it appears.
     /// </summary>
-    private const string Fonts = "ui_overhaul_assets";
+    private const string Fonts = "assets";
 
     /// <summary>
     /// The art bundle. Unlike the fonts, this name never appears in our C# either, but for a different
     /// reason: RimWorld resolves these itself through ContentFinder, which walks every loaded bundle.
     /// </summary>
-    private const string Textures = "gideon_uioverhaul_textures";
+    private const string Textures = "textures";
 
     /// <summary>
     /// Where the art has to live inside the project, and it is not a matter of taste.
@@ -48,12 +49,25 @@ public static class BundleBuilder
     /// </summary>
     private const string ArtRoot = "Assets/Data/gideon.uioverhaul/Textures";
 
+    /// <summary>
+    /// A plain list of every art path the bundle carries, in the capitalization the game uses.
+    ///
+    /// <b>It exists because Unity lower cases asset names and RimWorld's content dictionary does not.</b>
+    /// <c>ModContentHolder.Get</c> is a <c>Dictionary</c> lookup with the default comparer, so
+    /// <c>UIOverhaul/UI/OptionsUIOverhaul</c> and <c>uioverhaul/ui/optionsuioverhaul</c> are different keys,
+    /// and its folder enumeration walks a trie that has to agree with those keys exactly. Reading the names
+    /// back out of the bundle would only ever yield the lower case spelling, so the real one has to be
+    /// recorded here at bake time, while the file names on disk still have it.
+    /// </summary>
+    private const string Manifest = "Assets/Data/gideon.uioverhaul/_paths.txt";
+
     public static void Build()
     {
         try
         {
             ImportFonts();
             ImportTextures();
+            WritePathManifest();
 
             Directory.CreateDirectory("AssetBundles");
 
@@ -160,6 +174,46 @@ public static class BundleBuilder
             importer.assetBundleName = Textures;
             importer.SaveAndReimport();
         }
+    }
+
+    /// <summary>
+    /// Writes <see cref="Manifest"/> and puts it in the art bundle beside the textures it describes, so the
+    /// list can never drift from the bundle it belongs to.
+    ///
+    /// Paths are relative to the art root and carry no extension, which is exactly the shape RimWorld uses to
+    /// name a texture -- <c>UIOverhaul/UI/OptionsUIOverhaul</c>, not a file name.
+    /// </summary>
+    private static void WritePathManifest()
+    {
+        List<string> paths = new List<string>();
+
+        foreach (string file in Directory.GetFiles(ArtRoot, "*.*", SearchOption.AllDirectories))
+        {
+            string asset = file.Replace('\\', '/');
+
+            if (Path.GetExtension(asset).ToLowerInvariant() == ".meta")
+                continue;
+
+            string relative = asset.Substring(ArtRoot.Length + 1);
+
+            paths.Add(relative.Substring(0, relative.Length - Path.GetExtension(relative).Length));
+        }
+
+        paths.Sort(StringComparer.Ordinal);
+
+        File.WriteAllLines(Manifest, paths.ToArray());
+
+        AssetDatabase.ImportAsset(Manifest, ImportAssetOptions.ForceUpdate);
+
+        AssetImporter importer = AssetImporter.GetAtPath(Manifest);
+
+        if (importer == null)
+            throw new Exception("No importer for " + Manifest);
+
+        importer.assetBundleName = Textures;
+        importer.SaveAndReimport();
+
+        Debug.Log("BundleBuilder: manifest lists " + paths.Count + " textures");
     }
 
     private static void TrySetSampling(AssetImporter importer)

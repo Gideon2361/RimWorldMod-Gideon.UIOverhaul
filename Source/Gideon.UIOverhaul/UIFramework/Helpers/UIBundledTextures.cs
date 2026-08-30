@@ -1,111 +1,170 @@
 using System;
 using System.Reflection;
+using UnityEngine;
 using Verse;
 
 namespace Gideon.UIFramework.Helpers
 {
     /// <summary>
-    /// Teaches RimWorld to look for <c>.dds</c> inside an AssetBundle, which it otherwise never does.
+    /// Puts the art from our AssetBundle into RimWorld's own texture cache, so everything downstream finds it
+    /// without knowing a bundle exists.
     ///
-    /// <b>The gap is one array.</b> A DDS on disk loads fine:
-    /// <c>ModContentLoader.AcceptableExtensionsTexture</c> lists <c>.dds</c> and hands the file to
-    /// <c>ModDdsLoader</c>. The bundle path consults a different list --
-    /// <c>ModAssetBundlesHandler.TextureExtensions</c>, which is only <c>.png</c>, <c>.psd</c>, <c>.jpg</c>
-    /// and <c>.jpeg</c> -- so <c>ContentFinder.TryFindAssetInModBundles</c> builds candidate names from those
-    /// four and a bundled DDS is never probed for. Nothing errors. The texture is simply not found and the
-    /// caller draws the placeholder.
+    /// <b>Why not let ContentFinder do it.</b> ContentFinder does have a bundle fallback, but it builds the
+    /// name it looks for from <c>ModAssetBundlesHandler.TextureExtensions</c> -- <c>.png</c>, <c>.psd</c>,
+    /// <c>.jpg</c>, <c>.jpeg</c> -- and never <c>.dds</c>, which is what our art is. Widening that array meant
+    /// writing a public static readonly field by reflection, and the runtime declined, silently, which is how
+    /// a hundred textures turned into placeholder squares with nothing in the log to say why. Registering the
+    /// textures ourselves depends on no vanilla behavior we do not control.
     ///
-    /// <b>Nothing needs decoding.</b> Unity imports a DDS through <c>IHVImageFormatImporter</c>, its
-    /// pass-through importer for block-compressed formats, so the bundle already contains a finished
-    /// <c>Texture2D</c> holding exactly the payload that was authored. <c>ModDdsLoader</c> is for files on
-    /// disk and has no part in this.
+    /// <b>It also fixes what the fallback could not.</b> A def with a multi-directional graphic resolves
+    /// through <c>GetAllUnderPath</c>, which walks a prefix trie of known paths rather than probing names, so
+    /// no extension list would ever have helped it. Filling the cache serves both roads at once.
     ///
-    /// <b>Why the array and not a Harmony patch.</b> The obvious patch is a postfix on
-    /// <c>ContentFinder&lt;Texture2D&gt;.TryFindAssetInModBundles</c>, and it is a trap: methods on a generic
-    /// type share one native implementation across every reference type argument, so patching the
-    /// <c>Texture2D</c> instantiation can also run against the <c>AudioClip</c> and <c>Shader</c> ones, where
-    /// the postfix's <c>ref Texture2D __result</c> would be bound to something that is not a texture. Editing
-    /// the array is duller and cannot mistype anything.
-    ///
-    /// <b>This changes the lookup for every mod, deliberately.</b> The array is vanilla state, so any mod
-    /// shipping a bundled DDS starts working too. That is strictly additive: the extension is only ever tried
-    /// on the fallback path, after a filesystem miss, where the alternative is the null it already returns.
+    /// <b>Case is the reason the bundle carries a manifest.</b> Unity lower cases every asset name it stores;
+    /// RimWorld's cache is an ordinary <c>Dictionary</c> and its trie is prefix matched, both case sensitive.
+    /// So the real spelling is written into <c>_paths.txt</c> at bake time and read back here, rather than
+    /// being guessed from the lower case names the bundle would otherwise report.
     /// </summary>
     internal static class UIBundledTextures
     {
-        private const string Extension = ".dds";
+        /// <summary>Tried in order. The mod's own art is all DDS; PNG is here for anything added later.</summary>
+        private static readonly string[] Extensions = { ".dds", ".png" };
+
+        private const string ManifestName = "_paths.txt";
+
+        private static FieldInfo trieField;
+        private static MethodInfo trieAdd;
 
         /// <summary>
-        /// Adds the extension, once. Safe to call twice; the second call finds it already present.
-        ///
-        /// Reports rather than throws. A failure here costs the bundled art and nothing else, and it must not
-        /// escape into the mod's constructor, where RimWorld's answer is to apply none of the mod at all.
+        /// Registers every texture the manifest names, skipping any path already present so a file left on
+        /// disk still wins. Returns how many were added, for the caller to log.
         /// </summary>
-        internal static void Enable()
+        internal static int Register(ModContentPack mod)
+        {
+            if (mod == null || mod.assetBundles == null || mod.assetBundles.loadedAssetBundles == null)
+                return 0;
+
+            ModContentHolder<Texture2D> holder = mod.GetContentHolder<Texture2D>();
+
+            if (holder == null || holder.contentList == null)
+                return 0;
+
+            string packageId = mod.PackageIdPlayerFacing;
+            string manifestPath = "Assets/Data/" + packageId + "/" + ManifestName;
+            string root = "Assets/Data/" + packageId + "/Textures/";
+
+            int added = 0;
+
+            foreach (AssetBundle bundle in mod.assetBundles.loadedAssetBundles)
+            {
+                if (bundle == null)
+                    continue;
+
+                TextAsset manifest = bundle.LoadAsset<TextAsset>(manifestPath);
+
+                if (manifest == null || manifest.text.NullOrEmpty())
+                    continue;
+
+                foreach (string line in manifest.text.Split('\n'))
+                {
+                    string path = line.Trim();
+
+                    if (path.Length == 0 || holder.contentList.ContainsKey(path))
+                        continue;
+
+                    Texture2D texture = Load(bundle, root, path);
+
+                    if (texture == null)
+                    {
+                        Log.Warning(UILogTag.Prefix + "The bundle names '" + path
+                                    + "' but holds no texture for it.");
+
+                        continue;
+                    }
+
+                    holder.contentList.Add(path, texture);
+
+                    if (AddToTrie(holder, path))
+                        added++;
+                }
+            }
+
+            return added;
+        }
+
+        private static Texture2D Load(AssetBundle bundle, string root, string path)
+        {
+            foreach (string extension in Extensions)
+            {
+                Texture2D texture = bundle.LoadAsset<Texture2D>(root + path + extension);
+
+                if (texture == null)
+                    continue;
+
+                // RimWorld names a texture after its file when loading from disk, and a few places read that
+                // back rather than the path they asked for.
+                int slash = path.LastIndexOf('/');
+
+                texture.name = slash < 0 ? path : path.Substring(slash + 1);
+
+                return texture;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The trie is private and has no public door, but it is an ordinary instance field, so reflection
+        /// reaches it without any of the trouble a readonly static would bring.
+        ///
+        /// A path missing from the trie is not a broken texture -- a direct <c>Get</c> still finds it in the
+        /// dictionary -- but it is invisible to folder enumeration, which is how multi-directional graphics
+        /// are built. Failing loudly here is better than a pawn rendering as one frame.
+        /// </summary>
+        private static bool AddToTrie(ModContentHolder<Texture2D> holder, string path)
         {
             try
             {
-                FieldInfo field = typeof(ModAssetBundlesHandler).GetField("TextureExtensions",
-                    BindingFlags.Public | BindingFlags.Static);
-
-                if (field == null)
+                if (trieField == null)
                 {
-                    Report("ModAssetBundlesHandler.TextureExtensions no longer exists.");
+                    trieField = typeof(ModContentHolder<Texture2D>).GetField("contentListTrie",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
 
-                    return;
+                    if (trieField == null)
+                    {
+                        Log.Warning(UILogTag.Prefix + "ModContentHolder.contentListTrie no longer exists, so "
+                                    + "bundled art will not appear in folder lookups.");
+
+                        return false;
+                    }
                 }
 
-                string[] current = field.GetValue(null) as string[];
+                object trie = trieField.GetValue(holder);
 
-                if (current == null)
+                if (trie == null)
+                    return false;
+
+                if (trieAdd == null)
+                    trieAdd = trie.GetType().GetMethod("Add", new[] { typeof(string) });
+
+                if (trieAdd == null)
                 {
-                    Report("ModAssetBundlesHandler.TextureExtensions was not a string array.");
+                    Log.Warning(UILogTag.Prefix + "The content trie has no Add(string), so bundled art will "
+                                + "not appear in folder lookups.");
 
-                    return;
+                    return false;
                 }
 
-                foreach (string extension in current)
-                {
-                    if (string.Equals(extension, Extension, StringComparison.OrdinalIgnoreCase))
-                        return;
-                }
+                trieAdd.Invoke(trie, new object[] { path });
 
-                string[] extended = new string[current.Length + 1];
-
-                Array.Copy(current, extended, current.Length);
-
-                // Last, so the four vanilla formats are still tried first and a mod shipping both spellings
-                // keeps whichever behavior it has today.
-                extended[current.Length] = Extension;
-
-                field.SetValue(null, extended);
-
-                // Read back rather than assume. Writing a static readonly field through reflection is allowed
-                // on the Mono runtime the game ships and refused on some others, and a refusal that threw
-                // nothing would leave every bundled texture quietly missing.
-                string[] after = field.GetValue(null) as string[];
-
-                if (after == null || after.Length != extended.Length)
-                {
-                    Report("the runtime did not accept the change.");
-
-                    return;
-                }
-
-                if (Prefs.LogVerbose)
-                    Log.Message(UILogTag.Prefix + "Bundled DDS textures enabled.");
+                return true;
             }
             catch (Exception e)
             {
-                Report(e.Message);
-            }
-        }
+                Log.Warning(UILogTag.Prefix + "Could not index '" + path + "' for folder lookups: " + e.Message);
 
-        private static void Report(string reason)
-        {
-            Log.Warning(UILogTag.Prefix + "Could not enable DDS lookup inside asset bundles: " + reason
-                        + " Textures shipped only in the bundle will fall back to the missing texture "
-                        + "placeholder.");
+                return false;
+            }
         }
     }
 }
