@@ -1,20 +1,44 @@
 # Typefaces
 
 **Interface text no longer uses baked atlases -- it ships as a Unity AssetBundle.** The headless project in
-`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/gideonfonts` as dynamic fonts, which the
-engine renders itself: FreeType hinting at every size, bold and italic from tags, per-glyph fallback for
-characters a face lacks. That file must stay extensionless; RimWorld's bundle loader only accepts files with no
-extension. To rebake after adding a TTF to `BundleProject/Assets/Fonts/`:
+`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/ui_overhaul_assets` as dynamic fonts,
+which the engine renders itself: FreeType hinting at every size, bold and italic from tags, per-glyph fallback
+for characters a face lacks. The name is deliberately not about fonts, so textures can join them later without
+another rename.
+
+## The three rules the loader imposes
+
+`Verse.ModAssetBundlesHandler.ReloadAll` scans `AssetBundles/` and enforces all of this:
+
+1. **No extension, ever.** `IsAcceptableExtension` returns true only for an empty extension, and it filters
+   the directory listing before anything is opened. `ui_overhaul_assets.assets` or `.bundle` is not a bundle
+   that fails to load -- it is a file the game never looks at, silently.
+2. **Never end the name in `_win`, `_mac` or `_linux`.** Those are the OS specifiers; a name ending in one is
+   loaded only on that platform and skipped everywhere else. Any other name loads on all three, which is what
+   we want, since font and texture data are platform agnostic. `ui_overhaul_assets` is safe -- it ends in
+   `_assets`.
+3. **Copy exactly one file out of the Unity output.** `BuildAssetBundles` also writes a root manifest bundle
+   named after the output folder (`AssetBundles`), and that one is extensionless too, so copying the folder
+   wholesale hands RimWorld a bundle of build bookkeeping to load. The `.manifest` files are ignored by rule 1
+   and are only useful to us -- `ui_overhaul_assets.manifest` lists what actually went in, which is the way to
+   verify a bake, since the bundle itself is LZ4-compressed and shows no readable strings.
+
+## Rebaking
+
+After adding a TTF to `BundleProject/Assets/Fonts/`. **Quote the paths** -- the repo lives under
+`RimWorld Mods`, and an unquoted path with a space makes Unity resolve a truncated project path and abort:
 
 ```
-"C:\Program Files\Unity\Hub\Editor\2022.3.35f1\Editor\Unity.exe" -batchmode -nographics -projectPath BundleProject -executeMethod BundleBuilder.Build -logFile bake.log
+& "C:\Program Files\Unity\Hub\Editor\2022.3.35f1\Editor\Unity.exe" -batchmode -nographics -projectPath "<repo>\Source\Gideon.UIOverhaul\ThirdParty\Fonts\BundleProject" -executeMethod BundleBuilder.Build -logFile "$env:TEMP\bake.log"
 ```
 
-The editor version must be exactly the game's own (2022.3.35f1 for RimWorld 1.6; read it from
-`globalgamemanagers` after a game update). Three other roads were tried and are closed: drawing glyphs
-ourselves from baked sheets reimplemented a font engine and showed it; `Font(path)` routes to a native call
-that is a stub in the shipped player; registering a TTF with the OS is invisible to an engine whose font list
-is sealed before mod code runs.
+Unity.exe is a GUI-subsystem binary, so PowerShell's `&` does not wait for it and `$LASTEXITCODE` stays empty;
+use `Start-Process -Wait -PassThru` when the exit code matters. The editor version must be exactly the game's
+own (2022.3.35f1 for RimWorld 1.6; read it from `globalgamemanagers` after a game update).
+
+Three other roads were tried and are closed: drawing glyphs ourselves from baked sheets reimplemented a font
+engine and showed it; `Font(path)` routes to a native call that is a stub in the shipped player; registering a
+TTF with the OS is invisible to an engine whose font list is sealed before mod code runs.
 
 **Everything below concerns the baker and the baked atlases, which now serve only the floor labels and the
 research scripts.**

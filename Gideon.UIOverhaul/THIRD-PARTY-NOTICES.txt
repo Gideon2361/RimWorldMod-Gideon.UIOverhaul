@@ -45,9 +45,9 @@ Typefaces -- nine families, all under the SIL Open Font License 1.1
 
 Used in Gideon's UI Overhaul:
 
-  * The interface typefaces, shipped unmodified inside the AssetBundles/gideonfonts
-    file, from which the game engine renders them directly. The OFL permits
-    bundling and redistribution.
+  * The interface typefaces, shipped unmodified inside the
+    AssetBundles/ui_overhaul_assets file, from which the game engine renders them
+    directly. The OFL permits bundling and redistribution.
   * The glyph atlases in Fonts/, one PNG and one metrics table per face, used for
     the floor labels and the research scripts. Each is rasterized offline from the
     typeface named below. No font file is modified.
