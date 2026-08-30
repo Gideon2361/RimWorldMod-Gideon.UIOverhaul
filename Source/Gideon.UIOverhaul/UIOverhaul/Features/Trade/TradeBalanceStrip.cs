@@ -1,3 +1,4 @@
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using RimWorld;
@@ -127,13 +128,22 @@ namespace Gideon.UIOverhaul.Features.Trade
                 Text.Anchor = anchor;
                 GUI.color = palette.TextDisabled;
 
-                Widgets.LabelEllipses(new Rect(rect.x, y, rect.width, tiny),
-                    caption != null ? caption.ToUpperInvariant() : string.Empty);
+                // <b>Monospaced, because all three lines are about a number that changes while you watch.</b> In
+                // a proportional face a 1 is narrower than a 4, so a purse ticking from 4211 to 3811 shifts every
+                // digit sideways as it counts. Fixed width holds the column still, which is the whole reason to
+                // spend a face on a readout this small.
+                //
+                // The bar between these two keeps the game's font: it has one word and no figures, so there is
+                // nothing for a monospace to line up.
+                UITextControl.LabelEllipses(new Rect(rect.x, y, rect.width, tiny),
+                    caption != null ? caption.ToUpperInvariant() : string.Empty,
+                    UIFace.IBMPlexMono, GameFont.Tiny);
 
                 Text.Font = GameFont.Medium;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(rect.x, y + tiny, rect.width, big), now.ToStringCached());
+                UITextControl.Label(new Rect(rect.x, y + tiny, rect.width, big), now.ToStringCached(),
+                    UIFace.IBMPlexMono, GameFont.Medium);
 
                 Text.Font = GameFont.Tiny;
 
@@ -147,8 +157,8 @@ namespace Gideon.UIOverhaul.Features.Trade
                             ? palette.Success
                             : palette.Warning;
 
-                Widgets.LabelEllipses(new Rect(rect.x, y + tiny + big, rect.width, tiny),
-                    "after this deal " + after.ToStringCached());
+                UITextControl.LabelEllipses(new Rect(rect.x, y + tiny + big, rect.width, tiny),
+                    "after this deal " + after.ToStringCached(), UIFace.IBMPlexMono, GameFont.Tiny);
             }
             finally
             {

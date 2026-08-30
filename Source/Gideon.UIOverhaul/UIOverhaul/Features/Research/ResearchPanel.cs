@@ -685,17 +685,23 @@ namespace Gideon.UIOverhaul.Features.Research
 
                     GUI.color = tint;
 
-                    // Bold, as the mockup had it, via the rich text tag rather than a second font: IMGUI has
-                    // three sizes and no weights. Measured with the tag still on, because Text.CalcSize goes
-                    // through the same GUIStyle that renders it and so accounts for the extra width bold costs --
-                    // measuring the bare string would under-report and let the rule run over the last letter.
-                    // Uppercase as well as bold, which is how the mockup drew it. IMGUI has no letter-spacing, so
-                    // caps is the whole of what separates a heading from a node name here -- and it is the thing
-                    // doing the work, since both are the same font at the same size.
-                    string caption = "<b>" + group.Label.ToUpperInvariant() + "</b>";
-                    float width = UIRichText.WidthOf(caption) + 6f;
+                    // Weight as a face rather than as a tag. The bold markup was the only way to get weight out
+                    // of RimWorld's one font; with sheets shipped it is the typeface's job, and dropping the tag
+                    // is also what lets UITextControl draw this at all, since it refuses text carrying markup.
+                    //
+                    // Uppercase stays. IMGUI has no letter-spacing, so caps was doing most of the work of
+                    // separating a heading from a node name -- and it still is, now that the two also differ in
+                    // weight rather than only in case.
+                    //
+                    // Measured through the same control that draws it, so the rule beside it lands where the
+                    // letters actually end. Measuring one face and drawing another is how a heading gets a rule
+                    // through its last letter.
+                    string caption = group.Label.ToUpperInvariant();
+                    float width = UITextControl.Width(caption, UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold)
+                                  + 6f;
 
-                    UIRichText.Label(new Rect(x, band.y, width, band.height), caption);
+                    UITextControl.Label(new Rect(x, band.y, width, band.height), caption,
+                        UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold);
 
                     x += width;
 
@@ -851,8 +857,10 @@ namespace Gideon.UIOverhaul.Features.Research
             Text.Anchor = railFolded ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
             GUI.color = palette.TextDisabled;
 
-            Widgets.Label(railFolded ? fold : new Rect(fold.x + 5f, fold.y, fold.width - 5f, fold.height),
-                railFolded ? ">>" : RailHeading());
+            // The caption goes with the rows under it. A heading in one typeface over a list in another reads as
+            // two panels rather than one, which is the whole reason a face is chosen for a block and not a line.
+            UITextControl.Label(railFolded ? fold : new Rect(fold.x + 5f, fold.y, fold.width - 5f, fold.height),
+                railFolded ? ">>" : RailHeading(), UIFace.BarlowCondensed, GameFont.Tiny, FontStyle.Bold);
 
             Text.Anchor = TextAnchor.UpperLeft;
             GUI.color = palette.TextPrimary;
@@ -923,7 +931,8 @@ namespace Gideon.UIOverhaul.Features.Research
                 GUI.color = here ? palette.TextSecondary : palette.TextDisabled;
                 Text.Anchor = TextAnchor.MiddleRight;
 
-                Widgets.Label(new Rect(row.xMax - tallyWidth - 3f, row.y, tallyWidth, RailRowHeight), tally);
+                UITextControl.Label(new Rect(row.xMax - tallyWidth - 3f, row.y, tallyWidth, RailRowHeight),
+                    tally, UIFace.BarlowCondensed, GameFont.Tiny);
 
                 // The label in the band's own colour, not grey. A four pixel tick is not enough of a hue to read
                 // as "this is the medicine band" at a glance, and the canvas heading it jumps to is coloured, so
@@ -933,9 +942,14 @@ namespace Gideon.UIOverhaul.Features.Research
                 Text.Anchor = TextAnchor.MiddleLeft;
                 Text.Font = GameFont.Small;
 
-                UIRichText.Label(new Rect(row.x + 11f, row.y,
+                // Bold as a face rather than as a tag. The markup was the only way to get weight out of
+                // RimWorld's one font; with the sheet shipped, the weight is the typeface and the string is just
+                // the name -- which also means UITextControl can set it, since it refuses text carrying markup.
+                // Widths are still measured against the game's font above, so the rail keeps the size it had and
+                // the condensed face simply has more room in it than it needs.
+                UITextControl.LabelEllipses(new Rect(row.x + 11f, row.y,
                         Mathf.Max(0f, row.width - tallyWidth - 17f), RailRowHeight),
-                    "<b>" + group.Label + "</b>");
+                    group.Label, UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold);
 
                 Text.Anchor = TextAnchor.UpperLeft;
 
