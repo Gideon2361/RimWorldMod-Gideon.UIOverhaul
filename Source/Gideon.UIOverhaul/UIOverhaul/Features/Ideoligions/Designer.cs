@@ -35,7 +35,12 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
                 if (ideo.development == null || !ideo.development.CanReformNow)
                     return;
 
-                Find.WindowStack.Add(new Dialog_ReformIdeo(ideo));
+                IdeoDraft draft = IdeoDraft.Of(ideo);
+
+                if (draft == null)
+                    return;
+
+                Find.WindowStack.Add(new Dialog_IdeoDesigner(draft));
             }, "The reform screen did not open. RimWorld's own ideoligion tab still reaches it.");
         }
     }
