@@ -907,6 +907,21 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showQuickOrders = true;
 
         /// <summary>
+        /// Whether the ideoligion designer leaves the doctrine alone when the memes change.
+        ///
+        /// Off by default, because on is a departure from how RimWorld behaves and a default that quietly
+        /// changes what a reform does would be the wrong kind of surprise. The switch is on the designer itself
+        /// rather than only in this window, since that is where the decision is made; it is remembered here so a
+        /// player who wants it never has to find it twice.
+        ///
+        /// <b>Read only inside the designer.</b> It is not a patch and it gates nothing during world generation,
+        /// which is the failure mode the mod that inspired it warns about in its own description: a global switch
+        /// left on produces a starting ideoligion with no precepts at all. This one cannot, because nothing
+        /// outside <c>IdeoDraft</c> asks about it.
+        /// </summary>
+        public bool preservePrecepts;
+
+        /// <summary>
         /// Whether frames wait for the monitor.
         ///
         /// <b>Ours to store because RimWorld does not have one.</b> There is no vsync field anywhere in
@@ -1668,6 +1683,13 @@ namespace Gideon.UIOverhaul.Features.Options
 
                             break;
 
+                        // Opt in rather than opt out, unlike most of the switches above: an absent or unreadable
+                        // value means off, which is RimWorld's own behaviour.
+                        case "preservePrecepts":
+                            settings.preservePrecepts = value.EqualsIgnoreCase("true");
+
+                            break;
+
                         case "hideCalendarBirthdays":
                             settings.hideCalendarBirthdays = value.EqualsIgnoreCase("true");
 
@@ -1853,6 +1875,7 @@ namespace Gideon.UIOverhaul.Features.Options
                         showExplicitStoryEvents ? "true" : "false");
                     writer.WriteElementString("vsync", vsync ? "true" : "false");
                     writer.WriteElementString("showQuickOrders", showQuickOrders ? "true" : "false");
+                    writer.WriteElementString("preservePrecepts", preservePrecepts ? "true" : "false");
                     writer.WriteElementString("hideCalendarBirthdays",
                         hideCalendarBirthdays ? "true" : "false");
                     writer.WriteElementString("showTimeWidget", showTimeWidget ? "true" : "false");
