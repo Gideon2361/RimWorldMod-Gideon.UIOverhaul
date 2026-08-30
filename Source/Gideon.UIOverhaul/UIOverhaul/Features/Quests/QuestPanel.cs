@@ -47,6 +47,7 @@ namespace Gideon.UIOverhaul.Features.Quests
         private static readonly List<ActiveRow> Running = new List<ActiveRow>();
         private static readonly List<HistoryRow> Finished = new List<HistoryRow>();
         private static readonly Dictionary<int, float> Measured = new Dictionary<int, float>();
+        private static readonly List<DeadlineRow> Clocks = new List<DeadlineRow>();
 
         internal static void Draw(Rect inRect)
         {
@@ -264,6 +265,8 @@ namespace Gideon.UIOverhaul.Features.Quests
                         : "No quests are on offer. The storyteller will bring one along.",
                     palette.TextDisabled);
             }
+
+            y = Strip(view, y, palette);
 
             for (int i = 0; i < Offers.Count; i++)
                 y = Offer(view, y, Offers[i], palette);
@@ -573,6 +576,8 @@ namespace Gideon.UIOverhaul.Features.Quests
             if (Running.Count == 0)
                 return TabParts.Line(view, y + 20f, "Nothing is running.", palette.TextDisabled);
 
+            y = Chart(view, y, palette);
+
             for (int i = 0; i < Running.Count; i++)
                 y = ActiveOne(view, y, Running[i], palette);
 
@@ -635,6 +640,230 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 cursor += 20f;
             }
+
+            return box.yMax + RowGap;
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // The shared axis
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// How many days the chart covers: far enough to hold the furthest clock, and no further.
+        ///
+        /// <b>Scaled to the colony rather than fixed.</b> A fixed fortnight squashes six offers that all lapse
+        /// within three days into the first fifth of the axis, which is the case the chart exists for. Floored
+        /// at three days so a single imminent deadline does not fill the width and read as comfortable, and
+        /// capped so one quest running to a season does not flatten everything else against the left edge.
+        /// </summary>
+        private static float Span(float furthest)
+        {
+            const float floor = 3f * GenDate.TicksPerDay;
+            const float ceiling = 20f * GenDate.TicksPerDay;
+
+            return Mathf.Clamp(furthest, floor, ceiling);
+        }
+
+        /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>
+        private static void Axis(Rect track, float span, UIColorPaletteDef palette)
+        {
+            int days = Mathf.Max(1, Mathf.CeilToInt(span / GenDate.TicksPerDay));
+            int step = days <= 6 ? 1 : days <= 12 ? 2 : 5;
+
+            Color previous = GUI.color;
+            TextAnchor previousAnchor = Text.Anchor;
+
+            try
+            {
+                Text.Anchor = TextAnchor.UpperCenter;
+
+                for (int day = 0; day <= days; day += step)
+                {
+                    float x = track.x + track.width * (day * GenDate.TicksPerDay / span);
+
+                    if (x > track.xMax)
+                        break;
+
+                    GUI.color = palette.Border;
+
+                    Widgets.DrawLineVertical(x, track.y, track.height);
+
+                    GUI.color = palette.TextDisabled;
+
+                    UITextControl.Label(new Rect(x - 20f, track.yMax + 2f, 40f, 14f),
+                        day == 0 ? "now" : "+" + day + "d", QuestFaces.Mono, QuestFaces.Size.Caption);
+                }
+            }
+            finally
+            {
+                Text.Anchor = previousAnchor;
+                GUI.color = previous;
+            }
+        }
+
+        /// <summary>
+        /// Every offer's deadline on one axis.
+        ///
+        /// <b>One axis is the whole point.</b> Six expiry strings down a column are six numbers to hold in your
+        /// head; on a shared scale, the offers that lapse together are visibly together, which is the thing
+        /// worth knowing before spending a caravan on one of them.
+        /// </summary>
+        private static float Strip(Rect view, float y, UIColorPaletteDef palette)
+        {
+            float furthest = 0f;
+            int dated = 0;
+
+            for (int i = 0; i < Offers.Count; i++)
+            {
+                if (Offers[i].expires == int.MaxValue)
+                    continue;
+
+                dated++;
+                furthest = Mathf.Max(furthest, Offers[i].expires);
+            }
+
+            if (dated == 0)
+                return y;
+
+            float span = Span(furthest);
+
+            Rect box = new Rect(view.x, y, view.width, 74f);
+
+            UIElementPainter.OutlineRounded(box, palette.Border, palette.PanelBackground);
+
+            TabParts.RowLabel(new Rect(box.x + 10f, box.y + 4f, box.width - 20f, 16f),
+                QuestFaces.Caps("Deadlines"), palette.TextSecondary, GameFont.Tiny, QuestFaces.Mono,
+                QuestFaces.Size.BlockHead);
+
+            Rect track = new Rect(box.x + 14f, box.y + 24f, box.width - 28f, 30f);
+
+            Axis(track, span, palette);
+
+            for (int i = 0; i < Offers.Count; i++)
+            {
+                OfferRow row = Offers[i];
+
+                if (row.expires == int.MaxValue)
+                    continue;
+
+                float x = track.x + track.width * (row.expires / span);
+
+                Color tint = row.expires <= GenDate.TicksPerDay
+                    ? palette.Danger
+                    : row.expires <= GenDate.TicksPerDay * 3
+                        ? palette.Warning
+                        : palette.Accent;
+
+                // Staggered by index so two offers lapsing within an hour of each other do not draw one pin
+                // over the other and read as one deadline.
+                float height = 10f + i % 3 * 6f;
+
+                Widgets.DrawBoxSolid(new Rect(x - 1f, track.yMax - height, 2f, height), tint);
+
+                Rect hot = new Rect(x - 6f, track.y, 12f, track.height);
+
+                if (!Mouse.IsOver(hot))
+                    continue;
+
+                Widgets.DrawBoxSolid(new Rect(x - 1f, track.y, 2f, track.height), tint);
+
+                TooltipHandler.TipRegion(hot,
+                    (TipSignal) (row.name + "\n\nExpires in " + QuestFacts.Period(row.expires) + "."));
+            }
+
+            return box.yMax + RowGap;
+        }
+
+        /// <summary>
+        /// What the running quests are committed to, on the same axis as each other.
+        ///
+        /// <b>A bar per clock rather than per quest.</b> A quest carries as many deadlines as its content gave
+        /// it, and the overlap that matters is between clocks, not between quests: a lodger leaving on day 51
+        /// and a raid due on day 52 belong to one quest and are two different problems.
+        ///
+        /// <b>A quest with no clock gets a row and no bar,</b> rather than being left out. Open-ended is an
+        /// answer to "when does this end", and a chart that silently drops those quests reads as a complete
+        /// list of commitments when it is not.
+        /// </summary>
+        private static float Chart(Rect view, float y, UIColorPaletteDef palette)
+        {
+            float furthest = 0f;
+
+            for (int i = 0; i < Running.Count; i++)
+            {
+                if (Running[i].ends != int.MaxValue)
+                    furthest = Mathf.Max(furthest, Running[i].ends);
+            }
+
+            if (furthest <= 0f)
+                return y;
+
+            float span = Span(furthest);
+
+            float height = 30f + Running.Count * 22f + 18f;
+            Rect box = new Rect(view.x, y, view.width, height);
+
+            UIElementPainter.OutlineRounded(box, palette.Border, palette.PanelBackground);
+
+            TabParts.RowLabel(new Rect(box.x + 10f, box.y + 4f, box.width - 20f, 16f),
+                QuestFaces.Caps("Commitments"), palette.TextSecondary, GameFont.Tiny, QuestFaces.Mono,
+                QuestFaces.Size.BlockHead);
+
+            const float names = 190f;
+
+            float cursor = box.y + 24f;
+
+            for (int i = 0; i < Running.Count; i++)
+            {
+                ActiveRow row = Running[i];
+
+                Rect band = new Rect(box.x + 10f, cursor, box.width - 20f, 20f);
+
+                TabParts.RowLabel(new Rect(band.x, band.y, names - 8f, band.height), row.name,
+                    palette.TextPrimary, GameFont.Small, QuestFaces.Condensed, QuestFaces.Size.Body);
+
+                Rect track = new Rect(band.x + names, band.y + 3f, band.width - names - 4f, 14f);
+
+                UIElementPainter.OutlineRounded(track, palette.Border, palette.SurfaceSunken);
+
+                if (row.ends == int.MaxValue)
+                {
+                    TabParts.RowLabel(new Rect(track.x + 6f, track.y, track.width - 12f, track.height),
+                        "open ended", palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono,
+                        QuestFaces.Size.Small);
+
+                    cursor = band.yMax + 2f;
+
+                    continue;
+                }
+
+                QuestFacts.Deadlines(row.quest, Clocks);
+
+                for (int c = 0; c < Clocks.Count; c++)
+                {
+                    float width = Mathf.Max(3f, track.width * (Clocks[c].ticks / span));
+
+                    Color tint = Clocks[c].ticks <= GenDate.TicksPerDay
+                        ? palette.Danger
+                        : Clocks[c].ticks <= GenDate.TicksPerDay * 3
+                            ? palette.Warning
+                            : palette.Accent;
+
+                    Rect bar = new Rect(track.x, track.y, width, track.height);
+
+                    UIElementPainter.OutlineRounded(bar, tint,
+                        UIElementPainter.Composite(palette.SurfaceSunken,
+                            new Color(tint.r, tint.g, tint.b, 0.22f)));
+
+                    if (Mouse.IsOver(bar) && !Clocks[c].text.NullOrEmpty())
+                        TooltipHandler.TipRegion(bar, (TipSignal) (row.name + "\n\n" + Clocks[c].text));
+                }
+
+                cursor = band.yMax + 2f;
+            }
+
+            Axis(new Rect(box.x + 10f + names, box.y + 24f, box.width - 20f - names - 4f,
+                cursor - box.y - 26f), span, palette);
 
             return box.yMax + RowGap;
         }
