@@ -3,7 +3,10 @@
   <name>Gideon's UI Overhaul</name>
   <author>Gideon</author>
   <packageId>gideon.uioverhaul</packageId>
-  <modVersion>1.6.4871.14203</modVersion>
+  <!-- Bumped on merge to main only, never on a branch commit or a BuildTest merge. The reasoning is
+       recorded beside <Version> in Source/Gideon.UIOverhaul/Gideon.UIOverhaul.csproj; keep the two
+       numbers in step. -->
+  <modVersion>1.6.4871.14204</modVersion>
   <supportedVersions>
     <li>1.6</li>
   </supportedVersions>

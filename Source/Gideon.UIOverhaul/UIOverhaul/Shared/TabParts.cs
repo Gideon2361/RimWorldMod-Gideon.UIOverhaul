@@ -27,26 +27,92 @@ namespace Gideon.UIOverhaul.Shared
         internal const float BlockGap = 10f;
 
         /// <summary>
+        /// How much smaller a pill sets its word than the Tiny it is measured at.
+        ///
+        /// Tiny is the smallest GameFont RimWorld has, and a chip wants to be smaller still: it is a label on
+        /// a label, and at the same size as the row it sits beside it competes with the thing it is annotating.
+        /// A bundled face is drawn at a point size rather than chosen from a fixed set, so it can go below Tiny
+        /// where the game font cannot -- which is why this only applies when a face is given.
+        /// </summary>
+        private const float ChipScale = 0.76f;
+
+        /// <summary>
+        /// The point size a chip sets at: the caller's if it named one, and otherwise the size the old
+        /// Tiny-times-a-fraction rule worked out to.
+        ///
+        /// Keeping the old rule as the default is what lets the chips on twenty other tabs stay exactly where
+        /// they are while a converted screen names a real size. It resolves against the game font rather than
+        /// the face on purpose: it is standing in for a number nobody chose, so it should not also vary by face.
+        /// </summary>
+        private static float ChipPoints(float points)
+        {
+            return points > 0f ? points : UIFonts.PointsOf(GameFont.Tiny) * ChipScale;
+        }
+
+        /// <summary>
+        /// Air either side of a chip's word, for a chip set in a bundled face.
+        ///
+        /// The game-font path adds six and that is right for it, because UIRichText measures with the thirteen
+        /// pixel ellipsis reserve already in the figure and that reserve reads as padding once drawn. A bundled
+        /// face is measured through the style that draws it, bare, so the same six became three pixels a side --
+        /// less than half the mockup's seven -- and the word crowded the border hard enough to read as oversized
+        /// whatever point size it was really set at.
+        ///
+        /// Past the mockup's seven, at ten, because the mockup's chip has no rounding on it and ours does: a
+        /// rounded end eats into the corner the word would otherwise have had, so matching the flat design's
+        /// padding leaves less air than the flat design has.
+        /// </summary>
+        private const float ChipPad = 20f;
+
+        /// <summary>
         /// A section heading: a hairline, then a small dim caption under it.
         ///
         /// The same shape the hunting bill dialog uses, so a player moving between the two windows is reading the
         /// same furniture rather than learning a second convention.
+        ///
+        /// <paramref name="rule"/> draws the hairline and is on by default, because the line is what separates one
+        /// section from the one above it. Pass false for the first heading inside a panel, where there is nothing
+        /// above to separate from and the line only doubles up on the panel's own edge.
         /// </summary>
-        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette)
+        /// <paramref name="face"/> defaults to the game's own, so existing callers are unchanged.
+        /// <param name="points">
+        /// An absolute point size for the caption, or zero to take it from Tiny the way every caller written
+        /// before point sizes existed does. The row height follows it, so a heading set smaller closes up
+        /// rather than leaving the gap a larger one needed.
+        /// </param>
+        /// <param name="gap">
+        /// Air between the rule and the caption under it. The default is what an unruled heading needs to sit
+        /// clear of whatever is above it; a heading that draws a rule wants more, because four pixels under a
+        /// line reads as the caption hanging off it rather than as a section starting below it.
+        /// </param>
+        internal static float Heading(Rect rect, float y, string text, UIColorPaletteDef palette, bool rule = true,
+            UIFace face = UIFace.Game, float points = 0f, float gap = 4f)
         {
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
+
+            float line = points > 0f && face != UIFace.Game
+                ? UITextControl.LineHeight(face, points)
+                : UIFonts.LineHeightOf(GameFont.Tiny);
 
             try
             {
                 GUI.color = palette.Border;
 
-                Widgets.DrawLineHorizontal(rect.x, y, rect.width);
+                if (rule)
+                    Widgets.DrawLineHorizontal(rect.x, y, rect.width);
 
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
 
-                Widgets.Label(new Rect(rect.x, y + 4f, rect.width, UIFonts.LineHeightOf(GameFont.Tiny)), text);
+                Rect caption = new Rect(rect.x, y + gap, rect.width, line);
+
+                if (face == UIFace.Game)
+                    Widgets.Label(caption, text);
+                else if (points > 0f)
+                    UITextControl.LabelEllipses(caption, text, face, points);
+                else
+                    UITextControl.LabelEllipses(caption, text, face, GameFont.Tiny);
             }
             finally
             {
@@ -54,7 +120,9 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = previousFont;
             }
 
-            return y + UIFonts.LineHeightOf(GameFont.Tiny) + 8f;
+            // The gap is part of the row, not an offset inside it: leaving it out of the total put the caption
+            // below the y the next row starts at as soon as the gap grew past four.
+            return y + gap + line + 4f;
         }
 
         /// <summary>
@@ -91,8 +159,15 @@ namespace Gideon.UIOverhaul.Shared
             }
         }
 
-        /// <summary>One line of text at a given weight, ellipsed rather than wrapped.</summary>
-        internal static float Line(Rect rect, float y, string text, Color color, GameFont font = GameFont.Small)
+        /// <summary>
+        /// One line of text at a given weight, ellipsed rather than wrapped.
+        /// </summary>
+        /// <param name="face">
+        /// Which typeface to set it in. Defaults to the game's own, so every existing caller is unchanged and a
+        /// caller opts in by naming a face, exactly as <see cref="RowLabel"/> does.
+        /// </param>
+        internal static float Line(Rect rect, float y, string text, Color color, GameFont font = GameFont.Small,
+            UIFace face = UIFace.Game)
         {
             if (text == null)
                 text = string.Empty;
@@ -109,7 +184,10 @@ namespace Gideon.UIOverhaul.Shared
                 Text.WordWrap = false;
                 GUI.color = color;
 
-                UIRichText.Label(new Rect(rect.x, y, rect.width, height), text);
+                if (face == UIFace.Game)
+                    UIRichText.Label(new Rect(rect.x, y, rect.width, height), text);
+                else
+                    UITextControl.LabelEllipses(new Rect(rect.x, y, rect.width, height), text, face, font);
             }
             finally
             {
@@ -360,8 +438,14 @@ namespace Gideon.UIOverhaul.Shared
         /// Which typeface to set it in. Defaults to the game's own, so all thirty-odd existing callers are
         /// unchanged and a caller opts in by naming a face rather than by everything moving at once.
         /// </param>
+        /// <param name="points">
+        /// An absolute point size, overriding <paramref name="font"/> for a caller that names a real size. Zero
+        /// leaves the GameFont in charge, which is what every caller written before point sizes existed wants.
+        /// It is ignored on the game font, which comes in three sizes and cannot honour a fourth; the row still
+        /// sets in the GameFont beside it, so a screen half converted looks off rather than breaking.
+        /// </param>
         internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small,
-            UIFace face = UIFace.Game)
+            UIFace face = UIFace.Game, float points = 0f)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -377,6 +461,8 @@ namespace Gideon.UIOverhaul.Shared
 
                 if (face == UIFace.Game)
                     UIRichText.Label(band, text);
+                else if (points > 0f)
+                    UITextControl.LabelEllipses(band, text, face, points);
                 else
                     UITextControl.LabelEllipses(band, text, face, font);
             }
@@ -389,7 +475,8 @@ namespace Gideon.UIOverhaul.Shared
             }
         }
 
-        internal static float PillWidth(string text, float ceiling = 9999f)
+        internal static float PillWidth(string text, float ceiling = 9999f, UIFace face = UIFace.Game,
+            float points = 0f)
         {
             GameFont previousFont = Text.Font;
 
@@ -400,7 +487,13 @@ namespace Gideon.UIOverhaul.Shared
                 // Through WidthOf rather than off CalcSize, because that is the figure the drawing side judges it
                 // against: LabelEllipses holds thirteen pixels back for the dots, so a pill sized to the bare
                 // text ellipses at every size however much room it has. The six on top is the visible padding.
-                return Mathf.Min(ceiling, UIRichText.WidthOf(text ?? string.Empty) + 6f);
+                //
+                // Measured in the same face Pill will draw it in, for the same reason.
+                float measured = face == UIFace.Game
+                    ? UIRichText.WidthOf(text ?? string.Empty)
+                    : UITextControl.Width(text ?? string.Empty, face, ChipPoints(points));
+
+                return Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
             }
             finally
             {
@@ -449,8 +542,10 @@ namespace Gideon.UIOverhaul.Shared
         ///
         /// Returns the rect it took so a caller laying several across a line knows where the next one starts.
         /// </summary>
+        /// <paramref name="face"/> sizes the pill as well as setting it: measuring in one face and drawing in
+        /// another is how a pill ends up either padded with air or ellipsing a word that would have fitted.
         internal static Rect Pill(Rect view, float x, float y, string text, Color color, UIColorPaletteDef palette,
-            float ceiling = 9999f, Color? behind = null)
+            float ceiling = 9999f, Color? behind = null, UIFace face = UIFace.Game, float points = 0f)
         {
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -462,8 +557,14 @@ namespace Gideon.UIOverhaul.Shared
                 Text.Font = GameFont.Tiny;
                 Text.WordWrap = false;
 
-                float width = Mathf.Min(ceiling, UIRichText.WidthOf(text) + 6f);
-                float height = UIFonts.LineHeightOf(GameFont.Tiny) + 2f;
+                float measured = face == UIFace.Game
+                    ? UIRichText.WidthOf(text)
+                    : UITextControl.Width(text, face, ChipPoints(points));
+
+                float width = Mathf.Min(ceiling, measured + (face == UIFace.Game ? 6f : ChipPad));
+                float height = (face == UIFace.Game
+                    ? UIFonts.LineHeightOf(GameFont.Tiny)
+                    : UITextControl.LineHeight(face, ChipPoints(points))) + 2f;
 
                 Rect pill = new Rect(x, y, width, height);
 
@@ -479,7 +580,10 @@ namespace Gideon.UIOverhaul.Shared
                 // whose text does not fit would read as the middle of a word with no sign anything was lost.
                 // Given the whole pill, since LabelEllipses already holds back the thirteen pixels that serve
                 // as its padding; insetting on top of that reserve ellipses every pill whatever its size.
-                UIRichText.Label(pill, text);
+                if (face == UIFace.Game)
+                    UIRichText.Label(pill, text);
+                else
+                    UITextControl.LabelEllipses(pill, text, face, ChipPoints(points));
 
                 return pill;
             }

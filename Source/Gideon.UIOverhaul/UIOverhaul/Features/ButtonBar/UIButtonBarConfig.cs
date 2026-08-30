@@ -186,6 +186,18 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                     StringComparison.OrdinalIgnoreCase))
                 return Hospital.HospitalIntegrations.ColonyHospitalLoaded && Hospital.HospitalTabs.Available;
 
+            // Vanilla's ideoligions tab, when ours is present. Conditioned on ours being available for the same
+            // reason the animal ones are -- and that availability also asks whether Ideology is installed, so an
+            // install without the expansion keeps whatever RimWorld would have shown, which is nothing.
+            if (string.Equals(defName, Ideoligions.IdeoTabs.VanillaDefName, StringComparison.OrdinalIgnoreCase))
+                return Ideoligions.IdeoTabs.Available;
+
+            // Our own ideoligions tab is suppressed the other way about: the button exists in every install
+            // because a MainButtonDef cannot be conditionally undefined, and without Ideology it would open a
+            // screen with nothing in it. This is what makes the tab absent rather than empty.
+            if (string.Equals(defName, Ideoligions.IdeoTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
+                return !Ideoligions.IdeoTabs.Available;
+
             if (!string.Equals(defName, "Animals", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(defName, "Wildlife", StringComparison.OrdinalIgnoreCase))
                 return false;
