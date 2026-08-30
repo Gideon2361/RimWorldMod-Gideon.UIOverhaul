@@ -44,8 +44,12 @@ namespace Gideon.UIOverhaul.Shared
         /// face is measured through the style that draws it, bare, so the same six became three pixels a side --
         /// less than half the mockup's seven -- and the word crowded the border hard enough to read as oversized
         /// whatever point size it was really set at.
+        ///
+        /// Past the mockup's seven, at ten, because the mockup's chip has no rounding on it and ours does: a
+        /// rounded end eats into the corner the word would otherwise have had, so matching the flat design's
+        /// padding leaves less air than the flat design has.
         /// </summary>
-        private const float ChipPad = 14f;
+        private const float ChipPad = 20f;
 
         /// <summary>
         /// A section heading: a hairline, then a small dim caption under it.
