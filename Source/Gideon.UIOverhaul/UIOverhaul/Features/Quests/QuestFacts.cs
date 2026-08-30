@@ -212,6 +212,21 @@ namespace Gideon.UIOverhaul.Features.Quests
             return into;
         }
 
+        /// <summary>
+        /// Ticks until the offer lapses, or int.MaxValue when it never does.
+        ///
+        /// <b>Minus one is the game's way of saying there is no deadline,</b> not a deadline that has passed.
+        /// <c>TicksUntilExpiry</c> returns it whenever <c>acceptanceExpireTick</c> was never set. Taken
+        /// literally it sorted those offers to the top as the most urgent and printed "expires in --" on
+        /// them, and put a red pin on today in the deadline strip. Reported on 2026-08-30.
+        /// </summary>
+        private static int Expiry(Quest quest)
+        {
+            int ticks = UIGuard.Try("Quests.Expiry", () => quest.TicksUntilExpiry, -1, null);
+
+            return ticks < 0 ? int.MaxValue : ticks;
+        }
+
         internal static OfferRow Offer(Quest quest)
         {
             OfferRow row = new OfferRow
@@ -221,7 +236,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                 factions = Factions(quest),
                 charity = quest.charity,
                 rating = quest.challengeRating > 0 ? quest.challengeRating : 0,
-                expires = UIGuard.Try("Quests.Expiry", () => quest.TicksUntilExpiry, int.MaxValue, null),
+                expires = Expiry(quest),
                 choices = new List<ChoiceRow>(),
                 rewards = new List<RewardRow>()
             };
