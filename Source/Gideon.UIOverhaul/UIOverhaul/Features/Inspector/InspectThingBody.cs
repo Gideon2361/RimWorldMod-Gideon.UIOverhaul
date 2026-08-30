@@ -92,6 +92,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float y;
 
             column = flow.Take(out y);
+            flow.Give(column, Construction(column, y, thing, palette));
+
+            column = flow.Take(out y);
             flow.Give(column, Growth(column, y, thing, palette));
 
             column = flow.Take(out y);
@@ -143,6 +146,129 @@ namespace Gideon.UIOverhaul.Features.Inspector
             flow.Give(column, Worth(column, y, thing, palette));
 
             return flow.Bottom - view.y;
+        }
+
+        /// <summary>
+        /// What a half-built thing still needs, and how much of the work is done.
+        ///
+        /// <b>Vanilla says the same things and says them as loose lines.</b> A frame's inspect string is a list
+        /// of "Steel: 110 / 400" with "Work left: 9" under it, sharing the pane with no heading and nothing to
+        /// separate the materials from the labour. The two are different questions -- one is answered by a
+        /// hauler and the other by a builder -- and running them together is why a stalled frame reads as a
+        /// wall of numbers rather than as a job waiting on something specific.
+        ///
+        /// <b>The bars are the point, as everywhere else on this pane.</b> "Steel: 110 / 400" is two numbers you
+        /// have to divide; a bar answers "is this nearly ready" without arithmetic, and a row of them answers
+        /// "which material is holding it up" at a glance.
+        ///
+        /// <b>Blueprints get the same block with no work row,</b> because a blueprint has no work done and no
+        /// materials delivered: the counts are what it will cost. <c>IConstructible</c> covers both, and
+        /// covering the interface rather than <c>Frame</c> also picks up modded constructibles for free.
+        /// </summary>
+        private static float Construction(Rect view, float y, Thing thing, UIColorPaletteDef palette)
+        {
+            IConstructible constructible = thing as IConstructible;
+
+            if (constructible == null)
+                return y;
+
+            List<ThingDefCountClass> cost = UIGuard.Try("Inspector.BuildCost",
+                constructible.TotalMaterialCost, null, null);
+
+            Frame frame = thing as Frame;
+
+            if (cost == null || cost.Count == 0)
+            {
+                // A frame with no material cost is still worth a block if it has work left, which is what
+                // reinstalling a minified building looks like: nothing to haul, only labour.
+                if (frame == null)
+                    return y;
+            }
+
+            float work = frame == null
+                ? 0f
+                : UIGuard.Try("Inspector.BuildWork", () => frame.WorkToBuild, 0f, null);
+
+            float done = frame == null
+                ? 0f
+                : UIGuard.Try("Inspector.BuildDone", () => frame.workDone, 0f, null);
+
+            bool delivered = frame != null && frame.resourceContainer != null;
+
+            // Counted before anything is drawn, because the heading says how many are short and a heading that
+            // contradicts the rows under it is worse than no heading.
+            int missing = 0;
+
+            for (int i = 0; cost != null && i < cost.Count; i++)
+            {
+                ThingDefCountClass item = cost[i];
+
+                if (item == null || item.thingDef == null)
+                    continue;
+
+                if (Delivered(frame, delivered, item.thingDef) < item.count)
+                    missing++;
+            }
+
+            string suffix = missing > 0
+                ? missing + (missing == 1 ? " short" : " short")
+                : cost == null || cost.Count == 0 ? null : "all delivered";
+
+            y = InspectPaneParts.Cap(view, y, "Construction summary", suffix, palette);
+
+            for (int i = 0; cost != null && i < cost.Count; i++)
+            {
+                ThingDefCountClass item = cost[i];
+
+                if (item == null || item.thingDef == null || item.count <= 0)
+                    continue;
+
+                int have = Delivered(frame, delivered, item.thingDef);
+                float fraction = Mathf.Clamp01((float) have / item.count);
+
+                // A blueprint has delivered nothing and never will, so it reads as a cost rather than as a
+                // shortfall: "400" rather than "0 / 400" in the danger colour.
+                if (!delivered)
+                {
+                    y = InspectPaneParts.Fact(view, y, item.thingDef.LabelCap, item.count.ToString(),
+                        palette.TextPrimary, palette);
+
+                    continue;
+                }
+
+                y = InspectPaneParts.Need(view, y, item.thingDef.LabelCap, have + " / " + item.count,
+                    have >= item.count ? palette.Success : InspectPaneParts.Level(fraction, palette),
+                    fraction, have >= item.count ? palette.Success : InspectPaneParts.Level(fraction, palette),
+                    null, null, palette);
+            }
+
+            if (frame != null && work > 0f)
+            {
+                float progress = Mathf.Clamp01(done / work);
+
+                // Work is in work units, which is not a unit anybody thinks in, so the row leads with the
+                // percentage and keeps vanilla's remaining figure as the note beside it.
+                y = InspectPaneParts.Need(view, y, "Work", InspectPaneParts.Percent(progress),
+                    palette.TextPrimary, progress, palette.Accent, null,
+                    Mathf.Max(0f, work - done).ToString("F0") + " left", palette);
+            }
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// How much of one material has already been hauled to a frame.
+        ///
+        /// Zero for anything that does not hold resources, which is every blueprint: a blueprint is a plan, and
+        /// nothing is delivered to it until it becomes a frame.
+        /// </summary>
+        private static int Delivered(Frame frame, bool holds, ThingDef def)
+        {
+            if (!holds)
+                return 0;
+
+            return UIGuard.Try("Inspector.BuildHeld",
+                () => frame.resourceContainer.TotalStackCountOfDef(def), 0, null);
         }
 
         /// <summary>
