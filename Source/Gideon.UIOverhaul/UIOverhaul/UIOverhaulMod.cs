@@ -32,6 +32,12 @@ namespace Gideon.UIOverhaul
         {
             ApplyPatches();
 
+            // Before defs load, because a def naming a texture resolves it the moment something draws it and
+            // the mod's art now lives in an AssetBundle rather than in Textures/. See UIBundledTextures for why
+            // this edits a vanilla array instead of patching the lookup.
+            UIGuard.Try("Mod.BundledTextures", UIBundledTextures.Enable,
+                "Textures shipped in the asset bundle may not be found.");
+
             // Guarded like everything else reachable from here. A throw in the settings loader would escape this
             // constructor, and RimWorld's response to that is to report the mod as failing to instantiate and
             // apply none of it -- the same total loss the patch loop above was split up to prevent. Leaving the
