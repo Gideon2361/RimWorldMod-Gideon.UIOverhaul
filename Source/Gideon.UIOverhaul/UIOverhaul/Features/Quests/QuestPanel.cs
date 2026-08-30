@@ -71,6 +71,18 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             float y = 0f;
 
+            if (QuestFacts.Selected != null)
+            {
+                y = Detail(view, y, QuestFacts.Selected, palette);
+
+                if (Event.current.type == EventType.Layout)
+                    viewHeight = Mathf.Max(1f, y);
+
+                Widgets.EndScrollView();
+
+                return;
+            }
+
             switch (QuestFacts.Showing)
             {
                 case QuestList.Active:
@@ -179,6 +191,197 @@ namespace Gideon.UIOverhaul.Features.Quests
             }
 
             return band.x - 14f;
+        }
+
+        // -------------------------------------------------------------------------------------------
+        // One quest, opened
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The detail view: everything a card cannot hold, for the one quest that is open.
+        ///
+        /// <b>It replaces the list rather than sitting beside it.</b> Vanilla splits the width and gives the
+        /// detail 64 percent of it, which is what forces its list down to names. The cards are the argument of
+        /// this screen, so they get the full width, and opening one takes the whole column for as long as it is
+        /// open. Closing is one click on a control that is always in the same place.
+        ///
+        /// <b>The accept controls live here and nowhere else.</b> A card is for comparing; a decision that
+        /// spends a caravan and a fortnight should cost one deliberate click more than skimming does.
+        /// </summary>
+        private static float Detail(Rect view, float y, Quest quest, UIColorPaletteDef palette)
+        {
+            OfferRow row = QuestFacts.Offer(quest);
+
+            Rect back = new Rect(view.x, y, 120f, 26f);
+
+            if (TabParts.Button(back, "Back", palette))
+            {
+                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+
+                QuestFacts.Selected = null;
+            }
+
+            y = back.yMax + 8f;
+
+            TabParts.RowLabel(new Rect(view.x, y, view.width, 30f), row.name, palette.Accent, GameFont.Medium,
+                QuestFaces.Display, QuestFaces.Size.Title);
+
+            y += 32f;
+
+            string under = row.factions.NullOrEmpty() ? "No faction involved" : "With " + row.factions;
+
+            if (row.rating > 0)
+                under += "  -  challenge rating " + row.rating + " of 5";
+
+            TabParts.RowLabel(new Rect(view.x, y, view.width, 20f), under, palette.TextSecondary, GameFont.Tiny,
+                QuestFaces.Condensed, QuestFaces.Size.Subtitle);
+
+            y += 26f;
+
+            y = Accept(view, y, quest, row, palette);
+            y = Block(view, y, "What you get", quest, row, palette);
+            y = Prose(view, y, quest, palette);
+
+            return y;
+        }
+
+        /// <summary>
+        /// The accept controls, in whichever of the three shapes this quest calls for.
+        ///
+        /// <b>A quest with two or more rewards to choose between gets a button per alternative,</b> because
+        /// picking the reward is what accepts it. A quest with exactly one still has to have that one chosen,
+        /// so its single button takes the choice on the way through. A quest with no reward part at all is
+        /// accepted plainly, which is the case this screen missed first time round.
+        ///
+        /// <b>Disabled with a reason rather than hidden.</b> A button that is not there tells you nothing; one
+        /// that is greyed with RimWorld's own refusal on it tells you what to go and fix.
+        /// </summary>
+        private static float Accept(Rect view, float y, Quest quest, OfferRow row, UIColorPaletteDef palette)
+        {
+            if (QuestFacts.Showing != QuestList.Offers && QuestFacts.Showing != QuestList.Dismissed)
+                return y;
+
+            AcceptanceReport can = QuestAccept.Can(quest);
+            QuestPart_Choice choice = QuestAccept.Choice(quest);
+
+            string refusal = can.Accepted ? null : can.Reason;
+
+            if (choice != null && choice.choices != null && choice.choices.Count >= 2)
+            {
+                TabParts.RowLabel(new Rect(view.x, y, view.width, 20f),
+                    QuestFaces.Caps("Take one of these"), palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono,
+                    QuestFaces.Size.Label);
+
+                y += 22f;
+
+                for (int i = 0; i < row.choices.Count && i < choice.choices.Count; i++)
+                {
+                    QuestPart_Choice.Choice taken = choice.choices[i];
+                    string label = Joined(row.choices[i].rewards);
+
+                    Rect band = new Rect(view.x, y, view.width, 30f);
+                    Rect button = new Rect(band.xMax - 120f, band.y, 120f, 28f);
+
+                    UIElementPainter.OutlineRounded(new Rect(band.x, band.y, band.width - 128f, 28f),
+                        palette.Border, palette.SurfaceSunken);
+
+                    TabParts.RowLabel(new Rect(band.x + 8f, band.y, band.width - 144f, 28f), label,
+                        palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+
+                    if (TabParts.Button(button, "Take this", palette, can.Accepted, true, refusal))
+                        QuestAccept.Begin(quest, () => choice.Choose(taken));
+
+                    y = band.yMax + 4f;
+
+                    y = Pawns(view, y, row.choices[i].rewards, palette);
+                }
+
+                return y + 6f;
+            }
+
+            QuestPart_Choice.Choice single = choice != null && choice.choices != null && choice.choices.Count == 1
+                ? choice.choices[0]
+                : null;
+
+            Rect accept = new Rect(view.x, y, 180f, 30f);
+
+            if (TabParts.Button(accept, "Accept quest", palette, can.Accepted, true,
+                    refusal ?? "Accept this quest. If it needs somebody to accept it, you will be asked who."))
+            {
+                QuestPart_Choice.Choice localSingle = single;
+                QuestPart_Choice localPart = choice;
+
+                QuestAccept.Begin(quest,
+                    localSingle == null ? (System.Action) null : () => localPart.Choose(localSingle));
+            }
+
+            return accept.yMax + 10f;
+        }
+
+        /// <summary>The reward stack in full, with a sheet button under any person among them.</summary>
+        private static float Block(Rect view, float y, string title, Quest quest, OfferRow row,
+            UIColorPaletteDef palette)
+        {
+            if (row.rewards.Count == 0 && row.choices.Count == 0)
+                return y;
+
+            TabParts.RowLabel(new Rect(view.x, y, view.width, 20f), QuestFaces.Caps(title),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
+
+            y += 22f;
+
+            if (row.rewards.Count > 0)
+            {
+                TabParts.RowLabel(new Rect(view.x + 8f, y, view.width - 8f, 22f), Joined(row.rewards),
+                    palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+
+                y += 24f;
+                y = Pawns(view, y, row.rewards, palette);
+            }
+
+            return y + 6f;
+        }
+
+        /// <summary>
+        /// The quest's own words, wrapped.
+        ///
+        /// <b>Resolved through the game's own text pipeline,</b> so the grammar rules and named arguments a
+        /// quest was written with come out as they were meant to rather than as raw tags.
+        /// </summary>
+        private static float Prose(Rect view, float y, Quest quest, UIColorPaletteDef palette)
+        {
+            string text = UIGuard.Try("Quests.Description",
+                () => quest.description.RawText.NullOrEmpty() ? null : quest.description.Resolve(), null, null);
+
+            if (text.NullOrEmpty())
+                return y;
+
+            TabParts.RowLabel(new Rect(view.x, y, view.width, 20f), QuestFaces.Caps("The offer"),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
+
+            y += 22f;
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Small;
+                GUI.color = palette.TextSecondary;
+
+                float height = Text.CalcHeight(text, view.width - 8f);
+
+                Widgets.Label(new Rect(view.x + 8f, y, view.width - 8f, height), text);
+
+                y += height + 8f;
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+
+            return y;
         }
 
         // -------------------------------------------------------------------------------------------
@@ -296,14 +499,17 @@ namespace Gideon.UIOverhaul.Features.Quests
             // The stripe carries urgency, which is the one thing about an offer that changes on its own while
             // you are looking at the list.
             Color stripe = row.expires == int.MaxValue
-                ? palette.Border
+                ? palette.Accent
                 : row.expires <= GenDate.TicksPerDay
                     ? palette.Danger
                     : row.expires <= GenDate.TicksPerDay * 3
                         ? palette.Warning
                         : palette.Border;
 
-            Widgets.DrawBoxSolid(new Rect(box.x, box.y, 3f, box.height), stripe);
+            // Inset by a pixel on all three sides, so the card's own outline stays unbroken around it. Drawn
+            // flush it covered the left of the border, which made a selected card look like its highlight had
+            // a bite out of it.
+            Widgets.DrawBoxSolid(new Rect(box.x + 1f, box.y + 1f, 3f, box.height - 2f), stripe);
 
             Rect inner = new Rect(box.x + 12f, box.y + 8f, box.width - 24f, box.height - 16f);
 
@@ -332,13 +538,15 @@ namespace Gideon.UIOverhaul.Features.Quests
             Rect band = new Rect(inner.x, y, inner.width, height);
 
             string when = row.expires == int.MaxValue
-                ? "no deadline"
+                ? "never expires"
                 : "expires in " + QuestFacts.Period(row.expires);
 
             float whenWidth = UITextControl.Width(when, QuestFaces.Mono, QuestFaces.Size.When) + 8f;
 
+            // An offer with no clock on it is not urgent and should not be dressed as though it were. It takes
+            // the accent rather than a warning colour, which is the same thing the stripe does.
             Color whenColor = row.expires == int.MaxValue
-                ? palette.TextDisabled
+                ? palette.Accent
                 : row.expires <= GenDate.TicksPerDay
                     ? palette.Danger
                     : row.expires <= GenDate.TicksPerDay * 3
@@ -430,7 +638,7 @@ namespace Gideon.UIOverhaul.Features.Quests
             y = Choices(inner, y, row, palette);
 
             string costs = row.expires == int.MaxValue
-                ? "Nothing until you accept"
+                ? "No hurry. This offer does not lapse."
                 : "Decide within " + QuestFacts.Period(row.expires);
 
             y = Line(inner, y, "Costs", costs, palette.TextSecondary, palette);
@@ -584,21 +792,69 @@ namespace Gideon.UIOverhaul.Features.Quests
             return y;
         }
 
+        /// <summary>
+        /// One running quest: what it is waiting on, who it is holding, and a way in.
+        ///
+        /// <b>The first version of this row said the name and "Holding nobody", which is nothing.</b> Most
+        /// quests hold no colonist, so the only line under the name was the same words on every row. What a
+        /// running quest is actually asked is when it ends and what it is waiting for, and the game has both:
+        /// the enabled delay carries its own player-facing wording, and every quest knows when it was accepted.
+        ///
+        /// <b>And it opens.</b> A row that cannot be clicked is a dead end when the detail view exists two
+        /// pixels away. Reported on 2026-08-30.
+        /// </summary>
         private static float ActiveOne(Rect view, float y, ActiveRow row, UIColorPaletteDef palette)
         {
-            float height = 30f + Mathf.Max(1, row.reserved.Count) * 20f;
+            QuestFacts.Deadlines(row.quest, Clocks);
+
+            string waiting = Clocks.Count > 0 && !Clocks[0].text.NullOrEmpty()
+                ? Clocks[0].text
+                : row.ends != int.MaxValue
+                    ? "Ends in " + QuestFacts.Period(row.ends)
+                    : "Running to no deadline";
+
+            string held = null;
+
+            for (int i = 0; i < row.reserved.Count; i++)
+            {
+                string name = UIGuard.Try("Quests.Held",
+                    () => row.reserved[i].LabelShortCap.ToString(), null, null);
+
+                if (name.NullOrEmpty())
+                    continue;
+
+                held = held == null ? name : held + ", " + name;
+            }
+
+            float height = held == null ? 48f : 68f;
 
             Rect box = new Rect(view.x, y, view.width, height);
+            bool over = Mouse.IsOver(box);
 
-            UIElementPainter.OutlineRounded(box, palette.Border, palette.PanelBackground);
+            UIElementPainter.OutlineRounded(box, over ? palette.Accent : palette.Border,
+                palette.PanelBackground);
+
+            // The stripe reads the same as it does on an offer: red when a clock is about to run out. Inset by
+            // a pixel so the card's outline stays unbroken around it.
+            Color stripe = row.ends == int.MaxValue
+                ? palette.Border
+                : row.ends <= GenDate.TicksPerDay
+                    ? palette.Danger
+                    : row.ends <= GenDate.TicksPerDay * 3
+                        ? palette.Warning
+                        : palette.Accent;
+
+            Widgets.DrawBoxSolid(new Rect(box.x + 1f, box.y + 1f, 3f, box.height - 2f), stripe);
 
             Rect inner = new Rect(box.x + 12f, box.y + 6f, box.width - 24f, box.height - 12f);
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y, inner.width * 0.6f, 22f), row.name, palette.TextPrimary,
-                GameFont.Small, QuestFaces.Condensed, QuestFaces.Size.Name);
+            float right = inner.xMax;
 
             if (!row.factions.NullOrEmpty())
             {
+                float width = Mathf.Min(inner.width * 0.4f,
+                    UITextControl.Width(row.factions, QuestFaces.Mono, QuestFaces.Size.Small) + 6f);
+
                 TextAnchor previousAnchor = Text.Anchor;
                 Color previousColor = GUI.color;
 
@@ -607,38 +863,48 @@ namespace Gideon.UIOverhaul.Features.Quests
                     Text.Anchor = TextAnchor.MiddleRight;
                     GUI.color = palette.TextSecondary;
 
-                    UITextControl.LabelEllipses(new Rect(inner.x + inner.width * 0.6f, inner.y,
-                        inner.width * 0.4f, 22f), row.factions, QuestFaces.Mono, QuestFaces.Size.Small);
+                    UITextControl.LabelEllipses(new Rect(inner.xMax - width, inner.y, width, 22f),
+                        row.factions, QuestFaces.Mono, QuestFaces.Size.Small);
                 }
                 finally
                 {
                     GUI.color = previousColor;
                     Text.Anchor = previousAnchor;
                 }
+
+                right = inner.xMax - width - 8f;
             }
 
-            float cursor = inner.y + 24f;
+            TabParts.RowLabel(new Rect(inner.x, inner.y, Mathf.Max(60f, right - inner.x), 22f), row.name,
+                palette.TextPrimary, GameFont.Small, QuestFaces.Condensed, QuestFaces.Size.Name);
 
-            if (row.reserved.Count == 0)
+            float cursor = inner.y + 22f;
+
+            Color when = row.ends == int.MaxValue
+                ? palette.TextDisabled
+                : row.ends <= GenDate.TicksPerDay * 3
+                    ? palette.Warning
+                    : palette.TextSecondary;
+
+            TabParts.RowLabel(new Rect(inner.x, cursor, inner.width, 20f), waiting, when, GameFont.Small,
+                QuestFaces.Body, QuestFaces.Size.Body);
+
+            cursor += 20f;
+
+            if (held != null)
             {
-                TabParts.RowLabel(new Rect(inner.x, cursor, inner.width, 20f), "Holding nobody",
-                    palette.TextDisabled, GameFont.Tiny, QuestFaces.Body, QuestFaces.Size.Body);
-
-                return box.yMax + RowGap;
-            }
-
-            for (int i = 0; i < row.reserved.Count; i++)
-            {
-                Pawn pawn = row.reserved[i];
-
-                TabParts.RowLabel(new Rect(inner.x, cursor, 70f, 20f), QuestFaces.Caps(i == 0 ? "Holding" : ""),
+                TabParts.RowLabel(new Rect(inner.x, cursor, 70f, 20f), QuestFaces.Caps("Holding"),
                     palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
 
-                TabParts.RowLabel(new Rect(inner.x + 76f, cursor, inner.width - 76f, 20f),
-                    UIGuard.Try("Quests.Held", () => pawn.LabelShortCap.ToString(), "?", null),
+                TabParts.RowLabel(new Rect(inner.x + 76f, cursor, inner.width - 76f, 20f), held,
                     palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+            }
 
-                cursor += 20f;
+            if (Widgets.ButtonInvisible(box))
+            {
+                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+
+                QuestFacts.Selected = row.quest;
             }
 
             return box.yMax + RowGap;
@@ -913,6 +1179,22 @@ namespace Gideon.UIOverhaul.Features.Quests
         // History
         // -------------------------------------------------------------------------------------------
 
+        /// <summary>Width of the outcome chip's column, so the chips line up rather than tracking their text.</summary>
+        private const float OutcomeColumn = 120f;
+
+        /// <summary>Width of the ended column.</summary>
+        private const float EndedColumn = 96f;
+
+        /// <summary>Width of the per-row remove control.</summary>
+        private const float BinColumn = 26f;
+
+        /// <summary>
+        /// The history, as a table with headed columns.
+        ///
+        /// <b>Headed, because three ragged columns are not a table.</b> Without headings the outcome chip and
+        /// the date read as decoration hanging off each name; with them the eye has something to run down, which
+        /// is the entire reason to list forty finished quests rather than summarise them.
+        /// </summary>
         private static float HistoryList(Rect view, float y, UIColorPaletteDef palette)
         {
             QuestFacts.History(Finished);
@@ -920,17 +1202,150 @@ namespace Gideon.UIOverhaul.Features.Quests
             if (Finished.Count == 0)
                 return TabParts.Line(view, y + 20f, "Nothing has finished yet.", palette.TextDisabled);
 
+            y = Sweep(view, y, palette);
+
+            float top = y;
+            float capHeight = 24f;
+
+            Rect cap = new Rect(view.x, y, view.width, capHeight);
+
+            UIElementPainter.FillRounded(cap,
+                UIElementPainter.Composite(palette.PanelBackground, palette.HoverOverlay));
+
+            Color previousLine = GUI.color;
+
+            GUI.color = palette.Border;
+            Widgets.DrawLineHorizontal(cap.x, cap.yMax, cap.width);
+            GUI.color = previousLine;
+
+            TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
+                QuestFaces.Caps("Finished"), palette.TextSecondary, GameFont.Tiny, QuestFaces.Mono,
+                QuestFaces.Size.BlockHead);
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.LabelEllipses(new Rect(cap.x + 10f, cap.y, cap.width - 20f, capHeight),
+                    QuestFaces.Caps("Most recent first"), QuestFaces.Mono, QuestFaces.Size.BlockHead);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            y = cap.yMax;
+
+            y = HistoryHead(view, y, palette);
+
             for (int i = 0; i < Finished.Count; i++)
                 y = HistoryOne(view, y, Finished[i], palette);
 
-            return y;
+            Color previousFrame = GUI.color;
+
+            GUI.color = palette.Border;
+            Widgets.DrawBox(new Rect(view.x, top, view.width, y - top));
+            GUI.color = previousFrame;
+
+            return y + RowGap;
+        }
+
+        /// <summary>
+        /// The button that clears out finished quests, and the count it will and will not take.
+        ///
+        /// <b>It says what it will leave behind before you press it.</b> A sweep that silently does less than
+        /// its label promises is worse than one that refuses: the label is the only thing telling you whether
+        /// the save was really cleaned. Chained quests are counted separately and named in the tooltip.
+        ///
+        /// <b>Confirmed, because it cannot be undone.</b> Removing a quest drops it from the save; there is no
+        /// bin to fish it back out of, so it gets a confirmation rather than a bare click.
+        /// </summary>
+        private static float Sweep(Rect view, float y, UIColorPaletteDef palette)
+        {
+            int removable;
+            int chained;
+
+            QuestHistory.Sweepable(out removable, out chained);
+
+            Rect band = new Rect(view.x, y, view.width, 30f);
+            Rect button = new Rect(band.x, band.y, 150f, 28f);
+
+            string tip = removable == 0
+                ? "Nothing here can be removed."
+                : "Removes " + removable + " finished "
+                  + (removable == 1 ? "quest" : "quests")
+                  + " from the save for good."
+                  + (chained > 0
+                      ? "\n\n" + chained + (chained == 1 ? " quest is" : " quests are")
+                        + " part of a chain and will be left. Removing one end of a chain would leave the "
+                        + "other pointing at nothing."
+                      : string.Empty);
+
+            if (TabParts.Button(button, "Remove all", palette, removable > 0, false, tip))
+            {
+                int count = removable;
+
+                Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                    "Remove " + count + " finished " + (count == 1 ? "quest" : "quests")
+                    + " from this save?\n\nThis cannot be undone."
+                    + (chained > 0
+                        ? "\n\n" + chained + (chained == 1 ? " quest is" : " quests are")
+                          + " part of a chain and will be kept."
+                        : string.Empty),
+                    () => QuestHistory.Sweep(), true));
+            }
+
+            string note = chained > 0
+                ? chained + (chained == 1 ? " quest is" : " quests are") + " chained and will be kept"
+                : removable > 0 ? "All of these can be removed" : null;
+
+            if (!note.NullOrEmpty())
+            {
+                TabParts.RowLabel(new Rect(button.xMax + 10f, band.y, band.width - button.width - 10f, 28f),
+                    note, palette.TextDisabled, GameFont.Tiny, QuestFaces.Body, QuestFaces.Size.Small);
+            }
+
+            return band.yMax + RowGap;
+        }
+
+        /// <summary>The column headings, in the same small caps the block heading uses.</summary>
+        private static float HistoryHead(Rect view, float y, UIColorPaletteDef palette)
+        {
+            const float height = 22f;
+
+            Rect band = new Rect(view.x + 10f, y, view.width - 20f, height);
+
+            float ended = band.xMax - BinColumn - EndedColumn;
+            float outcome = ended - OutcomeColumn;
+
+            TabParts.RowLabel(new Rect(band.x, band.y, outcome - band.x - 8f, height), QuestFaces.Caps("Quest"),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
+
+            TabParts.RowLabel(new Rect(outcome, band.y, OutcomeColumn, height), QuestFaces.Caps("Outcome"),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
+
+            TabParts.RowLabel(new Rect(ended, band.y, EndedColumn, height), QuestFaces.Caps("Ended"),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Label);
+
+            Color previous = GUI.color;
+
+            GUI.color = palette.Border;
+            Widgets.DrawLineHorizontal(band.x, band.yMax, band.width);
+            GUI.color = previous;
+
+            return band.yMax + 2f;
         }
 
         private static float HistoryOne(Rect view, float y, HistoryRow row, UIColorPaletteDef palette)
         {
             const float height = 26f;
 
-            Rect band = new Rect(view.x, y, view.width, height);
+            Rect band = new Rect(view.x + 10f, y, view.width - 20f, height);
 
             if (Mouse.IsOver(band))
                 UIElementPainter.FillRounded(band, palette.HoverOverlay);
@@ -941,36 +1356,84 @@ namespace Gideon.UIOverhaul.Features.Quests
                     ? palette.Danger
                     : palette.TextDisabled;
 
-            float chip = TabParts.PillWidth(QuestFaces.Caps(row.outcome), 9999f, QuestFaces.Mono,
+            float ended = band.xMax - BinColumn - EndedColumn;
+            float outcome = ended - OutcomeColumn;
+
+            TabParts.RowLabel(new Rect(band.x, band.y, outcome - band.x - 8f, height), row.name,
+                palette.TextPrimary, GameFont.Small, QuestFaces.Condensed, QuestFaces.Size.Name);
+
+            // Placed at the column's left edge rather than sized to the row, so a column of chips has one edge
+            // to read down instead of a ragged one that tracks the length of each word.
+            float chip = TabParts.PillWidth(QuestFaces.Caps(row.outcome), OutcomeColumn - 8f, QuestFaces.Mono,
                 QuestFaces.Size.Chip);
 
-            TabParts.Pill(band, band.xMax - chip, band.y + 3f, QuestFaces.Caps(row.outcome), tint, palette,
-                chip, null, QuestFaces.Mono, QuestFaces.Size.Chip);
+            TabParts.Pill(band, outcome, band.y + 3f, QuestFaces.Caps(row.outcome), tint, palette, chip, null,
+                QuestFaces.Mono, QuestFaces.Size.Chip);
 
-            string ago = QuestFacts.Period(row.ago) + " ago";
-            float agoWidth = UITextControl.Width(ago, QuestFaces.Mono, QuestFaces.Size.Small) + 10f;
+            TabParts.RowLabel(new Rect(ended, band.y, EndedColumn, height), Ended(row.ago),
+                palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono, QuestFaces.Size.Small);
 
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
+            Bin(new Rect(band.xMax - BinColumn + 4f, band.y + 4f, 18f, 18f), row.quest, palette);
+
+            return band.yMax + 1f;
+        }
+
+        /// <summary>
+        /// The colony day a quest ended on.
+        ///
+        /// <b>A date rather than an age.</b> "58 days ago" is a number you have to subtract from today to place
+        /// against anything else you remember; a day number is the same figure the rest of the game speaks in.
+        /// </summary>
+        private static string Ended(int ago)
+        {
+            return UIGuard.Try("Quests.EndedDay", () =>
+            {
+                int day = GenDate.DaysPassed - Mathf.FloorToInt(ago / (float) GenDate.TicksPerDay);
+
+                return "day " + Mathf.Max(0, day);
+            }, "--", null);
+        }
+
+        /// <summary>
+        /// The per-row remove control.
+        ///
+        /// <b>Disabled rather than absent on a chained quest,</b> with the reason on it. An absent control on
+        /// some rows and not others reads as a rendering fault; a greyed one that explains itself reads as a
+        /// rule.
+        /// </summary>
+        private static void Bin(Rect rect, Quest quest, UIColorPaletteDef palette)
+        {
+            bool can = QuestHistory.Removable(quest);
+            string blocked = QuestHistory.Blocked(quest);
+
+            Color previous = GUI.color;
 
             try
             {
-                Text.Anchor = TextAnchor.MiddleRight;
-                GUI.color = palette.TextDisabled;
+                GUI.color = !can
+                    ? palette.TextDisabled
+                    : Mouse.IsOver(rect)
+                        ? palette.Danger
+                        : palette.TextSecondary;
 
-                UITextControl.LabelEllipses(new Rect(band.xMax - chip - agoWidth - 8f, band.y, agoWidth, height),
-                    ago, QuestFaces.Mono, QuestFaces.Size.Small);
+                Text.Anchor = TextAnchor.MiddleCenter;
+
+                UITextControl.Label(rect, "x", QuestFaces.Mono, QuestFaces.Size.Body);
+
+                Text.Anchor = TextAnchor.UpperLeft;
             }
             finally
             {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
+                GUI.color = previous;
             }
 
-            TabParts.RowLabel(new Rect(band.x, band.y, band.width - chip - agoWidth - 16f, height), row.name,
-                palette.TextPrimary, GameFont.Small, QuestFaces.Condensed, QuestFaces.Size.Name);
+            TooltipHandler.TipRegion(rect, (TipSignal) (blocked
+                ?? "Remove this quest from the save for good. This cannot be undone."));
 
-            return band.yMax + 2f;
+            if (!can || !Widgets.ButtonInvisible(rect))
+                return;
+
+            QuestHistory.Remove(quest);
         }
     }
 }
