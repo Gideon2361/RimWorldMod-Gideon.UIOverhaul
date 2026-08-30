@@ -2559,22 +2559,33 @@ namespace Gideon.UIOverhaul.Features.Options
         /// feature so the next optional addition has somewhere to go.
         /// </summary>
         /// <summary>
-        /// Things the game does to you that this mod can stop doing.
+        /// Settings that save the player work, or save them a mistake.
         ///
-        /// <b>Its own category rather than a group inside Additional Features,</b> added 2026-08-23. That
-        /// category is for things this mod <em>adds</em> -- an overlay, a radius, a designation it issues for you
-        /// -- and every one of its toggles turns a new behaviour on. These take something away instead: an
-        /// interruption the game insists on, or a refusal it makes on the player's behalf. A player hunting for
-        /// the setting that stops the research popup is not looking under a heading called Additional Features.
+        /// <b>Its own category rather than a group inside Additional Features,</b> added 2026-08-23. Somebody
+        /// hunting for the setting that stops the research popup is not looking under a heading called
+        /// Additional Features, and the heading names a kind rather than a feature so the next one worth having
+        /// has an obvious home.
         ///
-        /// <b>The livestock area setting moved here on Aaron's call,</b> and it is the case that shows the line is
-        /// about direction rather than about size. It reads both ways -- it grants livestock an ability they did
-        /// not have -- but what it actually does is lift RimWorld's refusal to give a roaming animal an area, and
-        /// a refusal lifted belongs with the other refusals. It is still the one setting in this mod that changes
+        /// <b>The dividing line was redrawn on 2026-08-30, and it is worth saying what it used to be.</b> This
+        /// category was originally for things that <em>take something away</em> -- an interruption the game
+        /// insists on, or a refusal it makes on the player's behalf -- with Additional Features holding
+        /// everything the mod <em>adds</em>. That rule was about direction, and direction turned out to be the
+        /// wrong test: the ore overlay, the blast ring, the blight designation and the panel describing an
+        /// offered pawn all add something, and every one of them is the kind of thing a player goes looking for
+        /// under Quality of Life. Aaron moved all five across, and the rule that fits what is now here is about
+        /// effort rather than direction.
+        ///
+        /// <b>So: does the setting spare the player work they would otherwise do by hand, or a mistake they
+        /// would otherwise make?</b> Cutting blighted crops one at a time is work. Hovering cell by cell for ore
+        /// is work. Siting a chemfuel pile without knowing the blast radius is a mistake waiting to happen, and
+        /// so is judging a stranger a quest offers you from a single line of prose. Additional Features is now
+        /// the narrower heading, holding new interface surface: a window, an overlay you read rather than act
+        /// on, an editor.
+        ///
+        /// <b>The livestock area setting is still the case that tests the boundary,</b> and it stays here. It
+        /// reads as granting an ability RimWorld withholds, but what it does is lift a refusal to give a roaming
+        /// animal an area, and the work it saves is real. It remains the one setting in this mod that changes
         /// what pawns are allowed to do, which is why it alone starts switched off.
-        ///
-        /// The heading names a kind rather than a feature, so the next interruption worth silencing has an
-        /// obvious home and nobody has to widen a category to fit it.
         /// </summary>
         private void DrawQualityOfLifeSection(Rect view, ref float y, UIColorPaletteDef palette,
             UIOverhaulSettingsFile settings)
@@ -2583,8 +2594,8 @@ namespace Gideon.UIOverhaul.Features.Options
 
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(0f, y, view.width, 40f),
-                "Interruptions RimWorld hands you and refusals it makes on your behalf, that this mod can take "
-                + "back. Each is switched separately, and switching one off never affects the rest.");
+                "Busywork RimWorld leaves you to do by hand, interruptions it hands you, and things it knows "
+                + "and does not say. Each is switched separately, and switching one off never affects the rest.");
             y += 44f;
             GUI.color = palette.TextPrimary;
 
@@ -2694,20 +2705,55 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "out.\n\nRimWorld already does this for quest lodgers and for nobles whose title excuses them. "
                 + "This carries the same rule to everyone else it applies to.\n\nSlaves still count. A slave "
                 + "with nothing to do is the same problem as a colonist with nothing to do.");
+
+            GroupLabel(view, ref y, palette, "Plants");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Mark blighted crops for cutting",
+                settings.autoCutBlightedPlants, value => settings.autoCutBlightedPlants = value,
+                "The moment a crop catches blight it is designated to be cut, wherever it is: in the field, in a "
+                + "hydroponics basin, or one plant in the middle of a healthy row.\n\nA blighted plant yields "
+                + "nothing at all, and it spreads to its neighbours while it stands, so cutting it is the only "
+                + "answer the game has. This saves you finding them among the healthy plants and dragging over "
+                + "each one.\n\nA pending harvest order on the plant is replaced, since it cannot yield. A plant "
+                + "you have set to never be cut is left alone. Blight already on the map when you switch this on "
+                + "is left alone too; from then on, new blight is marked.");
+
             y += 8f;
-        }
 
-        private void DrawAdditionalFeaturesSection(Rect view, ref float y, UIColorPaletteDef palette,
-            UIOverhaulSettingsFile settings)
-        {
-            SectionHeader(view, ref y, "Additional Features", palette);
 
-            GUI.color = palette.TextSecondary;
-            Widgets.Label(new Rect(0f, y, view.width, 40f),
-                "Things this mod adds on top of restyling what RimWorld already has. Each can be switched off "
-                + "on its own, and switching one off never affects the rest.");
-            y += 44f;
-            GUI.color = palette.TextPrimary;
+            GroupLabel(view, ref y, palette, "On the map");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Highlight ore while the mine tool is out",
+                settings.showMineableOverlay, value => settings.showMineableOverlay = value,
+                "Shades every ore vein on the map in the colour of what it yields, but only while the Mine or "
+                + "Mine vein tool is selected.\n\nRimWorld draws ore as rock with a slightly different texture, "
+                + "which at anything but full zoom is no difference at all, so finding the compacted steel in a "
+                + "mountain means hovering cell by cell.\n\nPlain stone is not shaded: on a mountain map that "
+                + "would be the same as shading nothing.");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Ring the blast radius of explosives",
+                settings.showBlastRadius, value => settings.showBlastRadius = value,
+                "Draws the blast radius on the ground whenever you select something that can explode: an IED, a "
+                + "shell rack, a chemfuel pile, a fuelled generator, a boomalope.\n\nThe number is on the info "
+                + "card and nowhere on the map, which is where you decide how far from the wall to stack the "
+                + "chemfuel.\n\nThe ring is the real radius, not the one printed on the item: a stack of shells "
+                + "and a tank with fuel in it both blow up bigger than one of them would, and the ring grows to "
+                + "match.");
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "Offers");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Describe pawns you are offered",
+                settings.pawnDetailsOnOffers, value => settings.pawnDetailsOnOffers = value,
+                "Puts a panel of skills, traits and refused work beside the letters that offer you a person: a "
+                + "wanderer asking to join, a refugee at the door, a creepjoiner, a ransom demand, and the quest "
+                + "reward that asks you to pick one of three.\n\nVanilla gives you the prose of the letter and a "
+                + "row of names. Choosing between three strangers by name alone means accepting one, opening "
+                + "their Bio tab, and finding out.\n\nDisplay only. The buttons, the offer and what happens next "
+                + "are RimWorld's.");
+
+            y += 8f;
 
             if (ModsConfig.IdeologyActive)
             {
@@ -2726,6 +2772,21 @@ namespace Gideon.UIOverhaul.Features.Options
 
                 y += 8f;
             }
+
+            y += 8f;
+        }
+
+        private void DrawAdditionalFeaturesSection(Rect view, ref float y, UIColorPaletteDef palette,
+            UIOverhaulSettingsFile settings)
+        {
+            SectionHeader(view, ref y, "Additional Features", palette);
+
+            GUI.color = palette.TextSecondary;
+            Widgets.Label(new Rect(0f, y, view.width, 40f),
+                "Things this mod adds on top of restyling what RimWorld already has. Each can be switched off "
+                + "on its own, and switching one off never affects the rest.");
+            y += 44f;
+            GUI.color = palette.TextPrimary;
 
             GroupLabel(view, ref y, palette, "Overlays");
 
@@ -2775,23 +2836,6 @@ namespace Gideon.UIOverhaul.Features.Options
                 "Marks a bill red in the bills window when no colonist is allowed to start it, whether because "
                 + "of its skill range, its worker restriction, or the work type being switched off for "
                 + "everybody.\n\nDisplay only. Nothing is ever suspended, altered or reassigned because of it.");
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Highlight ore while the mine tool is out",
-                settings.showMineableOverlay, value => settings.showMineableOverlay = value,
-                "Shades every ore vein on the map in the colour of what it yields, but only while the Mine or "
-                + "Mine vein tool is selected.\n\nRimWorld draws ore as rock with a slightly different texture, "
-                + "which at anything but full zoom is no difference at all, so finding the compacted steel in a "
-                + "mountain means hovering cell by cell.\n\nPlain stone is not shaded: on a mountain map that "
-                + "would be the same as shading nothing.");
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Ring the blast radius of explosives",
-                settings.showBlastRadius, value => settings.showBlastRadius = value,
-                "Draws the blast radius on the ground whenever you select something that can explode: an IED, a "
-                + "shell rack, a chemfuel pile, a fuelled generator, a boomalope.\n\nThe number is on the info "
-                + "card and nowhere on the map, which is where you decide how far from the wall to stack the "
-                + "chemfuel.\n\nThe ring is the real radius, not the one printed on the item: a stack of shells "
-                + "and a tank with fuel in it both blow up bigger than one of them would, and the ring grows to "
-                + "match.");
 
             y += 8f;
 
@@ -2850,20 +2894,6 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += 8f;
 
-            GroupLabel(view, ref y, palette, "Plants");
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Mark blighted crops for cutting",
-                settings.autoCutBlightedPlants, value => settings.autoCutBlightedPlants = value,
-                "The moment a crop catches blight it is designated to be cut, wherever it is: in the field, in a "
-                + "hydroponics basin, or one plant in the middle of a healthy row.\n\nA blighted plant yields "
-                + "nothing at all, and it spreads to its neighbours while it stands, so cutting it is the only "
-                + "answer the game has. This saves you finding them among the healthy plants and dragging over "
-                + "each one.\n\nA pending harvest order on the plant is replaced, since it cannot yield. A plant "
-                + "you have set to never be cut is left alone. Blight already on the map when you switch this on "
-                + "is left alone too; from then on, new blight is marked.");
-
-            y += 8f;
-
             GroupLabel(view, ref y, palette, "Pawns");
 
             WidgetToggle(view, ref y, palette, settings, Indent, "Enable the character editor",
@@ -2876,15 +2906,6 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "is not a way to give somebody Shooting 20.\n\nWith it off the button does not exist -- not a "
                 + "greyed one, an absent one. Nothing is patched and nothing is watching. Changes you made while "
                 + "it was on are already part of your colony and stay that way.");
-
-            WidgetToggle(view, ref y, palette, settings, Indent, "Describe pawns you are offered",
-                settings.pawnDetailsOnOffers, value => settings.pawnDetailsOnOffers = value,
-                "Puts a panel of skills, traits and refused work beside the letters that offer you a person: a "
-                + "wanderer asking to join, a refugee at the door, a creepjoiner, a ransom demand, and the quest "
-                + "reward that asks you to pick one of three.\n\nVanilla gives you the prose of the letter and a "
-                + "row of names. Choosing between three strangers by name alone means accepting one, opening "
-                + "their Bio tab, and finding out.\n\nDisplay only. The buttons, the offer and what happens next "
-                + "are RimWorld's.");
 
             GUI.color = palette.TextSecondary;
             Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
