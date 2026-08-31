@@ -348,10 +348,30 @@ namespace Gideon.UIOverhaul.Features.Power
             return Mathf.Max(left, right);
         }
 
+        /// <summary>How many rows each of the two lists shows before it scrolls.</summary>
+        private const int ListRows = 10;
+
+        private const float ListRow = 22f;
+
+        private static Vector2 makerScroll;
+        private static Vector2 takerScroll;
+
+        /// <summary>
+        /// One side of the make-and-take pair, ten rows tall whatever it holds.
+        ///
+        /// <b>Both sides are the same height on purpose.</b> Sized to their contents they staggered badly: a
+        /// colony with three generators and eighteen kinds of consumer got a short box beside a very tall one,
+        /// with the block under them starting at the bottom of the taller. Two columns that start and end
+        /// together read as a comparison, which is what they are.
+        ///
+        /// <b>Ten rows, then it scrolls.</b> Ten is enough for every producer any colony has and for the
+        /// consumers worth acting on, which are the ones at the top; the tail is reachable rather than
+        /// dropped, and neither list dictates how tall the screen is.
+        /// </summary>
         private static float List(Rect view, float y, string title, List<DrawRow> rows, bool makers,
             UIColorPaletteDef palette)
         {
-            float height = 30f + Mathf.Max(1, rows.Count) * 22f + 8f;
+            float height = 30f + ListRows * ListRow + 8f;
 
             Rect box = new Rect(view.x, y, view.width, height);
 
@@ -389,23 +409,38 @@ namespace Gideon.UIOverhaul.Features.Power
                 Text.Anchor = previousAnchor;
             }
 
-            float cursor = cap.yMax + 4f;
-
             if (rows.Count == 0)
             {
-                TabParts.RowLabel(new Rect(box.x + 12f, cursor, box.width - 24f, 20f),
+                TabParts.RowLabel(new Rect(box.x + 12f, cap.yMax + 4f, box.width - 24f, 20f),
                     makers ? "Nothing here generates." : "Nothing here draws.", palette.TextDisabled,
                     GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
 
                 return box.yMax + RowGap;
             }
 
+            Rect outer = new Rect(box.x, cap.yMax + 4f, box.width, box.yMax - cap.yMax - 8f);
+
+            bool overflows = rows.Count > ListRows;
+
+            // The view is only narrowed when it actually scrolls, so a list of three does not leave a strip of
+            // empty gutter down its right side pretending a bar is missing.
+            Rect inner = new Rect(0f, 0f, outer.width - (overflows ? 18f : 0f), rows.Count * ListRow);
+
+            if (makers)
+                Widgets.BeginScrollView(outer, ref makerScroll, inner);
+            else
+                Widgets.BeginScrollView(outer, ref takerScroll, inner);
+
             // The bar is share of the largest rather than share of the total: against the total the top row is
             // the only visible bar, and the shape of the list is exactly what makes it worth drawing.
             float biggest = Mathf.Max(1f, Mathf.Abs(rows[0].watts));
 
+            float cursor = 0f;
+
             for (int i = 0; i < rows.Count; i++)
-                cursor = Row(box, cursor, rows[i], biggest, makers, palette);
+                cursor = Row(inner, cursor, rows[i], biggest, makers, palette);
+
+            Widgets.EndScrollView();
 
             return box.yMax + RowGap;
         }
