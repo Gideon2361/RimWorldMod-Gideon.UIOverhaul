@@ -172,7 +172,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             Texture2D glyph = null;
 
             UIGuard.Try("Console.Glyph",
-                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/LoadingConsole", false),
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Waterfall", false),
                 "The loading console has no glyph this session. Everything on the window still reads.");
 
             Glyph = glyph;
