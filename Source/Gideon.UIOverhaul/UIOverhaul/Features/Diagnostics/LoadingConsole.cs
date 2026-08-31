@@ -122,6 +122,23 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// <summary>Point size of a verdict cell's headline figure, which is the largest thing on the panel.</summary>
         private const float VerdictPoints = 12.75f;
 
+        /// <summary>
+        /// The face this window's own name is set in.
+        ///
+        /// <b>Oswald in the accent color, which is how every screen in the mod names itself.</b> The
+        /// ideoligion, quest and power tabs all put their name in this face and this color, and the console
+        /// was still naming itself with a bare <c>Widgets.Label</c> in RimWorld's font. That is the one line
+        /// on the window a reader looks at first, so it was also the line most likely to make a screen that
+        /// belongs to this mod read as though it belonged to the game.
+        /// </summary>
+        private const UIFace Display = UIFace.Oswald;
+
+        /// <summary>
+        /// Point size of the window's name. The same figure the tabs use for theirs, so the two are the same
+        /// size on screen rather than merely both being called a title.
+        /// </summary>
+        private const float TitlePoints = 15.75f;
+
         /// <summary>How far a step or definition is indented under the phase it belongs to.</summary>
         private const float StepIndent = 12f;
 
@@ -745,11 +762,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             try
             {
-                Text.Font = GameFont.Small;
                 Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = palette.TextPrimary;
+                GUI.color = palette.Accent;
 
-                Widgets.Label(rect, "Loading console");
+                UITextControl.Label(rect, "Loading console", Display, TitlePoints);
 
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = palette.TextSecondary;
