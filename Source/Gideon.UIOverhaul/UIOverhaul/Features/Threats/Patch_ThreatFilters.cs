@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Gideon.UIFramework.Helpers;
@@ -64,14 +65,8 @@ namespace Gideon.UIOverhaul.Features.Threats
     /// A postfix rather than a prefix, so the answer is only ever narrowed: a strategy vanilla has already ruled
     /// out for its own reasons is never talked back into being available.
     /// </summary>
-    [HarmonyPatch]
     internal static class Patch_RaidStrategyWorker_CanUseWith
     {
-        private static IEnumerable<MethodBase> TargetMethods()
-        {
-            return Declarations(typeof(RaidStrategyWorker), "CanUseWith");
-        }
-
         public static void Postfix(RaidStrategyWorker __instance, IncidentParms parms,
             PawnGroupKindDef groupKind, ref bool __result)
         {
@@ -121,15 +116,8 @@ namespace Gideon.UIOverhaul.Features.Threats
     /// The same shape as the strategy filter above, and for the same reason: <c>CanUseWith</c> is virtual here
     /// too.
     /// </summary>
-    [HarmonyPatch]
     internal static class Patch_PawnsArrivalModeWorker_CanUseWith
     {
-        private static IEnumerable<MethodBase> TargetMethods()
-        {
-            return Patch_RaidStrategyWorker_CanUseWith.Declarations(typeof(PawnsArrivalModeWorker),
-                "CanUseWith");
-        }
-
         public static void Postfix(PawnsArrivalModeWorker __instance, IncidentParms parms, ref bool __result)
         {
             if (!__result || !ThreatToggles.Any)
@@ -137,6 +125,97 @@ namespace Gideon.UIOverhaul.Features.Threats
 
             if (ThreatToggles.Refuse(__instance?.def, parms))
                 __result = false;
+        }
+    }
+    /// <summary>
+    /// The raid strategy filter, applied by hand after the defs are in rather than by <c>PatchAll</c>.
+    ///
+    /// <b>Two separate faults made this necessary, and they compound.</b>
+    ///
+    /// <b>One: preparing a method runs its type's static constructor.</b> Harmony has to build a wrapper
+    /// around the target, and building it initialises the declaring type. Our patches are applied from the
+    /// mod's constructor, which RimWorld runs in <c>CreateModClasses</c> -- before any def exists. A modded
+    /// strategy whose static constructor touches a def therefore throws a null reference the moment we go
+    /// near it, through no fault of its own: it was written to be initialised at a normal time, and we
+    /// arrived early. Vanilla Factions Expanded's deserter strategy is one such, reported on 2026-08-30.
+    ///
+    /// <b>Two: one bad target killed every other one.</b> The class asked <c>PatchAll</c> to apply a list of
+    /// targets in a single call, so a failure on any one of them aborted the lot and the switches stopped
+    /// working for vanilla strategies too.
+    ///
+    /// <b>So it is applied late and one at a time.</b> Late, because by then the defs are loaded and the
+    /// static constructor that was throwing now succeeds, which keeps the feature working for that mod
+    /// rather than merely surviving it. One at a time, because a type that still cannot be prepared should
+    /// cost its own strategy and nothing else.
+    ///
+    /// <b>And overrides are patched, not just the base.</b> A Harmony patch on a virtual method does not run
+    /// for an override that never calls base, so patching only <c>RaidStrategyWorker.CanUseWith</c> would
+    /// quietly ignore every modded strategy -- which is the whole set this is trying to filter.
+    /// </summary>
+    [StaticConstructorOnStartup]
+    internal static class ThreatStrategyPatch
+    {
+        static ThreatStrategyPatch()
+        {
+            UIGuard.Try("Threats.ApplyStrategyPatch", Apply,
+                "Raid strategies are not filtered this session. The incident switches still work, and every "
+                + "other part of this mod is unaffected.");
+        }
+
+        private static void Apply()
+        {
+            Harmony harmony = new Harmony(UIOverhaulMod.HarmonyId);
+
+            int skipped = 0;
+
+            skipped += Batch(harmony, typeof(RaidStrategyWorker),
+                AccessTools.DeclaredMethod(typeof(Patch_RaidStrategyWorker_CanUseWith), "Postfix"));
+
+            skipped += Batch(harmony, typeof(PawnsArrivalModeWorker),
+                AccessTools.DeclaredMethod(typeof(Patch_PawnsArrivalModeWorker_CanUseWith), "Postfix"));
+
+            if (skipped > 0)
+            {
+                Log.Warning(UILogTag.Prefix + skipped + " raid method(s) could not be patched. Each was "
+                            + "reported above with the type it belongs to.");
+            }
+        }
+
+        /// <summary>
+        /// One family of CanUseWith overrides, patched one at a time.
+        ///
+        /// <b>Individually, so a type that cannot be prepared costs only itself.</b> Applied as one batch, a
+        /// single modded strategy taking Harmony down with it left vanilla's strategies unfiltered too.
+        /// </summary>
+        private static int Batch(Harmony harmony, Type root, MethodInfo postfix)
+        {
+            if (postfix == null)
+            {
+                UIGuard.Report("Threats.NoPostfix", new MissingMethodException(root.Name + " postfix"),
+                    "Raids of that kind are not filtered this session.");
+
+                return 1;
+            }
+
+            HarmonyMethod wrapped = new HarmonyMethod(postfix);
+            int skipped = 0;
+
+            foreach (MethodBase target in Patch_RaidStrategyWorker_CanUseWith.Declarations(root, "CanUseWith"))
+            {
+                MethodBase one = target;
+
+                // Named for the declaring type, so a report says which strategy could not be reached rather
+                // than only that something could not.
+                string where = one.DeclaringType != null ? one.DeclaringType.Name : "unknown";
+
+                if (!UIGuard.Try("Threats.Target." + where,
+                        () => harmony.Patch(one, null, wrapped),
+                        "Raids using that strategy ignore the threat switches. Every other strategy is still "
+                        + "filtered."))
+                    skipped++;
+            }
+
+            return skipped;
         }
     }
 }
