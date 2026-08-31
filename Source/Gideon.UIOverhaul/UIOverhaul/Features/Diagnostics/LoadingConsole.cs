@@ -102,6 +102,26 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// <summary>Width of the elapsed-time column. Wide enough for three digits of seconds.</summary>
         private const float TimeColumn = 60f;
 
+        /// <summary>
+        /// The face every figure on this console is set in.
+        ///
+        /// <b>IBM Plex Mono, which is what the rest of the mod uses for figures.</b> The mockup for this
+        /// screen named Cascadia Mono, and it is a fine face, but the ideoligion, quest and power tabs all
+        /// count in Plex; a fourth screen counting in something else would be the only place in the mod where
+        /// a column of numbers looks like it came from somewhere else. Aaron called it on 2026-08-31.
+        ///
+        /// <b>Tabular figures are the point of a mono here.</b> These columns are read down, not across, and
+        /// a digit that shifts sideways between rows makes a column unreadable even when every value in it is
+        /// right.
+        /// </summary>
+        private const UIFace Figures = UIFace.IBMPlexMono;
+
+        /// <summary>Point size of a figure in the phase table and the header.</summary>
+        private const float FigurePoints = 11f;
+
+        /// <summary>Point size of a verdict cell's headline figure, which is the largest thing on the panel.</summary>
+        private const float VerdictPoints = 17f;
+
         /// <summary>How far a step or definition is indented under the phase it belongs to.</summary>
         private const float StepIndent = 12f;
 
@@ -740,7 +760,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 // Same reason as the last phase span: the clock runs until a game starts, so reporting it here
                 // would tell the reader their load took as long as they have been sitting on the main menu.
-                Widgets.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds));
+                UITextControl.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds), Figures,
+                    FigurePoints);
             }
             finally
             {
@@ -829,9 +850,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 GUI.color = palette.TextDisabled;
                 Widgets.Label(new Rect(inner.x, inner.y, inner.width, line), label.ToUpperInvariant());
 
-                Text.Font = GameFont.Small;
                 GUI.color = tint;
-                Widgets.Label(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f), value);
+
+                UITextControl.Label(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f), value,
+                    Figures, VerdictPoints);
 
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextSecondary;
@@ -1100,7 +1122,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = palette.TextDisabled;
-            Widgets.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height), row.Seconds.ToString("F2"));
+
+            UITextControl.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height),
+                row.Seconds.ToString("F2"), Figures, FigurePoints);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1170,7 +1194,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 GUI.color = palette.TextSecondary;
                 Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(chip, row.Children.ToString());
+
+                UITextControl.Label(chip, row.Children.ToString(), Figures, FigurePoints);
+
                 Text.Anchor = TextAnchor.MiddleLeft;
             }
 
@@ -1181,8 +1207,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                     : row.Duration >= 1f ? palette.Warning
                     : palette.TextDisabled;
 
-                Widgets.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
-                    UILoadingLog.Duration(row.Duration));
+                UITextControl.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
+                    UILoadingLog.Duration(row.Duration), Figures, FigurePoints);
 
                 Text.Anchor = TextAnchor.MiddleLeft;
             }
@@ -1348,8 +1374,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 : span.Duration >= 1f ? palette.Warning
                 : palette.TextSecondary;
 
-            Widgets.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
-                UILoadingLog.Duration(span.Duration));
+            UITextControl.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
+                UILoadingLog.Duration(span.Duration), Figures, FigurePoints);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1894,8 +1920,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 ? dropped + " lines not kept"
                 : visible.Count + " of " + UILoadingLog.Count + " shown";
 
-            Widgets.Label(new Rect(clear.xMax + 6f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 6f),
-                rect.height), status);
+            UITextControl.Label(new Rect(clear.xMax + 6f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 6f),
+                rect.height), status, Figures, FigurePoints);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;

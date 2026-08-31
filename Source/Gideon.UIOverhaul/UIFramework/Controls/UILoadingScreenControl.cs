@@ -40,10 +40,15 @@ namespace Gideon.UIFramework.Controls
         /// <summary>
         /// The console's figure face: the step line, which is a path rather than a sentence.
         ///
-        /// The mockup sets paths, timings and footer figures in Cascadia Mono and everything else in the
-        /// sans. A step line is the first of those: "Loading defs: ThingDef_Wall" is a path being walked.
+        /// The mockup sets paths, timings and footer figures in the mono and everything else in the sans. A
+        /// step line is the first of those: "Loading defs: ThingDef_Wall" is a path being walked.
+        ///
+        /// <b>IBM Plex Mono, though the mockup named Cascadia.</b> Cascadia is a fine face and this was set
+        /// in it for a day, but the ideoligion, quest and power tabs all count in Plex, and the mod having
+        /// two monospaces means every screen has to be checked against the others to know which one it uses.
+        /// One mono is worth more than the better of two.
         /// </summary>
-        private const UIFace Mono = UIFace.CascadiaMono;
+        private const UIFace Mono = UIFace.IBMPlexMono;
 
         /// <summary>Point size of the stage line.</summary>
         protected const float StagePoints = 15f;
