@@ -346,7 +346,11 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
             if (Widgets.ButtonText(new Rect(rect.x + width + Gap, rect.y, width, rect.height),
                     "ClearAll".Translate()))
             {
-                filter.SetDisallowAll(forceHiddenDefs, forceHiddenFilters);
+                // The defs go in as the materialized set for speed; the filters go in exactly as the caller gave
+                // them. Clear all is vanilla ThingFilterUI code, and it passes the caller's exclusions rather
+                // than the unmatchable ones the tree hides, so substituting those here would quietly change
+                // which special filters a clear leaves switched on.
+                filter.SetDisallowAll(view.ForceHidden, forceHiddenFilters);
                 SoundDefOf.Checkbox_TurnedOff.PlayOneShotOnCamera();
             }
 
@@ -559,7 +563,7 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
                     Widgets.ToggleInvisibleDraggable(hit, ref on, true, true);
 
                     if (on != before)
-                        filter.SetAllow(row.Node.catDef, on, forceHiddenDefs, view.HiddenSpecials);
+                        filter.SetAllow(row.Node.catDef, on, view.ForceHidden, view.HiddenSpecials);
 
                     UIElementPainter.PaintCheckbox(switchRect, state, palette, false);
                     break;
