@@ -1,26 +1,24 @@
 # Typefaces
 
 **Interface text no longer uses baked atlases -- it ships as a Unity AssetBundle.** The headless project in
-`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/ui_overhaul_assets` as dynamic fonts,
+`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/assets` as dynamic fonts,
 which the engine renders itself: FreeType hinting at every size, bold and italic from tags, per-glyph fallback
-for characters a face lacks. The name is deliberately not about fonts, so textures can join them later without
-another rename.
+for characters a face lacks. The art travels in a second bundle, `textures`, described further down.
 
 ## The three rules the loader imposes
 
 `Verse.ModAssetBundlesHandler.ReloadAll` scans `AssetBundles/` and enforces all of this:
 
 1. **No extension, ever.** `IsAcceptableExtension` returns true only for an empty extension, and it filters
-   the directory listing before anything is opened. `ui_overhaul_assets.assets` or `.bundle` is not a bundle
+   the directory listing before anything is opened. `assets.assets` or `assets.bundle` is not a bundle
    that fails to load -- it is a file the game never looks at, silently.
 2. **Never end the name in `_win`, `_mac` or `_linux`.** Those are the OS specifiers; a name ending in one is
    loaded only on that platform and skipped everywhere else. Any other name loads on all three, which is what
-   we want, since font and texture data are platform agnostic. `ui_overhaul_assets` is safe -- it ends in
-   `_assets`.
+   we want, since font and texture data are platform agnostic. `assets` and `textures` are safe -- neither ends in an OS suffix.
 3. **Copy exactly one file out of the Unity output.** `BuildAssetBundles` also writes a root manifest bundle
    named after the output folder (`AssetBundles`), and that one is extensionless too, so copying the folder
    wholesale hands RimWorld a bundle of build bookkeeping to load. The `.manifest` files are ignored by rule 1
-   and are only useful to us -- `ui_overhaul_assets.manifest` lists what actually went in, which is the way to
+   and are only useful to us -- `textures.manifest` and `assets.manifest` lists what actually went in, which is the way to
    verify a bake, since the bundle itself is LZ4-compressed and shows no readable strings.
 
 ## Rebaking
@@ -43,14 +41,14 @@ TTF with the OS is invisible to an engine whose font list is sealed before mod c
 **Everything below concerns the baker and the baked atlases, which now serve only the floor labels and the
 research scripts.**
 
-Eleven families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
+Twelve families, all under the SIL Open Font License 1.1, plus the tool that turns them into something Unity can
 actually draw. Two are for the floor labels; three are the scripts the research tab writes undiscovered Anomaly
 projects in; one is a display face kept as a candidate; the rest are interface text.
 
 **What ships depends on the face.** The interface faces ship as real font files inside the AssetBundle; the
 floor label and research faces ship only as rasterized atlases. Either way no font is modified, and the OFL
 permits both bundling and rasterizing. The attributions live in `Gideon.UIOverhaul/THIRD-PARTY-NOTICES.txt`
-with the license reproduced once, since it is byte for byte identical in all eleven.
+with the license reproduced once, since it is byte for byte identical in all twelve.
 
 **The baker no longer bakes interface text.** It did until 2026-08-30, over everything a face covered and at
 32 rather than 64. That work moved to the bundle, and those sheets are deleted; what the baker still produces
@@ -67,6 +65,7 @@ is the floor labels and the research masks, each over a fixed set of code points
 | `Barlow/` | Barlow | Regular, SemiBold, Italic, SemiBold Italic | interface | OFL 1.1 |
 | `BarlowCondensed/` | Barlow Condensed | Regular, SemiBold, Bold, Italic, SemiBold Italic, Thin, Thin Italic | interface | OFL 1.1 |
 | `IBMPlexSans/` | IBM Plex Sans | Regular, SemiBold, Italic, SemiBold Italic | interface | OFL 1.1, Reserved Font Name "Plex" |
+| `SourceSans3/` | Source Sans 3 | Regular, Semibold, Italic, Semibold Italic | interface | OFL 1.1, Reserved Font Name "Source" |
 | `CascadiaMono/` | Cascadia Mono | Regular, from the variable font's default instance | interface, monospaced | OFL 1.1 |
 | `IBMPlexMono/` | IBM Plex Mono | Regular, SemiBold | interface, monospaced | OFL 1.1, Reserved Font Name "Plex" |
 
