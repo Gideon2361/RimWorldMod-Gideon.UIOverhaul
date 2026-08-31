@@ -255,77 +255,100 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         // Rail
         // -------------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The colony's faiths, then the ones it merely knows about.
+        ///
+        /// <b>Selecting writes vanilla's own selection,</b> so this screen, a pawn's bio panel and anything else
+        /// that reads <c>IdeoUIUtility.selected</c> stay in step.
+        /// </summary>
+        private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railDragOffset;
+
         private static void Rail(Rect rect, List<Ideo> here, List<Ideo> elsewhere, Ideo selected,
             UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
-            Rect view = rect.ContractedBy(6f);
-            float y = view.y + 2f;
+            List<UIRailElement> elements = new List<UIRailElement>();
+            List<Ideo> order = new List<Ideo>();
 
-            // The leading space is deliberate. The rail's rule runs the full width of the panel and the heading
-            // under it is drawn from the same x, so without it the first letter sits on the border. A space
-            // rather than an inset rect, because insetting the rect would carry the rule in with it.
-            y = TabParts.Heading(view, y, IdeoFaces.Caps(" In this colony"), palette, false, IdeoFaces.Mono,
-                IdeoFaces.Size.RailHead);
+            elements.Add(Caption("In this colony", palette));
 
             for (int i = 0; i < here.Count; i++)
-                y = Entry(view, y, here[i], selected, palette, true);
+                elements.Add(Row(here[i], selected, palette, true, order));
 
-            if (elsewhere.Count == 0)
+            if (elsewhere.Count > 0)
+            {
+                elements.Add(new UIRailDividerControl());
+                elements.Add(Caption("Known elsewhere", palette));
+
+                for (int i = 0; i < elsewhere.Count; i++)
+                    elements.Add(Row(elsewhere[i], selected, palette, false, order));
+            }
+
+            string current = null;
+
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (order[i] == selected)
+                    current = i.ToString();
+            }
+
+            string picked = UIRailControl.Draw(rect.ContractedBy(6f), elements, current, ref railScroll,
+                ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
                 return;
 
-            y += 8f;
-            y = TabParts.Heading(view, y, IdeoFaces.Caps(" Known elsewhere"), palette, true, IdeoFaces.Mono,
-                IdeoFaces.Size.RailHead, RuleGap);
+            int index;
 
-            for (int i = 0; i < elsewhere.Count; i++)
-                y = Entry(view, y, elsewhere[i], selected, palette, false);
+            if (!int.TryParse(picked, out index) || index < 0 || index >= order.Count)
+                return;
+
+            IdeoUIUtility.SetSelected(order[index]);
+
+            // Click rather than the rail's own tick: choosing a faith is a heavier act than filtering a list,
+            // and this screen has always said so.
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        private static UIRailSectionHeaderControl Caption(string label, UIColorPaletteDef palette)
+        {
+            return new UIRailSectionHeaderControl(IdeoFaces.Caps(label))
+            {
+                Face = IdeoFaces.Mono,
+                Points = IdeoFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            };
         }
 
         /// <summary>
-        /// One faith in the rail: its own colour as a swatch, its name, and its believer count.
-        ///
-        /// <b>Selecting writes vanilla's own selection,</b> so this screen, a pawn's bio panel and anything else
-        /// that reads <c>IdeoUIUtility.selected</c> stay in step.
+        /// One faith: its own colour as a mark, its name, and its believer count. A faith known only elsewhere
+        /// shows a dash rather than a zero, because nobody here believing it is different from counting none.
         /// </summary>
-        private static float Entry(Rect view, float y, Ideo ideo, Ideo selected, UIColorPaletteDef palette,
-            bool present)
+        private static UIRailClickableEntry Row(Ideo ideo, Ideo selected, UIColorPaletteDef palette,
+            bool present, List<Ideo> order)
         {
-            const float height = 26f;
-
-            Rect row = new Rect(view.x, y, view.width, height);
             bool on = ideo == selected;
+            Color mark = ideo.Color;
 
-            if (on)
-                UIElementPainter.FillRounded(row, palette.SelectionOverlay);
-            else if (Mouse.IsOver(row))
-                UIElementPainter.FillRounded(row, palette.HoverOverlay);
+            order.Add(ideo);
 
-            Rect swatch = new Rect(row.x + 5f, row.y + (height - 9f) * 0.5f, 9f, 9f);
-
-            Color previous = GUI.color;
-            GUI.color = ideo.Color;
-            GUI.DrawTexture(swatch, BaseContent.WhiteTex);
-            GUI.color = previous;
-
-            string count = present ? ideo.ColonistBelieverCountCached.ToString() : "-";
-            float countWidth = 24f;
-
-            TabParts.RowLabel(new Rect(row.xMax - countWidth - 4f, row.y, countWidth, height), count,
-                palette.TextDisabled, GameFont.Tiny, IdeoFaces.Mono, IdeoFaces.Size.RailCount);
-
-            TabParts.RowLabel(new Rect(swatch.xMax + 6f, row.y, row.width - 20f - countWidth - 12f, height),
-                ideo.name, on ? ideo.TextColor : present ? palette.TextPrimary : palette.TextDisabled,
-                GameFont.Small, IdeoFaces.Condensed, IdeoFaces.Size.RailName);
-
-            if (Widgets.ButtonInvisible(row))
+            return new UIRailClickableEntry(( order.Count - 1).ToString(), ideo.name)
             {
-                IdeoUIUtility.SetSelected(ideo);
-                SoundDefOf.Click.PlayOneShotOnCamera();
-            }
-
-            return y + height + RowGap;
+                Rise = 26f,
+                Face = IdeoFaces.Condensed,
+                Points = IdeoFaces.Size.RailName,
+                TextColor = on ? ideo.TextColor : present ? palette.TextPrimary : palette.TextDisabled,
+                Trailing = present ? ideo.ColonistBelieverCountCached.ToString() : "-",
+                CountFace = IdeoFaces.Mono,
+                CountPoints = IdeoFaces.Size.RailCount,
+                CountColor = palette.TextDisabled,
+                IconSize = 9f,
+                Glyph = (slot, color) => Widgets.DrawBoxSolid(slot, mark),
+                Silent = true
+            };
         }
 
         // -------------------------------------------------------------------------------------------

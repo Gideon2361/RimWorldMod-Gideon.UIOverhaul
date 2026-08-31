@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Inspector;
@@ -69,6 +70,8 @@ namespace Gideon.UIOverhaul.Features.Editor
         private EditorPanel panel;
 
         private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
 
         private Vector2 surfaceScroll;
 
@@ -352,30 +355,17 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// A dot marks the panels that move the render, so it is obvious before clicking that Appearance changes
         /// the picture and Skills does not.
         /// </summary>
+        /// <summary>
+        /// One row per editor panel, grouped, skipping the ones that do not apply to this pawn.
+        ///
+        /// <b>Resurrect is coloured as danger rather than filled differently,</b> so it reads as the one
+        /// destructive choice in the list while still being a row like any other.
+        /// </summary>
         private void Rail(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.PanelBackground);
 
-            Rect inner = rect.ContractedBy(6f);
-
-            float height = 0f;
-
-            for (int i = 0; i < EditorPanels.All.Length; i++)
-            {
-                if (!EditorPanels.Applies(EditorPanels.All[i], context))
-                    continue;
-
-                if (EditorPanels.GroupOf(EditorPanels.All[i], context.Dead) != null)
-                    height += RailGroupHeight;
-
-                height += RailRowHeight;
-            }
-
-            Rect view = new Rect(0f, 0f, inner.width - (height > inner.height ? 18f : 0f), height + 4f);
-
-            Widgets.BeginScrollView(inner, ref railScroll, view);
-
-            float y = 0f;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
             for (int i = 0; i < EditorPanels.All.Length; i++)
             {
@@ -388,123 +378,38 @@ namespace Gideon.UIOverhaul.Features.Editor
 
                 if (group != null)
                 {
-                    Group(new Rect(0f, y, view.width, RailGroupHeight), group, palette);
-
-                    y += RailGroupHeight;
+                    elements.Add(new UIRailSectionHeaderControl(group)
+                    {
+                        Rise = RailGroupHeight,
+                        Color = palette.TextDisabled
+                    });
                 }
-
-                Entry(new Rect(0f, y, view.width, RailRowHeight - 2f), which, palette);
-
-                y += RailRowHeight;
-            }
-
-            Widgets.EndScrollView();
-        }
-
-        private static void Group(Rect rect, string label, UIColorPaletteDef palette)
-        {
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.LowerLeft;
-                Text.WordWrap = false;
-                GUI.color = palette.TextDisabled;
-
-                UIRichText.Label(new Rect(rect.x + 4f, rect.y, rect.width - 8f, rect.height), label);
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-        }
-
-        private void Entry(Rect rect, EditorPanel which, UIColorPaletteDef palette)
-        {
-            bool on = panel == which;
-            bool over = Mouse.IsOver(rect);
-            bool danger = which == EditorPanel.Resurrect;
-
-            if (on)
-                UIElementPainter.FillRounded(rect, danger ? palette.Danger : palette.Accent);
-            else if (over)
-                UIElementPainter.FillRounded(rect, palette.SurfaceRaised);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                Text.WordWrap = false;
-
-                float right = rect.xMax - 6f;
 
                 string count = EditorPanels.CountOf(which, context);
 
-                if (!count.NullOrEmpty())
+                elements.Add(new UIRailClickableEntry(which.ToString(), EditorPanels.LabelOf(which))
                 {
-                    Text.Font = GameFont.Tiny;
-                    Text.Anchor = TextAnchor.MiddleRight;
-                    GUI.color = on ? palette.WindowBackground : palette.TextDisabled;
-
-                    float width = UIRichText.WidthOf(count) + 4f;
-
-                    UIRichText.Label(new Rect(right - width, rect.y, width, rect.height), count);
-
-                    right -= width + 4f;
-
-                    Text.Font = GameFont.Small;
-                    Text.Anchor = TextAnchor.MiddleLeft;
-                }
-
-                if (EditorPanels.NeedsRender(which))
-                {
-                    Rect dot = new Rect(right - 10f, rect.center.y - 3f, 6f, 6f);
-
-                    Widgets.DrawBoxSolid(dot, on ? palette.WindowBackground : palette.AccentMuted);
-
-                    if (over)
-                        TooltipHandler.TipRegion(dot, (TipSignal) "This panel changes what they look like.");
-
-                    right = dot.x - 4f;
-                }
-
-                GUI.color = on
-                    ? palette.WindowBackground
-                    : danger
-                        ? palette.Danger
-                        : palette.TextPrimary;
-
-                UIRichText.Label(new Rect(rect.x + 8f, rect.y, Mathf.Max(20f, right - rect.x - 10f),
-                    rect.height), EditorPanels.LabelOf(which));
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
+                    Rise = RailRowHeight,
+                    Trailing = count.NullOrEmpty() ? null : count,
+                    TextColor = which == EditorPanel.Resurrect ? palette.Danger : (Color?) null
+                });
             }
 
-            if (!Widgets.ButtonInvisible(rect) || on)
+            string picked = UIRailControl.Draw(rect.ContractedBy(6f), elements, panel.ToString(),
+                ref railScroll, ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
                 return;
 
-            panel = which;
-            measured = 0f;
-            surfaceScroll = Vector2.zero;
+            foreach (EditorPanel candidate in (EditorPanel[]) Enum.GetValues(typeof(EditorPanel)))
+            {
+                if (candidate.ToString() == picked)
+                {
+                    panel = candidate;
 
-            SoundDefOf.Click.PlayOneShotOnCamera();
+                    break;
+                }
+            }
         }
 
         /// <summary>

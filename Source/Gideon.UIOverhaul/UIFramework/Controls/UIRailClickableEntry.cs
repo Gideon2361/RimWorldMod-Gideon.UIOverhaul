@@ -31,6 +31,12 @@ namespace Gideon.UIFramework.Controls
         /// <summary>How many things are behind this row. Negative hides the number.</summary>
         internal int Count = -1;
 
+        /// <summary>
+        /// Text against the right edge, for a rail whose rows report a value rather than a tally -- a power
+        /// grid balance, a deadline, a status word. Wins over <see cref="Count"/> when both are set.
+        /// </summary>
+        internal string Trailing;
+
         /// <summary>Null takes the palette's secondary text color.</summary>
         internal Color? CountColor;
 
@@ -67,6 +73,19 @@ namespace Gideon.UIFramework.Controls
 
         internal GameFont Font = GameFont.Small;
 
+        /// <summary>
+        /// Point size for a bundled face, which is how this suite sizes anything that is not RimWorld own
+        /// font -- a GameFont is a bucket, and a bundled face line box rarely matches the bucket it lands in.
+        /// Zero falls back to <see cref="Font"/>.
+        /// </summary>
+        internal float Points;
+
+        /// <summary>Face for the count, so a rail with mono figures keeps them mono.</summary>
+        internal UIFace CountFace = UIFace.Game;
+
+        /// <summary>Point size for the count when <see cref="CountFace"/> is a bundled face.</summary>
+        internal float CountPoints;
+
         /// <summary>Bold or italic. Only honored for a bundled <see cref="Face"/>, which is where real weights live.</summary>
         internal FontStyle Style = FontStyle.Normal;
 
@@ -77,6 +96,17 @@ namespace Gideon.UIFramework.Controls
         internal bool Silent;
 
         internal bool Disabled;
+
+        /// <summary>
+        /// Completion from 0 to 1, drawn as a hairline under the label. Negative draws nothing.
+        ///
+        /// Drawn even at zero, because a row with no track under it reads as a row that does not have progress
+        /// rather than one that has none yet.
+        /// </summary>
+        internal float Progress = -1f;
+
+        /// <summary>Null takes the palette accent for the filled part.</summary>
+        internal Color? ProgressColor;
 
         /// <summary>Row height. Raise it for a face drawn large enough to preview properly.</summary>
         internal float Rise = 26f;
@@ -161,13 +191,20 @@ namespace Gideon.UIFramework.Controls
             // Measured before the label is placed so the text is trimmed around the count rather than drawn
             // underneath it.
             float countWidth = 0f;
-            string count = Count >= 0 ? Count.ToString() : null;
+            string count = !Trailing.NullOrEmpty() ? Trailing : Count >= 0 ? Count.ToString() : null;
 
             if (count != null)
             {
-                Text.Font = GameFont.Tiny;
+                if (CountFace != UIFace.Game && CountPoints > 0f)
+                {
+                    countWidth = UITextControl.Width(count, CountFace, CountPoints) + 8f;
+                }
+                else
+                {
+                    Text.Font = GameFont.Tiny;
 
-                countWidth = Text.CalcSize(count).x + 6f;
+                    countWidth = Text.CalcSize(count).x + 6f;
+                }
             }
 
             Rect label = new Rect(x, rect.y, Mathf.Max(0f, rect.xMax - 6f - countWidth - x), rect.height);
@@ -183,6 +220,10 @@ namespace Gideon.UIFramework.Controls
 
                     Widgets.LabelEllipses(label, Label);
                 }
+                else if (Points > 0f)
+                {
+                    UITextControl.LabelEllipses(label, Label, Face, Points, Style);
+                }
                 else
                 {
                     UITextControl.LabelEllipses(label, Label, Face, Font, Style);
@@ -191,16 +232,39 @@ namespace Gideon.UIFramework.Controls
 
             if (count != null)
             {
-                Text.Font = GameFont.Tiny;
+                Rect box = new Rect(rect.xMax - 6f - countWidth, rect.y, countWidth, rect.height);
+
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = CountColor ?? (Disabled ? palette.TextDisabled : palette.TextSecondary);
 
-                Widgets.Label(new Rect(rect.xMax - 6f - countWidth, rect.y, countWidth, rect.height), count);
+                if (CountFace == UIFace.Game)
+                {
+                    Text.Font = GameFont.Tiny;
+
+                    Widgets.Label(box, count);
+                }
+                else if (CountPoints > 0f)
+                {
+                    UITextControl.Label(box, count, CountFace, CountPoints);
+                }
+                else
+                {
+                    UITextControl.Label(box, count, CountFace, GameFont.Tiny);
+                }
             }
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
+
+            if (Progress >= 0f)
+            {
+                Rect track = new Rect(x, rect.yMax - 3f, Mathf.Max(0f, rect.xMax - 6f - x), 1f);
+
+                Widgets.DrawBoxSolid(track, palette.SurfaceSunken);
+                Widgets.DrawBoxSolid(new Rect(track.x, track.y, track.width * Mathf.Clamp01(Progress), 1f),
+                    ProgressColor ?? palette.Accent);
+            }
 
             if (Disabled || !Widgets.ButtonInvisible(rect))
                 return false;

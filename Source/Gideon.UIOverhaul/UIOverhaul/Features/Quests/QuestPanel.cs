@@ -32,6 +32,10 @@ namespace Gideon.UIOverhaul.Features.Quests
     [StaticConstructorOnStartup]
     internal static class QuestPanel
     {
+        private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railDragOffset;
+
         internal const float WindowWidth = 1180f;
         internal const float WindowHeight = 740f;
 
@@ -418,68 +422,76 @@ namespace Gideon.UIOverhaul.Features.Quests
         // Rail
         // -------------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The four lists, with "Set aside" separated below because dismissed quests are a different kind of
+        /// thing rather than a fourth peer.
+        ///
+        /// <b>Mono figures, condensed names.</b> The counts line up as a column because they are drawn in the
+        /// mono face at a point size; the labels are condensed because width is the scarce thing in a rail.
+        /// Both are the rail control's own settings now rather than this screen's drawing code.
+        /// </summary>
         private static void Rail(Rect rect, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
-            Rect view = rect.ContractedBy(6f);
-            float y = view.y + 2f;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            // The leading space is deliberate: the heading is drawn from the panel's own x, so without it the
-            // first letter sits on the border. A space rather than an inset rect, which would take the rule too.
-            y = TabParts.Heading(view, y, QuestFaces.Caps(" Quests"), palette, false, QuestFaces.Mono,
-                QuestFaces.Size.RailHead);
-
-            y = Entry(view, y, QuestList.Offers, "Offers", palette);
-            y = Entry(view, y, QuestList.Active, "Active", palette);
-            y = Entry(view, y, QuestList.History, "History", palette);
-
-            int dismissed = QuestFacts.Count(QuestList.Dismissed);
-
-            if (dismissed <= 0)
-                return;
-
-            y += 6f;
-
-            y = TabParts.Heading(view, y, QuestFaces.Caps(" Set aside"), palette, true, QuestFaces.Mono,
-                QuestFaces.Size.RailHead, RuleGap);
-
-            Entry(view, y, QuestList.Dismissed, "Dismissed", palette);
-        }
-
-        private static float Entry(Rect view, float y, QuestList which, string label, UIColorPaletteDef palette)
-        {
-            const float height = 26f;
-
-            Rect row = new Rect(view.x, y, view.width, height);
-            bool on = QuestFacts.Showing == which;
-
-            if (on)
-                UIElementPainter.FillRounded(row, palette.SelectionOverlay);
-            else if (Mouse.IsOver(row))
-                UIElementPainter.FillRounded(row, palette.HoverOverlay);
-
-            string count = QuestFacts.Count(which).ToString();
-            float countWidth = 28f;
-
-            TabParts.RowLabel(new Rect(row.xMax - countWidth - 6f, row.y, countWidth, height), count,
-                on ? palette.Accent : palette.TextDisabled, GameFont.Tiny, QuestFaces.Mono,
-                QuestFaces.Size.RailCount);
-
-            TabParts.RowLabel(new Rect(row.x + 8f, row.y, row.width - countWidth - 18f, height), label,
-                on ? palette.Accent : palette.TextPrimary, GameFont.Small, QuestFaces.Condensed,
-                QuestFaces.Size.RailName);
-
-            if (Widgets.ButtonInvisible(row))
+            elements.Add(new UIRailSectionHeaderControl(QuestFaces.Caps("Quests"))
             {
-                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+                Face = QuestFaces.Mono,
+                Points = QuestFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            });
 
-                QuestFacts.Showing = which;
-                QuestFacts.Selected = null;
-                scroll = Vector2.zero;
+            elements.Add(Row(QuestList.Offers, "Offers", palette));
+            elements.Add(Row(QuestList.Active, "Active", palette));
+            elements.Add(Row(QuestList.History, "History", palette));
+
+            if (QuestFacts.Count(QuestList.Dismissed) > 0)
+            {
+                elements.Add(new UIRailDividerControl());
+                elements.Add(new UIRailSectionHeaderControl(QuestFaces.Caps("Set aside"))
+                {
+                    Face = QuestFaces.Mono,
+                    Points = QuestFaces.Size.RailHead,
+                    Color = palette.TextDisabled
+                });
+
+                elements.Add(Row(QuestList.Dismissed, "Dismissed", palette));
             }
 
-            return y + height + 2f;
+            string picked = UIRailControl.Draw(rect.ContractedBy(6f), elements,
+                QuestFacts.Showing.ToString(), ref railScroll, ref railDragging, ref railDragOffset, palette,
+                false);
+
+            if (picked == null)
+                return;
+
+            foreach (QuestList which in (QuestList[]) Enum.GetValues(typeof(QuestList)))
+            {
+                if (which.ToString() == picked)
+                {
+                    QuestFacts.Showing = which;
+
+                    break;
+                }
+            }
+        }
+
+        private static UIRailClickableEntry Row(QuestList which, string label, UIColorPaletteDef palette)
+        {
+            bool on = QuestFacts.Showing == which;
+
+            return new UIRailClickableEntry(which.ToString(), label)
+            {
+                Count = QuestFacts.Count(which),
+                Rise = 26f,
+                Face = QuestFaces.Condensed,
+                TextColor = on ? palette.Accent : (Color?) null,
+                CountFace = QuestFaces.Mono,
+                CountPoints = QuestFaces.Size.RailCount,
+                CountColor = on ? palette.Accent : palette.TextDisabled
+            };
         }
 
         // -------------------------------------------------------------------------------------------

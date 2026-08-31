@@ -73,6 +73,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
         };
 
         private Vector2 scroll;
+        private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
         private int highlighted;
 
         /// <summary>Null for every tab, otherwise the one being shown.</summary>
@@ -290,6 +293,13 @@ namespace Gideon.UIOverhaul.Features.DevTools
                 rect.height - 2f), palette);
         }
 
+        /// <summary>
+        /// Tabs, then whatever was run recently.
+        ///
+        /// <b>Two kinds of row in one list.</b> A tab is a selection and stays chosen; a recent action is a
+        /// command and runs on click. The key prefix is what tells them apart on the way back out, since the
+        /// rail control only knows it handed back a string.
+        /// </summary>
         private void DrawRail(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.PanelBackground);
@@ -299,107 +309,69 @@ namespace Gideon.UIOverhaul.Features.DevTools
             Widgets.DrawLineVertical(rect.xMax, rect.y, rect.height);
             GUI.color = previousColor;
 
-            GameFont previousFont = Text.Font;
-            Text.Font = GameFont.Tiny;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            float y = rect.y + 6f;
+            elements.Add(new UIRailSectionHeaderControl("Tabs") { Uppercase = true, Color = palette.TextDisabled });
 
-            Heading(new Rect(rect.x + 10f, y, rect.width - 16f, 16f), "TABS", palette);
-            y += 18f;
-
-            if (RailRow(new Rect(rect.x, y, rect.width, RowHeight), "All results", DevActionIndex.Actions.Count,
-                    tab == null, palette))
-            {
-                navigateTab = null;
-                navigateTabSet = true;
-                navigateOut = true;
-            }
-
-            y += RowHeight;
+            elements.Add(Row("tab:", "All results", DevActionIndex.Actions.Count, tab == null, palette));
 
             foreach (KeyValuePair<string, int> entry in DevActionIndex.Tabs)
-            {
-                if (RailRow(new Rect(rect.x, y, rect.width, RowHeight), entry.Key, entry.Value,
-                        tab == entry.Key, palette))
-                {
-                    navigateTab = entry.Key;
-                    navigateTabSet = true;
-                    navigateOut = true;
-                }
-
-                y += RowHeight;
-            }
+                elements.Add(Row("tab:" + entry.Key, entry.Key, entry.Value, tab == entry.Key, palette));
 
             if (Recent.Count > 0)
             {
-                y += 8f;
-                Heading(new Rect(rect.x + 10f, y, rect.width - 16f, 16f), "RECENT", palette);
-                y += 18f;
+                elements.Add(new UIRailDividerControl());
+                elements.Add(new UIRailSectionHeaderControl("Recent")
+                {
+                    Uppercase = true,
+                    Color = palette.TextDisabled
+                });
 
                 for (int i = 0; i < Recent.Count; i++)
-                {
-                    Rect row = new Rect(rect.x, y, rect.width, RowHeight);
-
-                    if (RailRow(row, Recent[i].label, -1, false, palette))
-                        Run(Recent[i]);
-
-                    y += RowHeight;
-                }
+                    elements.Add(Row("recent:" + i, Recent[i].label, -1, false, palette));
             }
 
-            Text.Font = previousFont;
+            string picked = UIRailControl.Draw(rect, elements, tab == null ? "tab:" : "tab:" + tab,
+                ref railScroll, ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
+                return;
+
+            if (picked.StartsWith("recent:"))
+            {
+                int index;
+
+                if (int.TryParse(picked.Substring("recent:".Length), out index)
+                    && index >= 0 && index < Recent.Count)
+                {
+                    Run(Recent[index]);
+                }
+
+                return;
+            }
+
+            string name = picked.Substring("tab:".Length);
+
+            navigateTab = name.Length == 0 ? null : name;
+            navigateTabSet = true;
+            navigateOut = true;
         }
 
-        private static void Heading(Rect rect, string label, UIColorPaletteDef palette)
+        /// <summary>
+        /// The accent stripe marks the chosen row, which is the cue this rail has always used. The selected
+        /// background now comes from the shared control rather than from here, so it matches every other rail.
+        /// </summary>
+        private static UIRailClickableEntry Row(string key, string label, int count, bool chosen,
+            UIColorPaletteDef palette)
         {
-            Color previousColor = GUI.color;
-            GUI.color = palette.TextDisabled;
-            Widgets.Label(rect, label);
-            GUI.color = previousColor;
-        }
-
-        private static bool RailRow(Rect rect, string label, int count, bool chosen, UIColorPaletteDef palette)
-        {
-            if (chosen)
-                Widgets.DrawBoxSolid(rect, palette.SurfaceRaised);
-            else if (Mouse.IsOver(rect))
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
-
-            if (chosen)
+            return new UIRailClickableEntry(key, label)
             {
-                Color accent = GUI.color;
-                GUI.color = palette.Accent;
-                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, 2f, rect.height), palette.Accent);
-                GUI.color = accent;
-            }
-
-            Color previousColor = GUI.color;
-            TextAnchor previousAnchor = Text.Anchor;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.Anchor = TextAnchor.MiddleLeft;
-                Text.WordWrap = false;
-                GUI.color = chosen ? palette.TextPrimary : palette.TextSecondary;
-
-                Widgets.LabelEllipses(new Rect(rect.x + 12f, rect.y, rect.width - 50f, rect.height), label);
-
-                if (count >= 0)
-                {
-                    Text.Anchor = TextAnchor.MiddleRight;
-                    GUI.color = palette.TextDisabled;
-                    Widgets.Label(new Rect(rect.xMax - 34f, rect.y, 26f, rect.height), count.ToString());
-                }
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                Text.Anchor = previousAnchor;
-                GUI.color = previousColor;
-            }
-
-            return Widgets.ButtonInvisible(rect);
+                Count = count,
+                Rise = RowHeight,
+                Font = GameFont.Tiny,
+                Swatch = chosen ? palette.Accent : (Color?) null,
+                SwatchWidth = 2f
+            };
         }
 
         /// <summary>Recomputes the visible list when the query, the tab or the branch has moved.</summary>
