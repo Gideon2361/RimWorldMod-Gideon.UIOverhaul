@@ -25,16 +25,37 @@ using UnityEngine;
 public static class BundleBuilder
 {
     /// <summary>
+    /// The one thing that makes both bundle names unique in a process shared with a hundred other mods.
+    ///
+    /// <b>Unity keys loaded bundles by name, not by path.</b> Ask it to open a bundle calling itself what an
+    /// already loaded bundle calls itself and it declines, returning null, and the loser is whichever mod
+    /// happened to load second. These were once called <c>assets</c> and <c>textures</c>, which are the names
+    /// anyone would reach for, and that is exactly the problem: the mod worked perfectly on its own and lost
+    /// its art the moment it ran beside something that had reached for the same word. Load order decided who
+    /// broke, so it reproduced for one player and not for another running the same list.
+    ///
+    /// A guid is here rather than the package id because it cannot collide even by coincidence, and it never
+    /// needs to be read by a person: nothing looks these up by name.
+    ///
+    /// <b>It must stay exactly as it is.</b> The name is baked into the bundle, so changing it is a rebake
+    /// and a re-upload of both files, not an edit.
+    /// </summary>
+    private const string Unique = "40cca10d-4fe7-447d-aaae-5b4bf36b6cf4";
+
+    /// <summary>
     /// The typeface bundle. Nothing in the mod's C# names it: the font loader searches every bundle our mod
     /// has loaded, so this string and the file on disk are the only places it appears.
     /// </summary>
-    private const string Fonts = "assets";
+    private const string Fonts = Unique + "_assets";
 
     /// <summary>
     /// The art bundle. Unlike the fonts, this name never appears in our C# either, but for a different
     /// reason: RimWorld resolves these itself through ContentFinder, which walks every loaded bundle.
+    ///
+    /// The suffix is deliberately not <c>_win</c>, <c>_mac</c> or <c>_linux</c>. RimWorld reads those three as
+    /// a platform specifier and would then load this on one operating system only.
     /// </summary>
-    private const string Textures = "textures";
+    private const string Textures = Unique + "_textures";
 
     /// <summary>
     /// Where the art has to live inside the project, and it is not a matter of taste.
