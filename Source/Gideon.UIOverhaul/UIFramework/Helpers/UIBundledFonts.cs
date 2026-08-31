@@ -27,7 +27,14 @@ namespace Gideon.UIFramework.Helpers
 
         /// <summary>
         /// One font by asset name -- the TTF's file name without extension, such as
-        /// <c>BarlowCondensed-Regular</c>. Null when no loaded bundle carries it, and the null is cached.
+        /// <c>BarlowCondensed-Regular</c>. Null when no loaded bundle carries it.
+        ///
+        /// <b>A miss is only remembered once there was somewhere to look.</b> The loading screen draws before
+        /// the bundles are up and asks for its faces then; the honest answer at that moment is "not yet",
+        /// not "not there". Caching it blinded the whole session to a font that arrived a second later, and
+        /// because only the loading screen and the console ask that early, those were the only two faces in
+        /// the mod that failed -- silently, since text falls back to RimWorld's font. Everything drawn on a
+        /// tab asked later and was fine, which is what made it look like a styling omission rather than a bug.
         /// </summary>
         internal static Font Get(string assetName)
         {
@@ -36,14 +43,40 @@ namespace Gideon.UIFramework.Helpers
             if (Fonts.TryGetValue(assetName, out existing))
                 return existing;
 
-            Font found = UIGuard.Try("UIText.BundleFont", () => Load(assetName), null, null);
+            List<AssetBundle> bundles = Bundles();
 
-            Fonts[assetName] = found;
+            Font found = UIGuard.Try("UIText.BundleFont", () => Load(bundles, assetName), null, null);
+
+            if (found != null || (bundles != null && bundles.Count > 0))
+                Fonts[assetName] = found;
 
             return found;
         }
 
-        private static Font Load(string assetName)
+        private static Font Load(List<AssetBundle> bundles, string assetName)
+        {
+            for (int i = 0; bundles != null && i < bundles.Count; i++)
+            {
+                AssetBundle bundle = bundles[i];
+
+                if (bundle == null)
+                    continue;
+
+                Font font = bundle.LoadAsset<Font>(assetName);
+
+                if (font != null)
+                    return font;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The bundles belonging to the pack this assembly shipped in, or null before RimWorld has loaded
+        /// them. Separated from the lookup because the caller has to tell a genuine miss from a question
+        /// asked too early, and an empty list is the difference.
+        /// </summary>
+        private static List<AssetBundle> Bundles()
         {
             foreach (ModContentPack mod in LoadedModManager.RunningMods)
             {
@@ -65,16 +98,7 @@ namespace Gideon.UIFramework.Helpers
                 if (!ours || mod.assetBundles == null)
                     continue;
 
-                foreach (AssetBundle bundle in mod.assetBundles.loadedAssetBundles)
-                {
-                    if (bundle == null)
-                        continue;
-
-                    Font font = bundle.LoadAsset<Font>(assetName);
-
-                    if (font != null)
-                        return font;
-                }
+                return mod.assetBundles.loadedAssetBundles;
             }
 
             return null;
