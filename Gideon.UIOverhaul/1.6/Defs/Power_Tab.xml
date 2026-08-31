@@ -13,7 +13,10 @@
     no reading of it from the world view, and a tab that opens onto "no map to read a grid on" is worse
     than a button that is not there.
 
-    minimized, so it arrives as a bare icon like Factions and History rather than widening the bar.
+    minimized, so it arrives as a bare icon like Factions and History rather than widening the bar. The
+    icon is the lightning bolt already sitting in this mod's own UI/MainButtonIcons folder, shipped in
+    14084 for the bar's icon picker and unreferenced by any def until now. Drawing a second bolt would
+    have put two of them in that picker, where every icon is choosable for any button.
   -->
   <MainButtonDef>
     <defName>Gideon_Power</defName>
@@ -23,6 +26,7 @@
     <order>79</order>
     <validWithoutMap>false</validWithoutMap>
     <minimized>True</minimized>
+    <iconPath>UI/MainButtonIcons/Power</iconPath>
   </MainButtonDef>
 
 </Defs>
