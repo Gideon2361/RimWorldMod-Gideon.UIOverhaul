@@ -61,7 +61,13 @@ namespace Gideon.UIFramework.Helpers
 
         /// <summary>Oswald. Condensed and tall; its long line box makes it draw smaller than the others at the
         /// same <c>GameFont</c>, so reach for a larger size with it.</summary>
-        Oswald
+        Oswald,
+
+        /// <summary>
+        /// Source Sans 3. A neutral, wide-coverage sans for running text, where the condensed faces are
+        /// working against the reader rather than for them. Bold and italic are real files.
+        /// </summary>
+        SourceSans3
     }
 
     /// <summary>
@@ -164,6 +170,15 @@ namespace Gideon.UIFramework.Helpers
                         default: return "IBMPlexSans-Regular";
                     }
 
+                case UIFace.SourceSans3:
+                    switch (weight)
+                    {
+                        case FontStyle.Bold: return "SourceSans3-Semibold";
+                        case FontStyle.Italic: return "SourceSans3-It";
+                        case FontStyle.BoldAndItalic: return "SourceSans3-SemiboldIt";
+                        default: return "SourceSans3-Regular";
+                    }
+
                 case UIFace.Oswald:
                     synthesize = weight;
 
@@ -215,6 +230,7 @@ namespace Gideon.UIFramework.Helpers
                 case UIFace.IBMPlexMono: return "IBM Plex Mono";
                 case UIFace.IBMPlexSans: return "IBM Plex Sans";
                 case UIFace.Oswald: return "Oswald";
+                case UIFace.SourceSans3: return "Source Sans 3";
                 default: return "RimWorld";
             }
         }
