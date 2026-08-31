@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Gideon.UIFramework.Stages;
+using HarmonyLib;
 using UnityEngine;
 using Verse;
 
@@ -65,6 +67,8 @@ namespace Gideon.UIFramework.Helpers
             Pack(report, mod);
             Files(report, mod);
             Bundles(report, mod);
+            Collisions(report, mod);
+            Patches(report);
 
             return report.ToString();
         }
@@ -300,6 +304,131 @@ namespace Gideon.UIFramework.Helpers
                 for (int n = 0; n < 3 && n < names.Length; n++)
                     Line(report, "  holds", names[n]);
             }
+        }
+
+        /// <summary>
+        /// Every other mod shipping a bundle file of the same name as one of ours.
+        ///
+        /// <b>This is the failure that only happens in company.</b> Unity keys loaded bundles by name, not by
+        /// path, and refuses to open a second one calling itself what an already loaded bundle calls itself.
+        /// Our two are named <c>assets</c> and <c>textures</c>, which are the names anybody would pick, so
+        /// whichever mod loads first wins and the other gets a null back from <c>LoadFromFile</c> and a line
+        /// in the log about a file that is perfectly intact. Load order decides who loses, which is why it
+        /// reproduces for one player and not another with the same mods.
+        ///
+        /// <b>Read off disk rather than off what loaded,</b> because the mod that lost the race has nothing
+        /// loaded to enumerate. The files are what the collision is actually between.
+        /// </summary>
+        private static void Collisions(StringBuilder report, ModContentPack mod)
+        {
+            List<string> ours = Names(mod);
+
+            if (ours.Count == 0)
+                return;
+
+            UIGuard.Try("Bundle.Collisions", () =>
+            {
+                List<ModContentPack> running = LoadedModManager.RunningModsListForReading;
+
+                for (int i = 0; running != null && i < running.Count; i++)
+                {
+                    ModContentPack other = running[i];
+
+                    if (other == null || other == mod)
+                        continue;
+
+                    List<string> theirs = Names(other);
+
+                    for (int n = 0; n < theirs.Count; n++)
+                    {
+                        if (!ours.Contains(theirs[n]))
+                            continue;
+
+                        Line(report, "COLLISION", "'" + theirs[n] + "' is also the name of a bundle in "
+                                                  + other.Name + " (" + other.PackageIdPlayerFacing
+                                                  + "), and Unity loads only the first of that name");
+                    }
+                }
+            });
+        }
+
+        /// <summary>The bundle file names <paramref name="mod"/> ships, however few.</summary>
+        private static List<string> Names(ModContentPack mod)
+        {
+            List<string> names = new List<string>();
+
+            UIGuard.Try("Bundle.Names.Files", () =>
+            {
+                Dictionary<string, FileInfo> found = ModContentPack.GetAllFilesForMod(
+                    mod, BundleFolder, extension => extension.NullOrEmpty());
+
+                if (found == null)
+                    return;
+
+                foreach (KeyValuePair<string, FileInfo> entry in found)
+                {
+                    if (entry.Value != null)
+                        names.Add(entry.Value.Name);
+                }
+            });
+
+            return names;
+        }
+
+        /// <summary>
+        /// Who else has patched the methods this mod's art depends on.
+        ///
+        /// <b>A patch is the other way a working mod stops working in company.</b> Our registration rides on
+        /// the end of <c>ReloadContentInt</c>, and a prefix elsewhere that returns false, or a transpiler
+        /// that reshapes the method, can stop it running without anything appearing to be wrong. Harmony
+        /// already knows every owner of every patch, so naming them costs nothing and turns "some mod" into
+        /// a list of candidates.
+        ///
+        /// Only ours being listed against a method means that method is not where the trouble is.
+        /// </summary>
+        private static void Patches(StringBuilder report)
+        {
+            Patched(report, "ReloadContentInt",
+                () => AccessTools.Method(typeof(ModContentPack), "ReloadContentInt"));
+
+            Patched(report, "ReloadAll",
+                () => AccessTools.Method(typeof(ModAssetBundlesHandler), "ReloadAll"));
+
+            Patched(report, "ContentFinder.Get",
+                () => AccessTools.Method(typeof(ContentFinder<Texture2D>), "Get"));
+        }
+
+        private static void Patched(StringBuilder report, string label, Func<MethodBase> find)
+        {
+            string owners = UIGuard.Try("Bundle.Patches." + label, () =>
+            {
+                MethodBase method = find();
+
+                if (method == null)
+                    return "method not found, so the game has changed shape";
+
+                HarmonyLib.Patches patches = Harmony.GetPatchInfo(method);
+
+                if (patches == null)
+                    return "unpatched";
+
+                List<string> all = new List<string>();
+
+                Owners(all, "prefix", patches.Prefixes);
+                Owners(all, "postfix", patches.Postfixes);
+                Owners(all, "transpiler", patches.Transpilers);
+                Owners(all, "finalizer", patches.Finalizers);
+
+                return all.Count == 0 ? "unpatched" : string.Join(", ", all.ToArray());
+            }, "unreadable", null);
+
+            Line(report, "patched", label.PadRight(18) + owners);
+        }
+
+        private static void Owners(List<string> into, string kind, IList<Patch> patches)
+        {
+            for (int i = 0; patches != null && i < patches.Count; i++)
+                into.Add(patches[i].owner + " (" + kind + ")");
         }
 
         private static void Line(StringBuilder report, string label, string value)

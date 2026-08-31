@@ -1,9 +1,9 @@
 # Typefaces
 
 **Interface text no longer uses baked atlases -- it ships as a Unity AssetBundle.** The headless project in
-`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/assets` as dynamic fonts,
+`BundleProject/` bakes every TTF into `Gideon.UIOverhaul/AssetBundles/40cca10d-4fe7-447d-aaae-5b4bf36b6cf4_assets` as dynamic fonts,
 which the engine renders itself: FreeType hinting at every size, bold and italic from tags, per-glyph fallback
-for characters a face lacks. The art travels in a second bundle, `textures`, described further down.
+for characters a face lacks. The art travels in a second bundle, `40cca10d-4fe7-447d-aaae-5b4bf36b6cf4_textures`, described further down.
 
 ## The three rules the loader imposes
 
