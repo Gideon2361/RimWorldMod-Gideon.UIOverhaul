@@ -338,7 +338,9 @@ namespace Gideon.UIOverhaul.Features.Quests
         private static float Block(Rect view, float y, string title, Quest quest, OfferRow row,
             UIColorPaletteDef palette)
         {
-            if (row.rewards.Count == 0 && row.choices.Count == 0)
+            // Nothing to head. A quest whose whole reward is the choice above has no separate stack, and a
+            // heading with blank space under it reads as a section that failed to draw.
+            if (row.rewards.Count == 0)
                 return y;
 
             TabParts.RowLabel(new Rect(view.x, y, view.width, 20f), QuestFaces.Caps(title),
@@ -351,20 +353,18 @@ namespace Gideon.UIOverhaul.Features.Quests
                 string listed = Full(row.rewards);
                 float tall = Wrapped(listed, view.width - 8f);
 
-                GameFont previousFont = Text.Font;
                 Color previousColor = GUI.color;
 
                 try
                 {
-                    Text.Font = GameFont.Small;
                     GUI.color = palette.TextPrimary;
 
-                    Widgets.Label(new Rect(view.x + 8f, y, view.width - 8f, tall), listed);
+                    UITextControl.Paragraph(new Rect(view.x + 8f, y, view.width - 8f, tall), listed,
+                        QuestFaces.Body, QuestFaces.Size.Body);
                 }
                 finally
                 {
                     GUI.color = previousColor;
-                    Text.Font = previousFont;
                 }
 
                 y += tall + 4f;
@@ -393,24 +393,22 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             y += 22f;
 
-            GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Small;
                 GUI.color = palette.TextSecondary;
 
-                float height = Text.CalcHeight(text, view.width - 8f);
+                float height = Wrapped(text, view.width - 8f);
 
-                Widgets.Label(new Rect(view.x + 8f, y, view.width - 8f, height), text);
+                UITextControl.Paragraph(new Rect(view.x + 8f, y, view.width - 8f, height), text,
+                    QuestFaces.Body, QuestFaces.Size.Body);
 
                 y += height + 8f;
             }
             finally
             {
                 GUI.color = previousColor;
-                Text.Font = previousFont;
             }
 
             return y;
@@ -792,20 +790,18 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             Rect body = new Rect(card.x + 10f, card.y + 6f, textWidth, card.height - 12f);
 
-            GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Small;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(body.x, body.y, body.width, textHeight), text);
+                UITextControl.Paragraph(new Rect(body.x, body.y, body.width, textHeight), text,
+                    QuestFaces.Body, QuestFaces.Size.Body);
             }
             finally
             {
                 GUI.color = previousColor;
-                Text.Font = previousFont;
             }
 
             IconStrip(new Rect(body.x, body.y + textHeight + 4f, body.width, rows * (IconSize + IconGap)),
@@ -824,20 +820,17 @@ namespace Gideon.UIOverhaul.Features.Quests
         }
 
         /// <summary>How tall a wrapped block of text will be at the panel's body font.</summary>
+        /// <summary>
+        /// How tall a wrapped block of quest prose is, in the face it will be drawn in.
+        ///
+        /// <b>Measured through the same face that draws it.</b> Sized against RimWorld's font and drawn in
+        /// Barlow, a paragraph is either clipped at the bottom or trailed by a band of empty space, and which
+        /// of the two depends on the words.
+        /// </summary>
         private static float Wrapped(string text, float width)
         {
-            return UIGuard.Try("Quests.Wrap", () =>
-            {
-                GameFont previous = Text.Font;
-
-                Text.Font = GameFont.Small;
-
-                float height = Text.CalcHeight(text, width);
-
-                Text.Font = previous;
-
-                return height;
-            }, 22f, null);
+            return UIGuard.Try("Quests.Wrap",
+                () => UITextControl.Height(text, QuestFaces.Body, QuestFaces.Size.Body, width), 22f, null);
         }
 
         /// <summary>
