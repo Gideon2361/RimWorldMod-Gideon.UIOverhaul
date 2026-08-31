@@ -287,26 +287,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                 y += 22f;
 
                 for (int i = 0; i < row.choices.Count && i < choice.choices.Count; i++)
-                {
-                    QuestPart_Choice.Choice taken = choice.choices[i];
-                    string label = Joined(row.choices[i].rewards);
-
-                    Rect band = new Rect(view.x, y, view.width, 30f);
-                    Rect button = new Rect(band.xMax - 120f, band.y, 120f, 28f);
-
-                    UIElementPainter.OutlineRounded(new Rect(band.x, band.y, band.width - 128f, 28f),
-                        palette.Border, palette.SurfaceSunken);
-
-                    TabParts.RowLabel(new Rect(band.x + 8f, band.y, band.width - 144f, 28f), label,
-                        palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
-
-                    if (TabParts.Button(button, "Take this", palette, can.Accepted, true, refusal))
-                        QuestAccept.Begin(quest, () => choice.Choose(taken));
-
-                    y = band.yMax + 4f;
-
-                    y = Pawns(view, y, row.choices[i].rewards, palette);
-                }
+                    y = Alternative(view, y, row.choices[i], choice, choice.choices[i], quest, can, palette);
 
                 return y + 6f;
             }
@@ -687,7 +668,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     palette.Warning, palette);
 
                 for (int i = 0; i < row.choices.Count; i++)
-                    y = Alternative(inner, y, row.choices[i], palette);
+                    y = AlternativeLine(inner, y, row.choices[i], palette);
             }
             else if (row.choices.Count == 1)
             {
@@ -706,7 +687,15 @@ namespace Gideon.UIOverhaul.Features.Quests
             return y;
         }
 
-        private static float Alternative(Rect inner, float y, ChoiceRow choice, UIColorPaletteDef palette)
+        /// <summary>
+        /// One alternative on a list card, kept to a line.
+        ///
+        /// <b>The list is for comparing quests, not for choosing a reward.</b> A card that opened out into
+        /// icons and an accept button for every alternative would be taller than the six cards around it and
+        /// would put the decision in the place meant for the shortlist. The full treatment is one click away,
+        /// in the detail view.
+        /// </summary>
+        private static float AlternativeLine(Rect inner, float y, ChoiceRow choice, UIColorPaletteDef palette)
         {
             float height = Mathf.Max(20f, UITextControl.LineHeight(QuestFaces.Body, QuestFaces.Size.Body) + 6f);
 
@@ -717,9 +706,208 @@ namespace Gideon.UIOverhaul.Features.Quests
             TabParts.RowLabel(new Rect(band.x + 8f, band.y, band.width - 16f, height), Joined(choice.rewards),
                 palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
 
-            y = band.yMax + 2f;
+            return band.yMax + 2f;
+        }
+
+        /// <summary>Size of a reward's icon, and the gap between two of them.</summary>
+        private const float IconSize = 30f;
+
+        private const float IconGap = 3f;
+
+        /// <summary>Width kept for the accept button at the right of a choice card.</summary>
+        private const float TakeWidth = 110f;
+
+        /// <summary>
+        /// One alternative, as a card rather than a line.
+        ///
+        /// <b>A reward stack does not fit on a line and should not be asked to.</b> Transport pods with six
+        /// kinds of thing in them produce a sentence that ellipses after the total value, which is the least
+        /// useful part of it; what somebody choosing between three rewards wants is the list. So the text
+        /// wraps, and the goods behind it are drawn as their own icons underneath.
+        ///
+        /// <b>Every icon opens the thing's info card.</b> A psylink neuroformer and a profane soul gem are
+        /// both just names to somebody who has not used one, and the game already has a screen that explains
+        /// any thing in it. Reaching that screen from the offer is the difference between choosing and
+        /// guessing.
+        /// </summary>
+        private static float Alternative(Rect inner, float y, ChoiceRow choice, QuestPart_Choice part,
+            QuestPart_Choice.Choice taken, Quest quest, AcceptanceReport can, UIColorPaletteDef palette)
+        {
+            string text = Joined(choice.rewards);
+
+            float textWidth = inner.width - TakeWidth - 24f;
+            float textHeight = Wrapped(text, textWidth);
+
+            // Counted before the card is sized, because the icons are the part that makes it tall and a card
+            // measured without them clips its own contents.
+            int icons = Icons(choice.rewards, null);
+
+            int perRow = Mathf.Max(1, Mathf.FloorToInt(textWidth / (IconSize + IconGap)));
+            int rows = icons == 0 ? 0 : Mathf.CeilToInt(icons / (float) perRow);
+
+            float height = Mathf.Max(38f, textHeight + 12f + rows * (IconSize + IconGap));
+
+            Rect card = new Rect(inner.x, y, inner.width, height);
+
+            UIElementPainter.OutlineRounded(card, palette.Border, palette.SurfaceSunken);
+
+            Rect body = new Rect(card.x + 10f, card.y + 6f, textWidth, card.height - 12f);
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Small;
+                GUI.color = palette.TextPrimary;
+
+                Widgets.Label(new Rect(body.x, body.y, body.width, textHeight), text);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+
+            IconStrip(new Rect(body.x, body.y + textHeight + 4f, body.width, rows * (IconSize + IconGap)),
+                choice.rewards, perRow, palette);
+
+            Rect button = new Rect(card.xMax - TakeWidth - 8f, card.y + (card.height - 28f) * 0.5f,
+                TakeWidth, 28f);
+
+            if (TabParts.Button(button, "Take this", palette, can.Accepted, true,
+                    can.Accepted ? null : can.Reason))
+                QuestAccept.Begin(quest, () => part.Choose(taken));
+
+            y = card.yMax + 4f;
 
             return Pawns(inner, y, choice.rewards, palette);
+        }
+
+        /// <summary>How tall a wrapped block of text will be at the panel's body font.</summary>
+        private static float Wrapped(string text, float width)
+        {
+            return UIGuard.Try("Quests.Wrap", () =>
+            {
+                GameFont previous = Text.Font;
+
+                Text.Font = GameFont.Small;
+
+                float height = Text.CalcHeight(text, width);
+
+                Text.Font = previous;
+
+                return height;
+            }, 22f, null);
+        }
+
+        /// <summary>
+        /// Counts the things behind a set of rewards, and optionally collects them.
+        ///
+        /// One pass used twice, because the card has to know how many icons it will draw before it can decide
+        /// how tall to be, and a second walk that disagreed with the first would clip the last row.
+        /// </summary>
+        private static int Icons(List<RewardRow> rewards, List<Thing> into)
+        {
+            int count = 0;
+
+            for (int i = 0; i < rewards.Count; i++)
+            {
+                List<Thing> things = rewards[i].things;
+
+                for (int t = 0; things != null && t < things.Count; t++)
+                {
+                    if (things[t] == null)
+                        continue;
+
+                    count++;
+
+                    if (into != null)
+                        into.Add(things[t]);
+                }
+            }
+
+            return count;
+        }
+
+        private static readonly List<Thing> Shown = new List<Thing>();
+
+        /// <summary>
+        /// The goods, as icons that open their own info card.
+        ///
+        /// <b>Drawn from the real things rather than from their defs,</b> so a masterwork plasteel longsword
+        /// shows the quality and the stuff it is actually made of. Those things exist already: the reward
+        /// generated them when the quest did, and they are held until the reward is taken or dropped.
+        /// </summary>
+        private static void IconStrip(Rect rect, List<RewardRow> rewards, int perRow,
+            UIColorPaletteDef palette)
+        {
+            Shown.Clear();
+
+            if (Icons(rewards, Shown) == 0)
+                return;
+
+            for (int i = 0; i < Shown.Count; i++)
+            {
+                Thing thing = Shown[i];
+
+                int column = i % perRow;
+                int row = i / perRow;
+
+                Rect slot = new Rect(rect.x + column * (IconSize + IconGap),
+                    rect.y + row * (IconSize + IconGap), IconSize, IconSize);
+
+                bool over = Mouse.IsOver(slot);
+
+                UIElementPainter.OutlineRounded(slot, over ? palette.Accent : palette.Border,
+                    palette.PanelBackground);
+
+                UIGuard.Try("Quests.RewardIcon",
+                    () => Widgets.ThingIcon(slot.ContractedBy(2f), thing), null);
+
+                Count(slot, thing, palette);
+
+                if (over)
+                {
+                    TooltipHandler.TipRegion(slot, (TipSignal) (UIGuard.Try("Quests.RewardLabel",
+                        () => thing.LabelCap.ToString(), "?", null) + "\n\nClick for its details."));
+                }
+
+                if (!Widgets.ButtonInvisible(slot))
+                    continue;
+
+                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+
+                UIGuard.Try("Quests.RewardCard",
+                    () => Find.WindowStack.Add(new Dialog_InfoCard(thing)),
+                    "That reward's details could not be opened. The offer is unaffected.");
+            }
+        }
+
+        /// <summary>The stack count in the corner, for a reward that arrives as more than one.</summary>
+        private static void Count(Rect slot, Thing thing, UIColorPaletteDef palette)
+        {
+            int stack = UIGuard.Try("Quests.RewardStack", () => thing.stackCount, 1, null);
+
+            if (stack <= 1)
+                return;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.LowerRight;
+                GUI.color = palette.TextPrimary;
+
+                UITextControl.Label(new Rect(slot.x, slot.y, slot.width - 2f, slot.height - 1f),
+                    stack.ToString(), QuestFaces.Mono, QuestFaces.Size.Chip);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
         }
 
         /// <summary>
