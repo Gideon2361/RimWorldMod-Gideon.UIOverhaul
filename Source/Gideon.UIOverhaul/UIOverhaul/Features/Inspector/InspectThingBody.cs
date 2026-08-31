@@ -1083,7 +1083,18 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
         private static float? selfDischarge;
 
-        /// <summary>Fuel, against the level it is being refilled to rather than against the tank.</summary>
+        /// <summary>
+        /// A refuellable thing's fuel, and the level it is being kept at.
+        ///
+        /// <b>The target is the only setting on this pane you can change,</b> and it belongs here because it is
+        /// the answer to the question the block raises. A tank at full with a target of half is about to be
+        /// drained on purpose, and reading that off two separate lines in the footer is how somebody spends an
+        /// afternoon wondering why their chemfuel keeps going.
+        ///
+        /// <b>It is only drawn when the game says it is configurable.</b> <c>targetFuelLevelConfigurable</c> is
+        /// false for plenty of things that burn fuel, and drawing a handle that cannot move is worse than
+        /// drawing nothing.
+        /// </summary>
         private static float Fuel(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
             CompRefuelable fuel = UIGuard.Try("Inspector.FuelComp", thing.TryGetComp<CompRefuelable>, null, null);
@@ -1100,8 +1111,109 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
                 palette);
 
+            bool configurable = UIGuard.Try("Inspector.FuelConfigurable",
+                () => fuel.Props.targetFuelLevelConfigurable, false, null);
+
+            if (!configurable)
+                return y + InspectPaneParts.BlockGap;
+
+            float capacity = Mathf.Max(0.0001f, fuel.Props.fuelCapacity);
+            float target = UIGuard.Try("Inspector.FuelTarget", () => fuel.TargetFuelLevel, capacity, null);
+            float share = Mathf.Clamp01(target / capacity);
+
+            Rect track;
+
+            y = InspectPaneParts.Need(view, y, "Keep at", Mathf.Round(target).ToString(), palette.Accent,
+                share, palette.Accent, null, null, palette, out track);
+
+            DragTarget(track, fuel, capacity, palette);
+
             return y + InspectPaneParts.BlockGap;
         }
+
+        /// <summary>How far above and below the track a press still counts as grabbing it.</summary>
+        private const float FuelGrab = 5f;
+
+        /// <summary>The thing whose fuel target is being dragged, or null.</summary>
+        private static Thing draggingFuel;
+
+        /// <summary>
+        /// Turns the target track into something you can set by pointing at it.
+        ///
+        /// <b>Hand-rolled rather than an invisible slider laid over the top,</b> for the reason the character
+        /// editor's need bars are: RimWorld's slider draws its own art unconditionally, so borrowing it means
+        /// covering the row just drawn.
+        ///
+        /// <b>The drag is keyed on the thing, not on the pane.</b> The inspect pane redraws from scratch every
+        /// frame and can change what it is showing mid-drag if the selection changes; keying on the thing means
+        /// a drag that started on one tank cannot end up setting another one's target.
+        ///
+        /// <b>Written straight through rather than recorded.</b> This is a building's own setting and the game
+        /// has no undo for it; <c>TargetFuelLevel</c>'s setter clamps and refuses on its own, which is the
+        /// behaviour the vanilla gizmo gets too.
+        /// </summary>
+        private static void DragTarget(Rect track, CompRefuelable fuel, float capacity,
+            UIColorPaletteDef palette)
+        {
+            UIGuard.Try("Inspector.FuelDrag", () =>
+            {
+                Thing key = fuel.parent;
+
+                if (key == null)
+                    return;
+
+                Rect grab = new Rect(track.x, track.y - FuelGrab, track.width, track.height + FuelGrab * 2f);
+
+                Event input = Event.current;
+                bool over = Mouse.IsOver(grab);
+
+                if (over)
+                {
+                    TooltipHandler.TipRegion(grab, (TipSignal) ("Drag to set how full this is kept.\n\nHaulers "
+                        + "top it up to this level and no further."));
+                }
+
+                if (input.type == EventType.MouseDown && input.button == 0 && over)
+                {
+                    draggingFuel = key;
+                    input.Use();
+                }
+                else if (input.type == EventType.MouseUp && input.button == 0 && draggingFuel == key)
+                {
+                    draggingFuel = null;
+                    input.Use();
+                }
+
+                if (draggingFuel != key)
+                {
+                    if (over && draggingFuel == null)
+                        Knob(track, fuel.TargetFuelLevel / capacity, palette);
+
+                    return;
+                }
+
+                float wanted = Mathf.Clamp01((input.mousePosition.x - track.x)
+                                             / Mathf.Max(1f, track.width)) * capacity;
+
+                // Rounded to whole units, because fuel is counted in them and a target of 249.7 is a number
+                // nobody asked for that then displays as 250 anyway.
+                wanted = Mathf.Round(wanted);
+
+                Knob(track, wanted / capacity, palette);
+
+                if (Mathf.Abs(wanted - fuel.TargetFuelLevel) > 0.5f)
+                    fuel.TargetFuelLevel = wanted;
+            }, null);
+        }
+
+        /// <summary>The handle, drawn only while the track is being pointed at or dragged.</summary>
+        private static void Knob(Rect track, float fraction, UIColorPaletteDef palette)
+        {
+            float x = track.x + track.width * Mathf.Clamp01(fraction);
+
+            Widgets.DrawBoxSolid(new Rect(x - 1.5f, track.y - 3f, 3f, track.height + 6f), palette.Accent);
+        }
+
 
         /// <summary>A cooler or heater's target against what the room is actually doing.</summary>
         private static float Climate(Rect view, float y, Thing thing, UIColorPaletteDef palette)
