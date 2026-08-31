@@ -184,6 +184,42 @@ namespace Gideon.UIOverhaul.Features.Quests
                 () => Take(quest, accepter, before), "GoBack".Translate()));
         }
 
+
+        /// <summary>
+        /// Setting an offer aside, or taking it back off the shelf.
+        ///
+        /// <b>Dismissing is not refusing.</b> The offer stays in the save and its clock keeps running; it moves
+        /// off the list you are reading so that six offers you are still thinking about are not buried under
+        /// twenty you are not. That is why the rail lists dismissed quests separately rather than hiding them,
+        /// and why this is reversible in one click.
+        ///
+        /// <b>It applies to a running quest as readily as to an offer.</b> A quest you have accepted and are
+        /// not going to get to for a season is exactly as ignorable as one you have not taken.
+        ///
+        /// <b>Subquests follow the parent, which is vanilla's own behaviour.</b> A quest chain dismissed at the
+        /// top with its children left behind would leave those children on the offers list with no context,
+        /// looking like offers in their own right.
+        /// </summary>
+        internal static void SetAside(Quest quest, bool aside)
+        {
+            UIGuard.Try("Quests.Dismiss", () =>
+            {
+                if (quest == null)
+                    return;
+
+                quest.dismissed = aside;
+
+                foreach (Quest sub in quest.GetSubquests())
+                    sub.dismissed = aside;
+
+                SoundDefOf.Tick_Low.PlayOneShotOnCamera();
+
+                // The quest has just left the list being read, so the detail view it was opened from has
+                // nothing behind it any more. Closing back to the list is the only honest place to land.
+                QuestFacts.Selected = null;
+            }, "The quest could not be set aside. Nothing has changed.");
+        }
+
         /// <summary>The write itself, and the only one on this tab.</summary>
         private static void Take(Quest quest, Pawn accepter, System.Action before)
         {

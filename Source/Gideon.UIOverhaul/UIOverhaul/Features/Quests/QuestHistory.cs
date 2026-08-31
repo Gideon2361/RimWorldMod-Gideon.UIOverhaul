@@ -79,6 +79,96 @@ namespace Gideon.UIOverhaul.Features.Quests
             }, "That quest could not be removed. It is still in the save and nothing else has changed.");
         }
 
+        /// <summary>
+        /// The outcomes the history can be swept by, in the order a player thinks of them.
+        ///
+        /// <b>Grouped by what happened rather than by state,</b> which is why this is a list and not the
+        /// <c>QuestState</c> enum. Two of the seven states mean "it ended and nobody recorded how", and a menu
+        /// offering "ended unknown outcome" and "ended invalid" as separate lines would be reading the enum out
+        /// loud rather than answering a question anybody has.
+        /// </summary>
+        internal static readonly QuestState[] Groups =
+        {
+            QuestState.EndedSuccess,
+            QuestState.EndedFailed,
+            QuestState.EndedOfferExpired
+        };
+
+        /// <summary>What to call one of those groups.</summary>
+        internal static string GroupLabel(QuestState state)
+        {
+            switch (state)
+            {
+                case QuestState.EndedSuccess: return "completed";
+                case QuestState.EndedFailed: return "failed";
+                case QuestState.EndedOfferExpired: return "expired";
+                default: return "ended";
+            }
+        }
+
+        /// <summary>
+        /// Whether a quest falls in one of the named groups.
+        ///
+        /// The two vague states fall together under the last group, so a sweep of everything still reaches
+        /// them and no finished quest is unreachable by any button.
+        /// </summary>
+        private static bool InGroup(Quest quest, QuestState group)
+        {
+            QuestState state = UIGuard.Try("Quests.State", () => quest.State, QuestState.EndedInvalid, null);
+
+            if (group == QuestState.EndedSuccess || group == QuestState.EndedFailed
+                                                 || group == QuestState.EndedOfferExpired)
+                return state == group;
+
+            return state != QuestState.EndedSuccess && state != QuestState.EndedFailed
+                                                    && state != QuestState.EndedOfferExpired;
+        }
+
+        /// <summary>How many of one outcome could be removed.</summary>
+        internal static int CountOf(QuestState group)
+        {
+            List<Quest> all = UIGuard.Try("Quests.List", () => Find.QuestManager?.QuestsListForReading, null,
+                null);
+
+            int count = 0;
+
+            for (int i = 0; all != null && i < all.Count; i++)
+            {
+                if (Removable(all[i]) && InGroup(all[i], group))
+                    count++;
+            }
+
+            return count;
+        }
+
+        /// <summary>Drops every standalone finished quest with one outcome.</summary>
+        internal static int SweepOf(QuestState group)
+        {
+            return UIGuard.Try("Quests.SweepGroup", () =>
+            {
+                List<Quest> doomed = new List<Quest>();
+                List<Quest> all = Find.QuestManager?.QuestsListForReading;
+
+                for (int i = 0; all != null && i < all.Count; i++)
+                {
+                    if (Removable(all[i]) && InGroup(all[i], group))
+                        doomed.Add(all[i]);
+                }
+
+                for (int i = 0; i < doomed.Count; i++)
+                    Find.QuestManager.Remove(doomed[i]);
+
+                if (doomed.Count > 0)
+                {
+                    QuestFacts.Selected = null;
+
+                    SoundDefOf.Tick_Low.PlayOneShotOnCamera();
+                }
+
+                return doomed.Count;
+            }, 0, "Those quests could not be removed. They are still in the save and nothing else has changed.");
+        }
+
         /// <summary>How many finished quests the sweep would take, and how many it would have to leave.</summary>
         internal static void Sweepable(out int removable, out int chained)
         {
