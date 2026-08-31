@@ -253,115 +253,27 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             GUI.color = previous;
         }
 
-        /// <summary>Drawn width of the bar.</summary>
-        public const float ScrollBarWidth = 6f;
+        /// <summary>Drawn width of the bar. The framework control owns the value now.</summary>
+        public const float ScrollBarWidth = UIScrollBarControl.ScrollBarWidth;
 
         /// <summary>Clear space between the content and the bar.</summary>
-        public const float ScrollBarGutter = 4f;
+        public const float ScrollBarGutter = UIScrollBarControl.ScrollBarGutter;
 
-        /// <summary>
-        /// Grabbable width. Wider than the drawn bar because six pixels is a mean target to hit with
-        /// a mouse; the extra width reaches back over the gutter, which holds nothing clickable.
-        /// </summary>
-        private const float ScrollBarHitWidth = 14f;
-
-        private const float ScrollThumbMin = 24f;
-
-        /// <summary>
-        /// Width a scroll view's content may occupy inside <paramref name="outRect"/> without running
-        /// under the bar. Use it for the view rect passed to BeginScrollView -- and for anything that
-        /// has to line up with that content, such as column headers above the list.
-        ///
-        /// The bar is drawn over the right edge of <paramref name="outRect"/> rather than beside it,
-        /// so nothing forces a caller to leave room. This is that reservation in one place, instead
-        /// of each call site subtracting its own idea of the right number.
-        /// </summary>
+        /// <summary>The width a view rect should be, leaving room for the bar and its gutter.</summary>
         public static float ContentWidth(Rect outRect)
         {
-            return outRect.width - ScrollBarWidth - ScrollBarGutter;
+            return UIScrollBarControl.ContentWidth(outRect);
         }
 
         /// <summary>
-        /// Slim draggable scrollbar in place of RimWorld's chunky one. Pair it with
-        /// <c>Widgets.BeginScrollView(rect, ref scroll, view, showScrollbars: false)</c>, size the
-        /// view rect with <see cref="ContentWidth"/>, and call this after EndScrollView in the same
-        /// coordinate space as <paramref name="outRect"/>. The mouse wheel still works, because
-        /// Unity's scroll view handles it regardless of the scrollbar styles it was given.
-        ///
-        /// <paramref name="viewHeight"/> must be the height actually laid out, not an upper bound: it
-        /// sets both the thumb's size and how far the content can travel, so an over-estimate scrolls
-        /// into empty space below the content.
+        /// Slim draggable scrollbar. <b>The implementation moved to <see cref="UIScrollBarControl"/></b> when
+        /// the rail control needed it: the framework cannot reference a feature, so it had to come up a layer.
+        /// This forwarder stays because several screens already call it by this name.
         /// </summary>
-        public static void FlatScrollbar(Rect outRect, float viewHeight, ref Vector2 scroll, ref bool dragging, ref float dragOffset)
+        public static void FlatScrollbar(Rect outRect, float viewHeight, ref Vector2 scroll, ref bool dragging,
+            ref float dragOffset)
         {
-            float maxScroll = Mathf.Max(0f, viewHeight - outRect.height);
-            if (maxScroll <= 0f)
-            {
-                // Content that no longer overflows -- a list a search box has just filtered down --
-                // leaves the old offset stranded, showing blank space until something scrolls it back.
-                scroll.y = 0f;
-                dragging = false;
-                return;
-            }
-
-            // Same reason, for content that shrank but still overflows.
-            scroll.y = Mathf.Clamp(scroll.y, 0f, maxScroll);
-
-            Rect track = new Rect(outRect.xMax - ScrollBarWidth, outRect.y, ScrollBarWidth, outRect.height);
-            Widgets.DrawBoxSolid(track, Palette.SurfaceSunken);
-
-            float thumbHeight = Mathf.Max(ScrollThumbMin, outRect.height * (outRect.height / viewHeight));
-            float travel = outRect.height - thumbHeight;
-            Rect thumb = new Rect(track.x, track.y + travel * (scroll.y / maxScroll), ScrollBarWidth, thumbHeight);
-
-            Rect hit = new Rect(outRect.xMax - ScrollBarHitWidth, outRect.y, ScrollBarHitWidth, outRect.height);
-
-            Event current = Event.current;
-            bool over = Mouse.IsOver(hit);
-
-            // Read before anything calls Use(): Use() rewrites Event.current.type to Used, so the
-            // drag block below cannot ask what kind of event this was once the click is consumed.
-            bool positional = current.type == EventType.MouseDown || current.type == EventType.MouseDrag;
-            float mouseY = current.mousePosition.y;
-
-            if (current.type == EventType.MouseDown && current.button == 0 && over)
-            {
-                // Grabbing the thumb keeps the grab point; clicking the bare track centers it.
-                // Only the thumb's vertical span is tested -- horizontally the cursor is already
-                // known to be in the hit column, which is wider than the drawn bar, so a click in
-                // the gutter beside the thumb grabs it instead of jumping it under the cursor.
-                bool onThumb = mouseY >= thumb.y && mouseY <= thumb.yMax;
-                dragOffset = onThumb ? mouseY - thumb.y : thumbHeight * 0.5f;
-                dragging = true;
-                current.Use();
-            }
-            else if (dragging && (current.type == EventType.MouseUp || current.rawType == EventType.MouseUp))
-            {
-                // rawType as well as type: a button released outside the window, or over something
-                // that consumed the event, arrives here as Ignore and would leave the drag stuck on.
-                dragging = false;
-                current.Use();
-            }
-
-            // Only the events that carry a new cursor position move the content. Layout and Repaint
-            // reuse the stored offset, so the thumb still renders where the last drag left it.
-            //
-            // The drag is consumed because a draggable Window calls GUI.DragWindow, which otherwise
-            // treats an unclaimed drag as an instruction to move the whole window.
-            if (dragging && travel > 0f && positional)
-            {
-                float local = mouseY - dragOffset - track.y;
-                scroll.y = Mathf.Clamp01(local / travel) * maxScroll;
-                thumb.y = track.y + travel * (scroll.y / maxScroll);
-
-                if (current.type != EventType.Used)
-                    current.Use();
-            }
-
-            // The thumb has to stay visible against the track, so it comes from a text role rather than
-            // a translucent white wash: on a light theme white-on-light left it invisible. The two
-            // alphas are the original ones, keeping the same at-rest and grabbed weights.
-            Widgets.DrawBoxSolid(thumb, Wash(Palette.TextSecondary, dragging || over ? 0.7f : 0.45f));
+            UIScrollBarControl.Draw(outRect, viewHeight, ref scroll, ref dragging, ref dragOffset);
         }
 
         /// <summary>

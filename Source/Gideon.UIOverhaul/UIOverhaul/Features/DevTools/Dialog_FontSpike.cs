@@ -57,6 +57,8 @@ namespace Gideon.UIOverhaul.Features.DevTools
         private bool stressFace = true;
 
         private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
         private float smoothed;
 
         public Dialog_FontSpike()
@@ -146,64 +148,37 @@ namespace Gideon.UIOverhaul.Features.DevTools
         }
 
         /// <summary>
-        /// Every face, each drawn in itself. A face the bundle does not carry is named in RimWorld's font and
-        /// marked, because a row that silently fell back to the game font would look like a face that merely
-        /// resembles it.
+        /// Every face, each drawn in itself, so browsing the list is the comparison.
+        ///
+        /// A face the bundle does not carry is dimmed and unclickable rather than dropped, and drawn in
+        /// RimWorld's font, because a row that silently fell back would look like a face that merely resembles
+        /// the game's.
         /// </summary>
         private void Rail(Rect rect, UIColorPaletteDef palette)
         {
-            Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
-            Widgets.DrawBox(rect);
-
-            float rowHeight = UIFonts.LineHeightOf(GameFont.Medium) + 10f;
-            Rect view = new Rect(0f, 0f, rect.width - 18f, Faces.Length * rowHeight);
-
-            Widgets.BeginScrollView(rect.ContractedBy(1f), ref railScroll, view);
-
-            float y = 0f;
+            List<UIRailEntry> entries = new List<UIRailEntry>();
 
             for (int i = 0; i < Faces.Length; i++)
             {
                 UIFace face = Faces[i];
                 bool available = UIFaces.Available(face);
-                Rect row = new Rect(0f, y, view.width, rowHeight);
 
-                if (face == selected)
-                    Widgets.DrawBoxSolid(row, palette.Accent * new Color(1f, 1f, 1f, 0.22f));
-                else if (Mouse.IsOver(row))
-                    Widgets.DrawBoxSolid(row, palette.HoverOverlay);
-
-                Rect circle = new Rect(row.x + 6f, row.y + (rowHeight - UIRadioButtonControl.ButtonSize) / 2f,
-                    UIRadioButtonControl.ButtonSize, UIRadioButtonControl.ButtonSize);
-
-                UIRadioButtonControl.DrawButton(circle, face == selected, palette);
-
-                Rect label = new Rect(circle.xMax + 6f, row.y, row.width - circle.width - 18f, rowHeight);
-
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = available ? palette.TextPrimary : palette.TextDisabled;
-
-                if (available)
+                entries.Add(new UIRailEntry
                 {
-                    UITextControl.LabelEllipses(label, UIFaces.Named(face), face, GameFont.Medium);
-                }
-                else
-                {
-                    Text.Font = GameFont.Small;
-
-                    Widgets.LabelEllipses(label, UIFaces.Named(face) + "  (missing)");
-                }
-
-                GUI.color = Color.white;
-                Text.Anchor = TextAnchor.UpperLeft;
-
-                if (Widgets.ButtonInvisible(row))
-                    selected = face;
-
-                y += rowHeight;
+                    Key = face.ToString(),
+                    Label = available ? UIFaces.Named(face) : UIFaces.Named(face) + "  (missing)",
+                    Count = -1,
+                    Face = available ? face : UIFace.Game,
+                    Disabled = !available
+                });
             }
 
-            Widgets.EndScrollView();
+            string picked = UIRailControl.Draw(rect, entries, selected.ToString(), ref railScroll,
+                ref railDragging, ref railDragOffset, palette,
+                UIFonts.LineHeightOf(GameFont.Medium) + 10f);
+
+            if (picked != null)
+                selected = UIFaces.Parse(picked);
         }
 
         /// <summary>
