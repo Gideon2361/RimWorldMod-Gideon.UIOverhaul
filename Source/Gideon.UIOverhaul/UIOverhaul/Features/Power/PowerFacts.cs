@@ -33,6 +33,38 @@ namespace Gideon.UIOverhaul.Features.Power
         internal bool severe;
     }
 
+    /// <summary>One generator, and how long its own tank lasts.</summary>
+    internal struct BurnerRow
+    {
+        internal string name;
+        internal float held;
+        internal float capacity;
+        internal float perDay;
+
+        /// <summary>Days until this one is dry, or a negative when it is not burning.</summary>
+        internal float days;
+    }
+
+    /// <summary>One kind of fuel the grid burns, with every burner of it under it.</summary>
+    internal struct FuelRow
+    {
+        internal ThingDef kind;
+        internal string name;
+
+        /// <summary>Held across every burner of this fuel on the grid.</summary>
+        internal float held;
+
+        internal float capacity;
+
+        /// <summary>Units a day, counting only the burners actually consuming.</summary>
+        internal float perDay;
+
+        /// <summary>Days until the grid runs out of this, or a negative when nothing is burning it.</summary>
+        internal float days;
+
+        internal List<BurnerRow> burners;
+    }
+
     /// <summary>One power grid, read as a whole.</summary>
     internal struct GridRow
     {
@@ -358,6 +390,165 @@ namespace Gideon.UIOverhaul.Features.Power
             return int.TryParse(detail, out had) ? (had + 1).ToString() : detail;
         }
 
+        // -------------------------------------------------------------------------------------------
+        // Fuel
+        // -------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// What a grid is burning, and how long each burner has left.
+        ///
+        /// <b>Grouped by what goes in rather than by what it powers.</b> A colony stocks chemfuel and wood,
+        /// not "the generator by the east wall", and the question behind opening this is always whether one of
+        /// those two is about to run out. Generators are listed under their fuel so the answer and the things
+        /// giving it are in the same place.
+        ///
+        /// <b>Only burners that are actually consuming are counted into the rate.</b> A generator switched off,
+        /// or one whose props say it only burns while powered or in use, is holding its fuel rather than
+        /// spending it, and folding it into the rate would give a countdown that never comes true.
+        /// </summary>
+        internal static List<FuelRow> Fuels(PowerNet net, List<FuelRow> into)
+        {
+            into.Clear();
+
+            List<CompPowerTrader> traders = UIGuard.Try("Power.Traders", () => net?.powerComps, null, null);
+
+            Dictionary<ThingDef, int> seen = new Dictionary<ThingDef, int>();
+
+            for (int i = 0; traders != null && i < traders.Count; i++)
+            {
+                CompPowerTrader trader = traders[i];
+
+                if (trader?.parent == null)
+                    continue;
+
+                CompRefuelable fuel = UIGuard.Try("Power.FuelComp",
+                    trader.parent.TryGetComp<CompRefuelable>, null, null);
+
+                if (fuel?.Props == null || fuel.Props.fuelCapacity <= 0f)
+                    continue;
+
+                ThingDef kind = Burns(fuel);
+
+                if (kind == null)
+                    continue;
+
+                int at;
+
+                if (!seen.TryGetValue(kind, out at))
+                {
+                    seen[kind] = into.Count;
+
+                    into.Add(new FuelRow
+                    {
+                        kind = kind,
+                        name = kind.LabelCap,
+                        burners = new List<BurnerRow>()
+                    });
+
+                    at = into.Count - 1;
+                }
+
+                FuelRow row = into[at];
+
+                float held = UIGuard.Try("Power.FuelHeld", () => fuel.Fuel, 0f, null);
+                float rate = Rate(fuel, trader);
+
+                row.held += held;
+                row.capacity += fuel.Props.fuelCapacity;
+                row.perDay += rate;
+
+                row.burners.Add(new BurnerRow
+                {
+                    name = trader.parent.LabelCapNoCount,
+                    held = held,
+                    capacity = fuel.Props.fuelCapacity,
+                    perDay = rate,
+                    days = rate > 0f ? held / rate : -1f
+                });
+
+                into[at] = row;
+            }
+
+            for (int i = 0; i < into.Count; i++)
+            {
+                FuelRow row = into[i];
+
+                row.days = row.perDay > 0f ? row.held / row.perDay : -1f;
+
+                row.burners.Sort((a, b) =>
+                {
+                    // Whatever runs out first is what somebody wants to see, and a burner that is not
+                    // consuming has no answer to that and belongs at the bottom rather than at the top.
+                    if (a.days < 0f && b.days < 0f)
+                        return 0;
+
+                    if (a.days < 0f)
+                        return 1;
+
+                    if (b.days < 0f)
+                        return -1;
+
+                    return a.days.CompareTo(b.days);
+                });
+
+                into[i] = row;
+            }
+
+            into.Sort((a, b) => b.perDay.CompareTo(a.perDay));
+
+            return into;
+        }
+
+        /// <summary>
+        /// What this thing burns.
+        ///
+        /// <b>Read off the filter, which is where the game keeps it.</b> A generator's fuel is whatever its
+        /// <c>fuelFilter</c> allows, so a modded burner naming a modded fuel is answered correctly without
+        /// this knowing anything about either. A filter allowing several things reports the first, because a
+        /// row headed by one of two interchangeable fuels is still a truer heading than none.
+        /// </summary>
+        private static ThingDef Burns(CompRefuelable fuel)
+        {
+            return UIGuard.Try("Power.FuelKind", () =>
+            {
+                ThingFilter filter = fuel.Props.fuelFilter;
+
+                if (filter == null)
+                    return null;
+
+                foreach (ThingDef allowed in filter.AllowedThingDefs)
+                    return allowed;
+
+                return null;
+            }, null, null);
+        }
+
+        /// <summary>
+        /// How fast this one is burning, in units a day, or zero when it is not burning at all.
+        ///
+        /// <b>The conditions are the props' own.</b> <c>consumeFuelOnlyWhenPowered</c> and
+        /// <c>consumeFuelOnlyWhenUsed</c> both exist, both are false on the ordinary generators and true on
+        /// several modded ones, and a rate that ignored them would count fuel as spent that is not moving.
+        /// </summary>
+        private static float Rate(CompRefuelable fuel, CompPowerTrader trader)
+        {
+            return UIGuard.Try("Power.FuelRate", () =>
+            {
+                if (!fuel.HasFuel)
+                    return 0f;
+
+                CompFlickable flick = trader.parent.TryGetComp<CompFlickable>();
+
+                if (flick != null && !flick.SwitchIsOn)
+                    return 0f;
+
+                if (fuel.Props.consumeFuelOnlyWhenPowered && !trader.PowerOn)
+                    return 0f;
+
+                return fuel.Props.fuelConsumptionRate;
+            }, 0f, null);
+        }
+
         /// <summary>Hours as something readable, or a dash when there is no countdown to give.</summary>
         internal static string Hours(float hours)
         {
@@ -371,6 +562,18 @@ namespace Gideon.UIOverhaul.Features.Power
                 return Mathf.RoundToInt(hours) + "h";
 
             return (hours / 24f).ToString("F1") + "d";
+        }
+
+        /// <summary>Days as something readable, or a dash when nothing is burning it.</summary>
+        internal static string Days(float days)
+        {
+            if (days < 0f)
+                return "not burning";
+
+            if (days < 1f)
+                return Mathf.RoundToInt(days * 24f) + "h left";
+
+            return days.ToString("0.#") + "d left";
         }
 
         /// <summary>Watts with a sign and a separator, which is how the game writes them.</summary>

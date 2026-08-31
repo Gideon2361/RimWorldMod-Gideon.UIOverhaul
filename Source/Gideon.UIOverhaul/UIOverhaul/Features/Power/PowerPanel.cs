@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Inspector;
 using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
@@ -80,6 +81,7 @@ namespace Gideon.UIOverhaul.Features.Power
             float y = Balance(view, 0f, shown, palette);
 
             y = Lists(view, y, shown, palette);
+            y = Burners(view, y, shown, palette);
             y = Trouble(view, y, shown, palette);
 
             if (Event.current.type == EventType.Layout)
@@ -453,6 +455,187 @@ namespace Gideon.UIOverhaul.Features.Power
 
             TabParts.RowLabel(new Rect(band.x, band.y, track.x - band.x - 8f, height), name,
                 palette.TextPrimary, GameFont.Small, PowerFaces.Condensed, PowerFaces.Size.Name);
+
+            return band.yMax;
+        }
+
+        private static readonly List<FuelRow> Burning = new List<FuelRow>();
+
+        /// <summary>
+        /// What the grid is burning, by fuel, with every burner of it underneath.
+        ///
+        /// <b>Headed by the fuel rather than by the generator,</b> because a colony stocks chemfuel and wood
+        /// rather than "the generator by the east wall", and the question behind opening this is whether one
+        /// of those is about to run out. The burners sit under their fuel so the answer and the things giving
+        /// it are in one place.
+        ///
+        /// <b>The countdown is the point again.</b> Two hundred chemfuel means nothing on its own; two hundred
+        /// chemfuel at forty five a day is four days, and four days is a decision about whether somebody is
+        /// hauling today.
+        /// </summary>
+        private static float Burners(Rect view, float y, GridRow grid, UIColorPaletteDef palette)
+        {
+            PowerFacts.Fuels(grid.net, Burning);
+
+            if (Burning.Count == 0)
+                return y;
+
+            int rows = 0;
+
+            for (int i = 0; i < Burning.Count; i++)
+                rows += 1 + Burning[i].burners.Count;
+
+            float height = 30f + rows * 22f + Burning.Count * 4f + 8f;
+
+            Rect box = new Rect(view.x, y, view.width, height);
+
+            UIElementPainter.OutlineRounded(box, palette.Border, palette.PanelBackground);
+
+            Rect cap = new Rect(box.x, box.y, box.width, 22f);
+
+            UIElementPainter.FillRounded(cap,
+                UIElementPainter.Composite(palette.PanelBackground, palette.HoverOverlay));
+
+            TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, cap.height),
+                PowerFaces.Caps("Fuel"), palette.TextSecondary, GameFont.Tiny, PowerFaces.Mono,
+                PowerFaces.Size.BlockHead);
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.LabelEllipses(new Rect(cap.x + 10f, cap.y, cap.width - 20f, cap.height),
+                    PowerFaces.Caps(Burning.Count + (Burning.Count == 1 ? " kind" : " kinds")),
+                    PowerFaces.Mono, PowerFaces.Size.BlockHead);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            float cursor = cap.yMax + 4f;
+
+            for (int i = 0; i < Burning.Count; i++)
+                cursor = Fuel(box, cursor, Burning[i], palette);
+
+            return box.yMax + RowGap;
+        }
+
+        private static float Fuel(Rect box, float y, FuelRow fuel, UIColorPaletteDef palette)
+        {
+            const float height = 22f;
+            const float figure = 96f;
+
+            Rect band = new Rect(box.x + 12f, y, box.width - 24f, height);
+
+            Color tint = fuel.days < 0f
+                ? palette.TextDisabled
+                : fuel.days < 1f
+                    ? palette.Danger
+                    : fuel.days < 3f
+                        ? palette.Warning
+                        : palette.Success;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = tint;
+
+                UITextControl.LabelEllipses(new Rect(band.xMax - figure, band.y, figure, height),
+                    PowerFacts.Days(fuel.days), PowerFaces.Mono, PowerFaces.Size.Small);
+
+                GUI.color = palette.TextSecondary;
+
+                string rate = fuel.perDay > 0f
+                    ? Mathf.RoundToInt(fuel.held) + " left, " + fuel.perDay.ToString("0.#") + "/day"
+                    : Mathf.RoundToInt(fuel.held) + " left, not burning";
+
+                UITextControl.LabelEllipses(new Rect(band.xMax - figure - 200f, band.y, 196f, height), rate,
+                    PowerFaces.Mono, PowerFaces.Size.Small);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            TabParts.RowLabel(new Rect(band.x, band.y, band.width - figure - 208f, height), fuel.name,
+                palette.TextPrimary, GameFont.Small, PowerFaces.Condensed, PowerFaces.Size.Name);
+
+            float cursor = band.yMax;
+
+            for (int i = 0; i < fuel.burners.Count; i++)
+                cursor = Burner(box, cursor, fuel.burners[i], palette);
+
+            return cursor + 4f;
+        }
+
+        /// <summary>
+        /// One generator under its fuel: how full it is, and how long that lasts.
+        ///
+        /// <b>Indented and quieter than the fuel above it,</b> because these are the detail behind a figure
+        /// that has already been given. Somebody who only wanted to know whether the wood is running out has
+        /// their answer on the row above and can stop reading.
+        /// </summary>
+        private static float Burner(Rect box, float y, BurnerRow burner, UIColorPaletteDef palette)
+        {
+            const float height = 22f;
+            const float figure = 96f;
+            const float bar = 70f;
+
+            Rect band = new Rect(box.x + 26f, y, box.width - 38f, height);
+
+            float share = burner.capacity > 0f ? Mathf.Clamp01(burner.held / burner.capacity) : 0f;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+
+                GUI.color = burner.days < 0f
+                    ? palette.TextDisabled
+                    : burner.days < 1f
+                        ? palette.Danger
+                        : palette.TextSecondary;
+
+                UITextControl.LabelEllipses(new Rect(band.xMax - figure, band.y, figure, height),
+                    PowerFacts.Days(burner.days), PowerFaces.Mono, PowerFaces.Size.Small);
+
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.LabelEllipses(new Rect(band.xMax - figure - 90f, band.y, 86f, height),
+                    Mathf.RoundToInt(burner.held) + " / " + Mathf.RoundToInt(burner.capacity),
+                    PowerFaces.Mono, PowerFaces.Size.Small);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            Rect track = new Rect(band.xMax - figure - 90f - bar - 8f, band.y + (height - 6f) * 0.5f, bar, 6f);
+
+            UIElementPainter.OutlineRounded(track, palette.Border, palette.SurfaceSunken);
+
+            if (share > 0f)
+            {
+                Widgets.DrawBoxSolid(new Rect(track.x + 1f, track.y + 1f,
+                        Mathf.Max(1f, (track.width - 2f) * share), track.height - 2f),
+                    InspectPaneParts.Level(share, palette));
+            }
+
+            TabParts.RowLabel(new Rect(band.x, band.y, track.x - band.x - 8f, height), burner.name,
+                palette.TextSecondary, GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
 
             return band.yMax;
         }
