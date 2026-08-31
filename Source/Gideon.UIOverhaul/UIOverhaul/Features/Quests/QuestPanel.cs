@@ -4,6 +4,7 @@ using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Shared;
 using RimWorld;
+using RimWorld.Planet;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
@@ -793,25 +794,27 @@ namespace Gideon.UIOverhaul.Features.Quests
         }
 
         /// <summary>
-        /// One running quest: what it is waiting on, who it is holding, and a way in.
+        /// One running quest: what it is waiting on, where it is, who it is holding, and a way in.
         ///
-        /// <b>The first version of this row said the name and "Holding nobody", which is nothing.</b> Most
-        /// quests hold no colonist, so the only line under the name was the same words on every row. What a
-        /// running quest is actually asked is when it ends and what it is waiting for, and the game has both:
-        /// the enabled delay carries its own player-facing wording, and every quest knows when it was accepted.
+        /// <b>Two earlier versions of this row said nothing.</b> The first put "Holding nobody" under every
+        /// name, because most quests hold no colonist. The second put "Running to no deadline" under every
+        /// name, because most quests have no clock. A line that is the same on every row is not information,
+        /// however true it is.
         ///
-        /// <b>And it opens.</b> A row that cannot be clicked is a dead end when the detail view exists two
-        /// pixels away. Reported on 2026-08-30.
+        /// <b>So the row leads with whichever fact this quest actually has.</b> A clock if it is running
+        /// against one, otherwise where it is pointing and how far that is, and only then how long ago it was
+        /// accepted. The place is the useful answer for a site quest, which is most of what a colony carries:
+        /// it is not waiting on time, it is waiting on somebody walking there.
         /// </summary>
         private static float ActiveOne(Rect view, float y, ActiveRow row, UIColorPaletteDef palette)
         {
             QuestFacts.Deadlines(row.quest, Clocks);
 
-            string waiting = Clocks.Count > 0 && !Clocks[0].text.NullOrEmpty()
+            string clock = Clocks.Count > 0 && !Clocks[0].text.NullOrEmpty()
                 ? Clocks[0].text
                 : row.ends != int.MaxValue
                     ? "Ends in " + QuestFacts.Period(row.ends)
-                    : "Running to no deadline";
+                    : null;
 
             string held = null;
 
@@ -826,7 +829,19 @@ namespace Gideon.UIOverhaul.Features.Quests
                 held = held == null ? name : held + ", " + name;
             }
 
-            float height = held == null ? 48f : 68f;
+            string lead = clock ?? row.where
+                ?? "Accepted " + QuestFacts.Period(
+                    UIGuard.Try("Quests.Since", () => row.quest.TicksSinceAccepted, 0, null)) + " ago";
+
+            bool place = clock == null && !row.where.NullOrEmpty();
+
+            float height = 48f;
+
+            if (held != null)
+                height += 20f;
+
+            if (clock != null && !row.where.NullOrEmpty())
+                height += 20f;
 
             Rect box = new Rect(view.x, y, view.width, height);
             bool over = Mouse.IsOver(box);
@@ -834,8 +849,6 @@ namespace Gideon.UIOverhaul.Features.Quests
             UIElementPainter.OutlineRounded(box, over ? palette.Accent : palette.Border,
                 palette.PanelBackground);
 
-            // The stripe reads the same as it does on an offer: red when a clock is about to run out. Inset by
-            // a pixel so the card's outline stays unbroken around it.
             Color stripe = row.ends == int.MaxValue
                 ? palette.Border
                 : row.ends <= GenDate.TicksPerDay
@@ -844,15 +857,35 @@ namespace Gideon.UIOverhaul.Features.Quests
                         ? palette.Warning
                         : palette.Accent;
 
+            // Inset a pixel so the card's outline stays unbroken around it.
             Widgets.DrawBoxSolid(new Rect(box.x + 1f, box.y + 1f, 3f, box.height - 2f), stripe);
 
             Rect inner = new Rect(box.x + 12f, box.y + 6f, box.width - 24f, box.height - 12f);
 
             float right = inner.xMax;
 
+            // The jump control is laid out from the right before the name, so a long quest name gives way to
+            // it rather than pushing it off the card.
+            bool jumpable = row.target.IsValid && UIGuard.Try("Quests.CanJump",
+                () => CameraJumper.CanJump(row.target), false, null);
+
+            if (jumpable)
+            {
+                Rect jump = new Rect(inner.xMax - 74f, inner.y, 74f, 24f);
+
+                if (TabParts.Button(jump, "Show me", palette, true, false,
+                        "Move the camera to " + row.where + "."))
+                {
+                    UIGuard.Try("Quests.Jump", () => CameraJumper.TryJumpAndSelect(row.target),
+                        "The camera could not be moved to that quest's target.");
+                }
+
+                right = jump.x - 8f;
+            }
+
             if (!row.factions.NullOrEmpty())
             {
-                float width = Mathf.Min(inner.width * 0.4f,
+                float width = Mathf.Min(inner.width * 0.34f,
                     UITextControl.Width(row.factions, QuestFaces.Mono, QuestFaces.Size.Small) + 6f);
 
                 TextAnchor previousAnchor = Text.Anchor;
@@ -863,7 +896,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     Text.Anchor = TextAnchor.MiddleRight;
                     GUI.color = palette.TextSecondary;
 
-                    UITextControl.LabelEllipses(new Rect(inner.xMax - width, inner.y, width, 22f),
+                    UITextControl.LabelEllipses(new Rect(right - width, inner.y, width, 22f),
                         row.factions, QuestFaces.Mono, QuestFaces.Size.Small);
                 }
                 finally
@@ -872,7 +905,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     Text.Anchor = previousAnchor;
                 }
 
-                right = inner.xMax - width - 8f;
+                right -= width + 8f;
             }
 
             TabParts.RowLabel(new Rect(inner.x, inner.y, Mathf.Max(60f, right - inner.x), 22f), row.name,
@@ -880,16 +913,26 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             float cursor = inner.y + 22f;
 
-            Color when = row.ends == int.MaxValue
-                ? palette.TextDisabled
+            Color tint = clock == null
+                ? place ? palette.TextSecondary : palette.TextDisabled
                 : row.ends <= GenDate.TicksPerDay * 3
                     ? palette.Warning
                     : palette.TextSecondary;
 
-            TabParts.RowLabel(new Rect(inner.x, cursor, inner.width, 20f), waiting, when, GameFont.Small,
+            TabParts.RowLabel(new Rect(inner.x, cursor, inner.width, 20f), lead, tint, GameFont.Small,
                 QuestFaces.Body, QuestFaces.Size.Body);
 
             cursor += 20f;
+
+            // A quest with both a clock and a place gets both lines: the clock is what it is running against
+            // and the place is where you go to do something about it.
+            if (clock != null && !row.where.NullOrEmpty())
+            {
+                TabParts.RowLabel(new Rect(inner.x, cursor, inner.width, 20f), row.where, palette.TextDisabled,
+                    GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+
+                cursor += 20f;
+            }
 
             if (held != null)
             {
