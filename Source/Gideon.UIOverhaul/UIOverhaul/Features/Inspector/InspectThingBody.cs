@@ -174,6 +174,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (constructible == null)
                 return y;
 
+            // An install blueprint is asked for nothing, and asking it anyway writes an error to the log on
+            // every frame the pane is open. Its own TotalMaterialCost logs "Called MaterialsNeededTotal on a
+            // Blueprint_Install" and gives back an empty list, because the building being reinstalled already
+            // exists: there is no material cost, only the walking and the work. Reported on 2026-08-30.
+            Blueprint_Install install = thing as Blueprint_Install;
+
+            if (install != null)
+                return Reinstall(view, y, install, palette);
+
             List<ThingDefCountClass> cost = UIGuard.Try("Inspector.BuildCost",
                 constructible.TotalMaterialCost, null, null);
 
@@ -254,6 +263,37 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     palette.TextPrimary, progress, palette.Accent, null,
                     Mathf.Max(0f, work - done).ToString("F0") + " left", palette);
             }
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// What a reinstall is waiting on, which is a haul rather than a bill of materials.
+        ///
+        /// <b>Its own block because it is its own question.</b> The building exists; nothing is being spent on
+        /// it and nothing has to be delivered. What somebody clicking a reinstall marker wants to know is
+        /// which building is coming and whether it has been picked up yet.
+        /// </summary>
+        private static float Reinstall(Rect view, float y, Blueprint_Install install, UIColorPaletteDef palette)
+        {
+            Thing moving = UIGuard.Try("Inspector.Reinstall", () => install.ThingToInstall, null, null);
+
+            if (moving == null)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Construction summary", "reinstall", palette);
+
+            y = InspectPaneParts.Fact(view, y, "Moving", moving.LabelCap, palette.TextPrimary, palette);
+
+            bool carried = UIGuard.Try("Inspector.ReinstallHeld",
+                () => install.MiniToInstallOrBuildingToReinstall is MinifiedThing, false, null);
+
+            y = InspectPaneParts.Fact(view, y, "Materials", "none, it already exists", palette.TextSecondary,
+                palette);
+
+            y = InspectPaneParts.Fact(view, y, "State",
+                carried ? "uninstalled, waiting to be carried here" : "still standing where it is",
+                palette.TextSecondary, palette);
 
             return y + InspectPaneParts.BlockGap;
         }
@@ -866,37 +906,13 @@ namespace Gideon.UIOverhaul.Features.Inspector
             return watts;
         }
 
-        /// <summary>How a state pill moves, which is the part of it that carries the state.</summary>
-        private enum PillMotion
-        {
-            /// <summary>A highlight travels the way the energy is going.</summary>
-            SweepRight,
-
-            SweepLeft,
-
-            /// <summary>The whole pill drops out and returns. For a state that is not a direction.</summary>
-            Blink,
-
-            /// <summary>The wash swells and fades in place. For a state that is a place, not a movement.</summary>
-            Breathe
-        }
-
         /// <summary>
-        /// The pill beside the Charge heading: filling, emptying, at rest, or flat.
+        /// The pill beside the Charge heading, drawn by the shared control.
         ///
-        /// <b>The motion is the state, not decoration.</b> Fading the letters up and down, which is what this
-        /// did first, is the one animation that cannot encode anything: there is no direction in it and no
-        /// shape to read, so all four states moved identically. It also looked like a rendering fault, because
-        /// text going dim and bright is what a broken draw does. Aaron picked the sweep on 2026-08-30 from four
-        /// candidates.
-        ///
-        /// <b>So charge sweeps right and drain sweeps left,</b> and the direction of travel is the reading.
-        /// Empty blinks, because empty is not a direction. Full breathes, because full is a place rather than
-        /// a movement.
-        ///
-        /// <b>Empty and full both outrank the direction.</b> A battery at zero on a gaining grid is still a
-        /// battery with nothing in it; a battery at capacity is not charging, because there is nowhere for the
-        /// gain to go. The grid excess row underneath still says what the rest of the net is doing.
+        /// <b>This used to hold the animation itself.</b> It moved to <see cref="ChargePill"/> when the power
+        /// tab needed the same thing for a whole grid: the inspect pane says this about one battery and that
+        /// screen says it about every battery on a net, which is one sentence about different amounts of the
+        /// same thing.
         /// </summary>
         private static void Direction(Rect view, float y, CompPowerBattery battery, float stored,
             UIColorPaletteDef palette)
@@ -907,38 +923,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (!connected)
                 return;
 
-            string word;
-            Color tint;
-            PillMotion motion;
+            float capacity = UIGuard.Try("Inspector.BatteryMax",
+                () => battery.Props != null ? battery.Props.storedEnergyMax : 0f, 0f, null);
 
-            float level = UIGuard.Try("Inspector.BatteryPct", () => battery.StoredEnergyPct, 0f, null);
-
-            if (stored <= 0.01f)
-            {
-                word = "empty";
-                tint = palette.Danger;
-                motion = PillMotion.Blink;
-            }
-            else if (level >= 0.999f)
-            {
-                word = "full";
-                tint = palette.Accent;
-                motion = PillMotion.Breathe;
-            }
-            else if (watts > 0f)
-            {
-                word = "charge";
-                tint = palette.Success;
-                motion = PillMotion.SweepRight;
-            }
-            else
-            {
-                // Zero net gain still empties a battery below capacity, because it self-discharges whatever
-                // the grid is doing. Draining is the honest word for standing still at less than full.
-                word = "drain";
-                tint = palette.Warning;
-                motion = PillMotion.SweepLeft;
-            }
+            ChargeFlow flow = ChargePill.Flow(stored, capacity, watts);
 
             GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
@@ -950,32 +938,18 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 // In the slot the cap keeps for its value, laid out from the right edge. The state is what this
                 // block is for, so it takes the place a figure would have had rather than sitting beside the
                 // heading and pushing it about.
-                string label = word.ToUpperInvariant();
-
-                float wide = TabParts.PillWidth(label, 9999f, UIFace.IBMPlexMono, PillPoints);
+                float wide = ChargePill.Width(flow, PillPoints);
 
                 // Centred in the caption's own line rather than nudged up off it. The pill stands two pixels
                 // taller than the row it shares, and lifting it by one put that overhang above the top of the
                 // block, where the pane clips: the border came back with its corners shaved off.
                 float line = UIFonts.LineHeightOf(GameFont.Tiny);
-                float tall = UITextControl.LineHeight(UIFace.IBMPlexMono, PillPoints) + 2f;
+                float tall = ChargePill.Height(PillPoints);
 
                 Rect band = new Rect(view.xMax - wide, y + Mathf.Max(0f, (line - tall) * 0.5f), wide,
                     Mathf.Max(line, tall));
 
-                float clock = UIGuard.Try("Inspector.PillClock", () => Time.realtimeSinceStartup, 0f, null);
-
-                // Blink is the one state that changes the pill itself rather than overlaying it, because what
-                // it wants to say is that the pill is going away.
-                Color drawn = motion == PillMotion.Blink && clock % BlinkPeriod > BlinkPeriod * 0.62f
-                    ? UIElementPainter.Composite(palette.PanelBackground,
-                        new Color(tint.r, tint.g, tint.b, 0.34f))
-                    : tint;
-
-                Rect pill = TabParts.Pill(band, band.x, band.y, label, drawn, palette, 9999f, null,
-                    UIFace.IBMPlexMono, PillPoints);
-
-                Highlight(pill, tint, motion, clock);
+                ChargePill.Draw(band, band.x, band.y, flow, palette, PillPoints);
             }
             finally
             {
@@ -986,72 +960,6 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
         /// <summary>The point size the state pill sets at, named because the height is measured from it.</summary>
         private const float PillPoints = 9f;
-
-        private const float SweepPeriod = 1.9f;
-        private const float BreathePeriod = 2.4f;
-        private const float BlinkPeriod = 1.15f;
-
-        /// <summary>
-        /// The moving part, drawn over the finished pill.
-        ///
-        /// <b>An overlay rather than a second copy of the pill.</b> Redrawing the pill brighter behind a clip
-        /// would mean measuring and laying out the text again every frame; a translucent wash over the top
-        /// lifts the border, the fill and the letters together, which is the whole point of the sweep, and
-        /// costs no text work at all.
-        ///
-        /// <b>The band is drawn in slices with a sine of alpha across it,</b> because a single rect gives a
-        /// hard-edged block sliding past rather than a highlight. Seven is enough that the edges are not
-        /// countable at this size and few enough that the whole effect is seven filled rects.
-        ///
-        /// <b>It never leaves the pill.</b> Each slice is clamped to the pill's own rect, so the highlight
-        /// arrives and departs by being cut off at the ends rather than by overhanging the border.
-        /// </summary>
-        private static void Highlight(Rect pill, Color tint, PillMotion motion, float clock)
-        {
-            if (motion == PillMotion.Blink)
-                return;
-
-            if (motion == PillMotion.Breathe)
-            {
-                float swell = 0.06f + 0.16f * (1f - Mathf.Cos(clock / BreathePeriod * Mathf.PI * 2f)) * 0.5f;
-
-                Widgets.DrawBoxSolid(pill.ContractedBy(1f), new Color(tint.r, tint.g, tint.b, swell));
-
-                return;
-            }
-
-            const int slices = 7;
-
-            float width = Mathf.Max(10f, pill.width * 0.42f);
-            float travel = pill.width + width;
-            float phase = clock % SweepPeriod / SweepPeriod;
-
-            if (motion == PillMotion.SweepLeft)
-                phase = 1f - phase;
-
-            float head = pill.x - width + travel * phase;
-
-            for (int i = 0; i < slices; i++)
-            {
-                float across = (i + 0.5f) / slices;
-
-                // Brightest in the middle of the band and nothing at either end, so it reads as a highlight
-                // passing over rather than as a block sliding past.
-                float alpha = Mathf.Sin(across * Mathf.PI) * 0.3f;
-
-                float left = head + width * across - width / (slices * 2f);
-                float right = left + width / slices;
-
-                left = Mathf.Max(left, pill.x + 1f);
-                right = Mathf.Min(right, pill.xMax - 1f);
-
-                if (right <= left)
-                    continue;
-
-                Widgets.DrawBoxSolid(new Rect(left, pill.y + 1f, right - left, pill.height - 2f),
-                    new Color(tint.r, tint.g, tint.b, alpha));
-            }
-        }
 
         /// <summary>
         /// What a battery loses to self-discharge, read out of RimWorld rather than copied from it.
@@ -1083,7 +991,18 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
         private static float? selfDischarge;
 
-        /// <summary>Fuel, against the level it is being refilled to rather than against the tank.</summary>
+        /// <summary>
+        /// A refuellable thing's fuel, and the level it is being kept at.
+        ///
+        /// <b>The target is the only setting on this pane you can change,</b> and it belongs here because it is
+        /// the answer to the question the block raises. A tank at full with a target of half is about to be
+        /// drained on purpose, and reading that off two separate lines in the footer is how somebody spends an
+        /// afternoon wondering why their chemfuel keeps going.
+        ///
+        /// <b>It is only drawn when the game says it is configurable.</b> <c>targetFuelLevelConfigurable</c> is
+        /// false for plenty of things that burn fuel, and drawing a handle that cannot move is worse than
+        /// drawing nothing.
+        /// </summary>
         private static float Fuel(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
             CompRefuelable fuel = UIGuard.Try("Inspector.FuelComp", thing.TryGetComp<CompRefuelable>, null, null);
@@ -1100,8 +1019,109 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
                 palette);
 
+            bool configurable = UIGuard.Try("Inspector.FuelConfigurable",
+                () => fuel.Props.targetFuelLevelConfigurable, false, null);
+
+            if (!configurable)
+                return y + InspectPaneParts.BlockGap;
+
+            float capacity = Mathf.Max(0.0001f, fuel.Props.fuelCapacity);
+            float target = UIGuard.Try("Inspector.FuelTarget", () => fuel.TargetFuelLevel, capacity, null);
+            float share = Mathf.Clamp01(target / capacity);
+
+            Rect track;
+
+            y = InspectPaneParts.Need(view, y, "Keep at", Mathf.Round(target).ToString(), palette.Accent,
+                share, palette.Accent, null, null, palette, out track);
+
+            DragTarget(track, fuel, capacity, palette);
+
             return y + InspectPaneParts.BlockGap;
         }
+
+        /// <summary>How far above and below the track a press still counts as grabbing it.</summary>
+        private const float FuelGrab = 5f;
+
+        /// <summary>The thing whose fuel target is being dragged, or null.</summary>
+        private static Thing draggingFuel;
+
+        /// <summary>
+        /// Turns the target track into something you can set by pointing at it.
+        ///
+        /// <b>Hand-rolled rather than an invisible slider laid over the top,</b> for the reason the character
+        /// editor's need bars are: RimWorld's slider draws its own art unconditionally, so borrowing it means
+        /// covering the row just drawn.
+        ///
+        /// <b>The drag is keyed on the thing, not on the pane.</b> The inspect pane redraws from scratch every
+        /// frame and can change what it is showing mid-drag if the selection changes; keying on the thing means
+        /// a drag that started on one tank cannot end up setting another one's target.
+        ///
+        /// <b>Written straight through rather than recorded.</b> This is a building's own setting and the game
+        /// has no undo for it; <c>TargetFuelLevel</c>'s setter clamps and refuses on its own, which is the
+        /// behaviour the vanilla gizmo gets too.
+        /// </summary>
+        private static void DragTarget(Rect track, CompRefuelable fuel, float capacity,
+            UIColorPaletteDef palette)
+        {
+            UIGuard.Try("Inspector.FuelDrag", () =>
+            {
+                Thing key = fuel.parent;
+
+                if (key == null)
+                    return;
+
+                Rect grab = new Rect(track.x, track.y - FuelGrab, track.width, track.height + FuelGrab * 2f);
+
+                Event input = Event.current;
+                bool over = Mouse.IsOver(grab);
+
+                if (over)
+                {
+                    TooltipHandler.TipRegion(grab, (TipSignal) ("Drag to set how full this is kept.\n\nHaulers "
+                        + "top it up to this level and no further."));
+                }
+
+                if (input.type == EventType.MouseDown && input.button == 0 && over)
+                {
+                    draggingFuel = key;
+                    input.Use();
+                }
+                else if (input.type == EventType.MouseUp && input.button == 0 && draggingFuel == key)
+                {
+                    draggingFuel = null;
+                    input.Use();
+                }
+
+                if (draggingFuel != key)
+                {
+                    if (over && draggingFuel == null)
+                        Knob(track, fuel.TargetFuelLevel / capacity, palette);
+
+                    return;
+                }
+
+                float wanted = Mathf.Clamp01((input.mousePosition.x - track.x)
+                                             / Mathf.Max(1f, track.width)) * capacity;
+
+                // Rounded to whole units, because fuel is counted in them and a target of 249.7 is a number
+                // nobody asked for that then displays as 250 anyway.
+                wanted = Mathf.Round(wanted);
+
+                Knob(track, wanted / capacity, palette);
+
+                if (Mathf.Abs(wanted - fuel.TargetFuelLevel) > 0.5f)
+                    fuel.TargetFuelLevel = wanted;
+            }, null);
+        }
+
+        /// <summary>The handle, drawn only while the track is being pointed at or dragged.</summary>
+        private static void Knob(Rect track, float fraction, UIColorPaletteDef palette)
+        {
+            float x = track.x + track.width * Mathf.Clamp01(fraction);
+
+            Widgets.DrawBoxSolid(new Rect(x - 1.5f, track.y - 3f, 3f, track.height + 6f), palette.Accent);
+        }
+
 
         /// <summary>A cooler or heater's target against what the room is actually doing.</summary>
         private static float Climate(Rect view, float y, Thing thing, UIColorPaletteDef palette)

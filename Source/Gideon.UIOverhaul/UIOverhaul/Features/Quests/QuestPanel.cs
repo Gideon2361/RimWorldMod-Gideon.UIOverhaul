@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
@@ -28,6 +29,7 @@ namespace Gideon.UIOverhaul.Features.Quests
     /// are all the game's, and <c>QuestReserves</c> already knows which colonists a quest is holding because the
     /// game needs that to stop you sending them somewhere else. The read side lives in <see cref="QuestFacts"/>.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class QuestPanel
     {
         internal const float WindowWidth = 1180f;
@@ -37,6 +39,11 @@ namespace Gideon.UIOverhaul.Features.Quests
         private const float RailWidth = 210f;
         private const float HeaderHeight = 66f;
         private const float RowGap = 6f;
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
 
         /// <summary>Air between the rail's divider and the heading under it, matched to the panel inset.</summary>
         private const float RuleGap = 12f;
@@ -118,7 +125,23 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             Rect inner = rect.ContractedBy(10f);
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 2f, 320f, 26f), "Quests", palette.Accent,
+            float text = inner.x;
+
+            if (Glyph != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize,
+                    GlyphSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = palette.Accent;
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Quests", palette.Accent,
                 GameFont.Medium, QuestFaces.Display, QuestFaces.Size.Title);
 
             int offers = QuestFacts.Count(QuestList.Offers);
@@ -136,7 +159,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     soon++;
             }
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 28f, 320f, 18f),
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 320f, 18f),
                 offers == 0 ? "Nothing on offer" : offers + (offers == 1 ? " offer waiting" : " offers waiting"),
                 palette.TextSecondary, GameFont.Tiny, QuestFaces.Condensed, QuestFaces.Size.Subtitle);
 
@@ -287,26 +310,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                 y += 22f;
 
                 for (int i = 0; i < row.choices.Count && i < choice.choices.Count; i++)
-                {
-                    QuestPart_Choice.Choice taken = choice.choices[i];
-                    string label = Joined(row.choices[i].rewards);
-
-                    Rect band = new Rect(view.x, y, view.width, 30f);
-                    Rect button = new Rect(band.xMax - 120f, band.y, 120f, 28f);
-
-                    UIElementPainter.OutlineRounded(new Rect(band.x, band.y, band.width - 128f, 28f),
-                        palette.Border, palette.SurfaceSunken);
-
-                    TabParts.RowLabel(new Rect(band.x + 8f, band.y, band.width - 144f, 28f), label,
-                        palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
-
-                    if (TabParts.Button(button, "Take this", palette, can.Accepted, true, refusal))
-                        QuestAccept.Begin(quest, () => choice.Choose(taken));
-
-                    y = band.yMax + 4f;
-
-                    y = Pawns(view, y, row.choices[i].rewards, palette);
-                }
+                    y = Alternative(view, y, row.choices[i], choice, choice.choices[i], quest, can, palette);
 
                 return y + 6f;
             }
@@ -334,7 +338,9 @@ namespace Gideon.UIOverhaul.Features.Quests
         private static float Block(Rect view, float y, string title, Quest quest, OfferRow row,
             UIColorPaletteDef palette)
         {
-            if (row.rewards.Count == 0 && row.choices.Count == 0)
+            // Nothing to head. A quest whose whole reward is the choice above has no separate stack, and a
+            // heading with blank space under it reads as a section that failed to draw.
+            if (row.rewards.Count == 0)
                 return y;
 
             TabParts.RowLabel(new Rect(view.x, y, view.width, 20f), QuestFaces.Caps(title),
@@ -344,10 +350,24 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             if (row.rewards.Count > 0)
             {
-                TabParts.RowLabel(new Rect(view.x + 8f, y, view.width - 8f, 22f), Joined(row.rewards),
-                    palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+                string listed = Full(row.rewards);
+                float tall = Wrapped(listed, view.width - 8f);
 
-                y += 24f;
+                Color previousColor = GUI.color;
+
+                try
+                {
+                    GUI.color = palette.TextPrimary;
+
+                    UITextControl.Paragraph(new Rect(view.x + 8f, y, view.width - 8f, tall), listed,
+                        QuestFaces.Body, QuestFaces.Size.Body);
+                }
+                finally
+                {
+                    GUI.color = previousColor;
+                }
+
+                y += tall + 4f;
                 y = Pawns(view, y, row.rewards, palette);
             }
 
@@ -373,24 +393,22 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             y += 22f;
 
-            GameFont previousFont = Text.Font;
             Color previousColor = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Small;
                 GUI.color = palette.TextSecondary;
 
-                float height = Text.CalcHeight(text, view.width - 8f);
+                float height = Wrapped(text, view.width - 8f);
 
-                Widgets.Label(new Rect(view.x + 8f, y, view.width - 8f, height), text);
+                UITextControl.Paragraph(new Rect(view.x + 8f, y, view.width - 8f, height), text,
+                    QuestFaces.Body, QuestFaces.Size.Body);
 
                 y += height + 8f;
             }
             finally
             {
                 GUI.color = previousColor;
-                Text.Font = previousFont;
             }
 
             return y;
@@ -687,7 +705,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     palette.Warning, palette);
 
                 for (int i = 0; i < row.choices.Count; i++)
-                    y = Alternative(inner, y, row.choices[i], palette);
+                    y = AlternativeLine(inner, y, row.choices[i], palette);
             }
             else if (row.choices.Count == 1)
             {
@@ -706,7 +724,15 @@ namespace Gideon.UIOverhaul.Features.Quests
             return y;
         }
 
-        private static float Alternative(Rect inner, float y, ChoiceRow choice, UIColorPaletteDef palette)
+        /// <summary>
+        /// One alternative on a list card, kept to a line.
+        ///
+        /// <b>The list is for comparing quests, not for choosing a reward.</b> A card that opened out into
+        /// icons and an accept button for every alternative would be taller than the six cards around it and
+        /// would put the decision in the place meant for the shortlist. The full treatment is one click away,
+        /// in the detail view.
+        /// </summary>
+        private static float AlternativeLine(Rect inner, float y, ChoiceRow choice, UIColorPaletteDef palette)
         {
             float height = Mathf.Max(20f, UITextControl.LineHeight(QuestFaces.Body, QuestFaces.Size.Body) + 6f);
 
@@ -717,9 +743,203 @@ namespace Gideon.UIOverhaul.Features.Quests
             TabParts.RowLabel(new Rect(band.x + 8f, band.y, band.width - 16f, height), Joined(choice.rewards),
                 palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
 
-            y = band.yMax + 2f;
+            return band.yMax + 2f;
+        }
+
+        /// <summary>Size of a reward's icon, and the gap between two of them.</summary>
+        private const float IconSize = 30f;
+
+        private const float IconGap = 3f;
+
+        /// <summary>Width kept for the accept button at the right of a choice card.</summary>
+        private const float TakeWidth = 110f;
+
+        /// <summary>
+        /// One alternative, as a card rather than a line.
+        ///
+        /// <b>A reward stack does not fit on a line and should not be asked to.</b> Transport pods with six
+        /// kinds of thing in them produce a sentence that ellipses after the total value, which is the least
+        /// useful part of it; what somebody choosing between three rewards wants is the list. So the text
+        /// wraps, and the goods behind it are drawn as their own icons underneath.
+        ///
+        /// <b>Every icon opens the thing's info card.</b> A psylink neuroformer and a profane soul gem are
+        /// both just names to somebody who has not used one, and the game already has a screen that explains
+        /// any thing in it. Reaching that screen from the offer is the difference between choosing and
+        /// guessing.
+        /// </summary>
+        private static float Alternative(Rect inner, float y, ChoiceRow choice, QuestPart_Choice part,
+            QuestPart_Choice.Choice taken, Quest quest, AcceptanceReport can, UIColorPaletteDef palette)
+        {
+            string text = Full(choice.rewards);
+
+            float textWidth = inner.width - TakeWidth - 24f;
+            float textHeight = Wrapped(text, textWidth);
+
+            // Counted before the card is sized, because the icons are the part that makes it tall and a card
+            // measured without them clips its own contents.
+            int icons = Icons(choice.rewards, null);
+
+            int perRow = Mathf.Max(1, Mathf.FloorToInt(textWidth / (IconSize + IconGap)));
+            int rows = icons == 0 ? 0 : Mathf.CeilToInt(icons / (float) perRow);
+
+            float height = Mathf.Max(38f, textHeight + 12f + rows * (IconSize + IconGap));
+
+            Rect card = new Rect(inner.x, y, inner.width, height);
+
+            UIElementPainter.OutlineRounded(card, palette.Border, palette.SurfaceSunken);
+
+            Rect body = new Rect(card.x + 10f, card.y + 6f, textWidth, card.height - 12f);
+
+            Color previousColor = GUI.color;
+
+            try
+            {
+                GUI.color = palette.TextPrimary;
+
+                UITextControl.Paragraph(new Rect(body.x, body.y, body.width, textHeight), text,
+                    QuestFaces.Body, QuestFaces.Size.Body);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+            }
+
+            IconStrip(new Rect(body.x, body.y + textHeight + 4f, body.width, rows * (IconSize + IconGap)),
+                choice.rewards, perRow, palette);
+
+            Rect button = new Rect(card.xMax - TakeWidth - 8f, card.y + (card.height - 28f) * 0.5f,
+                TakeWidth, 28f);
+
+            if (TabParts.Button(button, "Take this", palette, can.Accepted, true,
+                    can.Accepted ? null : can.Reason))
+                QuestAccept.Begin(quest, () => part.Choose(taken));
+
+            y = card.yMax + 4f;
 
             return Pawns(inner, y, choice.rewards, palette);
+        }
+
+        /// <summary>How tall a wrapped block of text will be at the panel's body font.</summary>
+        /// <summary>
+        /// How tall a wrapped block of quest prose is, in the face it will be drawn in.
+        ///
+        /// <b>Measured through the same face that draws it.</b> Sized against RimWorld's font and drawn in
+        /// Barlow, a paragraph is either clipped at the bottom or trailed by a band of empty space, and which
+        /// of the two depends on the words.
+        /// </summary>
+        private static float Wrapped(string text, float width)
+        {
+            return UIGuard.Try("Quests.Wrap",
+                () => UITextControl.Height(text, QuestFaces.Body, QuestFaces.Size.Body, width), 22f, null);
+        }
+
+        /// <summary>
+        /// Counts the things behind a set of rewards, and optionally collects them.
+        ///
+        /// One pass used twice, because the card has to know how many icons it will draw before it can decide
+        /// how tall to be, and a second walk that disagreed with the first would clip the last row.
+        /// </summary>
+        private static int Icons(List<RewardRow> rewards, List<Thing> into)
+        {
+            int count = 0;
+
+            for (int i = 0; i < rewards.Count; i++)
+            {
+                List<Thing> things = rewards[i].things;
+
+                for (int t = 0; things != null && t < things.Count; t++)
+                {
+                    if (things[t] == null)
+                        continue;
+
+                    count++;
+
+                    if (into != null)
+                        into.Add(things[t]);
+                }
+            }
+
+            return count;
+        }
+
+        private static readonly List<Thing> Shown = new List<Thing>();
+
+        /// <summary>
+        /// The goods, as icons that open their own info card.
+        ///
+        /// <b>Drawn from the real things rather than from their defs,</b> so a masterwork plasteel longsword
+        /// shows the quality and the stuff it is actually made of. Those things exist already: the reward
+        /// generated them when the quest did, and they are held until the reward is taken or dropped.
+        /// </summary>
+        private static void IconStrip(Rect rect, List<RewardRow> rewards, int perRow,
+            UIColorPaletteDef palette)
+        {
+            Shown.Clear();
+
+            if (Icons(rewards, Shown) == 0)
+                return;
+
+            for (int i = 0; i < Shown.Count; i++)
+            {
+                Thing thing = Shown[i];
+
+                int column = i % perRow;
+                int row = i / perRow;
+
+                Rect slot = new Rect(rect.x + column * (IconSize + IconGap),
+                    rect.y + row * (IconSize + IconGap), IconSize, IconSize);
+
+                bool over = Mouse.IsOver(slot);
+
+                UIElementPainter.OutlineRounded(slot, over ? palette.Accent : palette.Border,
+                    palette.PanelBackground);
+
+                UIGuard.Try("Quests.RewardIcon",
+                    () => Widgets.ThingIcon(slot.ContractedBy(2f), thing), null);
+
+                Count(slot, thing, palette);
+
+                if (over)
+                {
+                    TooltipHandler.TipRegion(slot, (TipSignal) (UIGuard.Try("Quests.RewardLabel",
+                        () => thing.LabelCap.ToString(), "?", null) + "\n\nClick for its details."));
+                }
+
+                if (!Widgets.ButtonInvisible(slot))
+                    continue;
+
+                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+
+                UIGuard.Try("Quests.RewardCard",
+                    () => Find.WindowStack.Add(new Dialog_InfoCard(thing)),
+                    "That reward's details could not be opened. The offer is unaffected.");
+            }
+        }
+
+        /// <summary>The stack count in the corner, for a reward that arrives as more than one.</summary>
+        private static void Count(Rect slot, Thing thing, UIColorPaletteDef palette)
+        {
+            int stack = UIGuard.Try("Quests.RewardStack", () => thing.stackCount, 1, null);
+
+            if (stack <= 1)
+                return;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.LowerRight;
+                GUI.color = palette.TextPrimary;
+
+                UITextControl.Label(new Rect(slot.x, slot.y, slot.width - 2f, slot.height - 1f),
+                    stack.ToString(), QuestFaces.Mono, QuestFaces.Size.Chip);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
         }
 
         /// <summary>
@@ -728,29 +948,45 @@ namespace Gideon.UIOverhaul.Features.Quests
         /// <b>One per pawn rather than a picker,</b> which is the rule the offer panel settled in 14167: an
         /// offer of several people exists to be compared, and a picker turns a comparison into a memory test.
         /// The click chooses which sheet is expanded, never which is reachable.
+        ///
+        /// <b>Not gated on the letters setting, which is a correction.</b> It was, on the reasoning that
+        /// somebody who turned the panel off on letters had not asked for it on quests. That was wrong about
+        /// what the setting is for: the letters panel appears unasked beside a dialog, and this is a button
+        /// somebody presses. Turning off an interruption is not the same as refusing a door, and the version
+        /// that gated it left a quest offering a joiner with no way at all to read him. Reported on
+        /// 2026-08-30, on a quest offering a muffalo shaman named Clark.
+        ///
+        /// <b>A pawn the quest will not introduce still gets a row,</b> disabled and saying why. An absent
+        /// control reads as a screen that forgot; a greyed one that explains itself reads as the quest keeping
+        /// something back, which is what has actually happened.
         /// </summary>
         private static float Pawns(Rect inner, float y, List<RewardRow> rewards, UIColorPaletteDef palette)
         {
-            if (!QuestPawnSheet.Enabled)
-                return y;
-
             for (int i = 0; i < rewards.Count; i++)
             {
-                Pawn pawn = rewards[i].pawn;
+                RewardRow reward = rewards[i];
 
-                if (pawn == null)
+                if (reward.pawn == null && !reward.pawnHidden)
                     continue;
 
-                string label = "Read " + UIGuard.Try("Quests.PawnName",
-                    () => pawn.LabelShortCap.ToString(), "them", null) + "...";
+                bool known = reward.pawn != null;
+
+                string label = known
+                    ? "Read " + UIGuard.Try("Quests.PawnName",
+                        () => reward.pawn.LabelShortCap.ToString(), "them", null) + "..."
+                    : "Details withheld";
 
                 float width = TabParts.ButtonWidth(label);
                 Rect button = new Rect(inner.x + 76f, y, width, 26f);
 
-                if (TabParts.Button(button, label, palette, true, false,
-                        "Open this person's skills, traits, backstory and health, exactly as they will read "
-                        + "once they have joined. Nothing here can be changed."))
-                    QuestPawnSheet.Open(pawn);
+                if (TabParts.Button(button, label, palette, known, false,
+                        known
+                            ? "Open this person's skills, traits, backstory and health, exactly as they will "
+                              + "read once they have joined. Nothing here can be changed."
+                            : "This quest does not say who they are. Nothing about them is readable until "
+                              + "they arrive.")
+                    && known)
+                    QuestPawnSheet.Open(reward.pawn);
 
                 y = button.yMax + 3f;
             }
@@ -758,7 +994,32 @@ namespace Gideon.UIOverhaul.Features.Quests
             return y;
         }
 
+        /// <summary>Every reward in a set, folded onto one line, for a card row that has one.</summary>
         private static string Joined(List<RewardRow> rewards)
+        {
+            string joined = null;
+
+            for (int i = 0; i < rewards.Count; i++)
+            {
+                string flat = QuestFacts.Flat(rewards[i].text);
+
+                if (flat.NullOrEmpty())
+                    continue;
+
+                joined = joined == null ? flat : joined + ", " + flat;
+            }
+
+            return joined ?? "Nothing";
+        }
+
+        /// <summary>
+        /// The same set with its line breaks kept, for the detail view, which has room to be a list.
+        ///
+        /// <b>Separated by a blank line rather than a comma.</b> Each reward is already a heading and its
+        /// own list of things; running two of those together with a comma would put the second heading at the
+        /// end of the first list.
+        /// </summary>
+        private static string Full(List<RewardRow> rewards)
         {
             string joined = null;
 
@@ -767,7 +1028,9 @@ namespace Gideon.UIOverhaul.Features.Quests
                 if (rewards[i].text.NullOrEmpty())
                     continue;
 
-                joined = joined == null ? rewards[i].text : joined + ", " + rewards[i].text;
+                joined = joined == null
+                    ? rewards[i].text
+                    : joined + Environment.NewLine + Environment.NewLine + rewards[i].text;
             }
 
             return joined ?? "Nothing";
@@ -1065,42 +1328,56 @@ namespace Gideon.UIOverhaul.Features.Quests
                 QuestAccept.SetAside(quest, !dismissed);
         }
 
-        private static Texture2D dismissIcon;
-        private static Texture2D restoreIcon;
-        private static bool iconsLooked;
+        /// <summary>
+        /// RimWorld's own dismiss and restore marks.
+        ///
+        /// <b>Loaded in a static constructor under <c>StaticConstructorOnStartup</c>,</b> which is the
+        /// arrangement the game checks for: it warns about any type holding a static texture field without
+        /// that attribute, because assets have to be loaded on the main thread and it cannot know when a
+        /// lazily loaded one will be touched. This type used to load them on first draw, which worked and
+        /// still drew the warning, since the check reads the field's type rather than watching what happens
+        /// to it.
+        ///
+        /// <b>The game's textures rather than glyphs of ours,</b> because a player who has used vanilla's
+        /// quest tab already knows what these two marks mean, and a control meaning "hide this" needs to be
+        /// unmistakable from the one on the history rows meaning "delete this for ever".
+        /// </summary>
+        private static readonly Texture2D Dismiss;
 
-        private static Texture2D Dismiss
+        private static readonly Texture2D Restore;
+
+        /// <summary>
+        /// The tab's own glyph, drawn beside the title the way the power header draws its bolt.
+        ///
+        /// <b>The same texture the button on the bar uses,</b> so the mark a player clicked to get here is the
+        /// mark waiting at the top of the screen.
+        ///
+        /// <b>Tinted to the accent rather than to a second colour of its own.</b> The power header takes the
+        /// palette's amber because electricity reads amber; a chest has no such association, and giving this
+        /// one amber too would make two tabs that are nothing alike look like each other in the corner of the
+        /// eye. Matching the title is the quieter and more useful choice.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
+        static QuestPanel()
         {
-            get
-            {
-                Icons();
-
-                return dismissIcon;
-            }
-        }
-
-        private static Texture2D Restore
-        {
-            get
-            {
-                Icons();
-
-                return restoreIcon;
-            }
-        }
-
-        private static void Icons()
-        {
-            if (iconsLooked)
-                return;
-
-            iconsLooked = true;
+            // Through locals, because a readonly field can only be assigned in the constructor itself and
+            // the guard runs its work in a closure. Guarded all the same: a missing texture should cost the
+            // control its picture, not take the type down before anything has drawn.
+            Texture2D dismiss = null;
+            Texture2D restore = null;
+            Texture2D glyph = null;
 
             UIGuard.Try("Quests.Icons", () =>
             {
-                dismissIcon = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
-                restoreIcon = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
-            }, null);
+                dismiss = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
+                restore = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
+                glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Quests", false);
+            }, "The set-aside control has no icon this session. It still works.");
+
+            Dismiss = dismiss;
+            Restore = restore;
+            Glyph = glyph;
         }
 
         /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>

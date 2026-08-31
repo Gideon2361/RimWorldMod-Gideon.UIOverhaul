@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The power tab. RimWorld has no equivalent, so nothing is redirected or suppressed for this one: the
+    overlay and the per building inspect pane are what exist today, and both stay exactly as they are.
+
+    order 79 puts it beside Research and Wildlife rather than out at the end, since it is read during a
+    crisis and a button nobody can find is a button that does not help. No defaultHotKey, because every
+    unused key is somebody else's binding and this screen is not urgent enough to claim one.
+
+    validWithoutMap is false, unlike most of this mod's tabs. A power grid is a thing on a map; there is
+    no reading of it from the world view, and a tab that opens onto "no map to read a grid on" is worse
+    than a button that is not there.
+
+    minimized, so it arrives as a bare icon like Factions and History rather than widening the bar. The
+    icon is the lightning bolt already sitting in this mod's own UI/MainButtonIcons folder, shipped in
+    14084 for the bar's icon picker and unreferenced by any def until now. Drawing a second bolt would
+    have put two of them in that picker, where every icon is choosable for any button.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Power</defName>
+    <label>power</label>
+    <description>Every power grid on this map, and how long each one has left. A grid says what it produces against what it draws, how many hours the batteries cover the difference, which buildings account for the load, and whether anything on it is out of fuel, broken or wired to nothing at all.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Power.MainTabWindow_Power</tabWindowClass>
+    <order>79</order>
+    <validWithoutMap>false</validWithoutMap>
+    <minimized>True</minimized>
+    <iconPath>UI/MainButtonIcons/Power</iconPath>
+  </MainButtonDef>
+
+</Defs>
