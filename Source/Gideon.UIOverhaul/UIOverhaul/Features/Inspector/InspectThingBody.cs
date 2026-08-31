@@ -874,9 +874,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <b>Empty outranks the direction.</b> A battery at zero on a grid that is gaining is still a battery
         /// with nothing in it, and that is the fact worth the loudest colour.
         ///
-        /// <b>There is a fourth state, and it says nothing rather than guessing.</b> A grid in exact balance is
-        /// neither charging nor draining; calling it either would be a lie told in colour, so it reads HOLDING
-        /// and does not pulse.
+        /// <b>Full outranks it too.</b> A battery at capacity on a gaining grid is not charging, because there
+        /// is nowhere for the gain to go, and the grid excess row underneath still says what the rest of the
+        /// net is doing.
         /// </summary>
         private static void Direction(Rect view, float y, CompPowerBattery battery, float stored,
             UIColorPaletteDef palette)
@@ -889,28 +889,33 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             string word;
             Color tint;
-            bool live = true;
+
+            float level = UIGuard.Try("Inspector.BatteryPct", () => battery.StoredEnergyPct, 0f, null);
 
             if (stored <= 0.01f)
             {
                 word = "empty";
                 tint = palette.Danger;
             }
+            else if (level >= 0.999f)
+            {
+                // Full outranks the direction too, and for the same reason empty does. A battery at capacity
+                // on a gaining grid is not charging, because there is nowhere for the gain to go; the grid
+                // excess row underneath still says what the rest of the net is doing.
+                word = "full";
+                tint = palette.Accent;
+            }
             else if (watts > 0f)
             {
                 word = "charge";
                 tint = palette.Success;
             }
-            else if (watts < 0f)
-            {
-                word = "drain";
-                tint = palette.Warning;
-            }
             else
             {
-                word = "holding";
-                tint = palette.TextSecondary;
-                live = false;
+                // Zero net gain still empties a battery that is not full, because it self-discharges whatever
+                // the grid is doing. Draining is the honest word for standing still at less than capacity.
+                word = "drain";
+                tint = palette.Warning;
             }
 
             GameFont previousFont = Text.Font;
@@ -924,9 +929,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 // whatever the caption is translated to.
                 float caption = Text.CalcSize("Charge").x;
 
-                if (live)
-                    tint *= UIGuard.Try("Inspector.ChargePulse", () => Pulser.PulseBrightness(0.6f, 0.4f), 1f,
-                        null);
+                // Every state pulses, including full: all four are live readings of what the battery is doing
+                // right now, and one of them sitting still would read as the one that had stopped updating.
+                tint *= UIGuard.Try("Inspector.ChargePulse", () => Pulser.PulseBrightness(0.6f, 0.4f), 1f, null);
 
                 Rect band = new Rect(view.x + caption + 8f, y - 1f, view.width - caption - 8f,
                     UIFonts.LineHeightOf(GameFont.Tiny) + 2f);
