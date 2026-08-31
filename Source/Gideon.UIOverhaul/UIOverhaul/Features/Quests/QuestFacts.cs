@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Helpers;
 using RimWorld;
+using RimWorld.Planet;
+using UnityEngine;
 using Verse;
 
 namespace Gideon.UIOverhaul.Features.Quests
@@ -61,6 +63,12 @@ namespace Gideon.UIOverhaul.Features.Quests
 
         /// <summary>Colonists this quest is holding, which is what makes it cost something today.</summary>
         internal List<Pawn> reserved;
+
+        /// <summary>Where it is pointing, with a distance when that is somewhere on the world map.</summary>
+        internal string where;
+
+        /// <summary>That same place as something the camera can be sent to.</summary>
+        internal GlobalTargetInfo target;
     }
 
     /// <summary>One clock running on a quest: how long is left, and the game's own wording for it.</summary>
@@ -375,6 +383,8 @@ namespace Gideon.UIOverhaul.Features.Quests
                     reserved = new List<Pawn>()
                 };
 
+                row.where = Where(quest, out row.target);
+
                 Reserved(quest, row.reserved);
 
                 into.Add(row);
@@ -465,6 +475,65 @@ namespace Gideon.UIOverhaul.Features.Quests
             into.Sort((a, b) => a.ticks.CompareTo(b.ticks));
 
             return into;
+        }
+
+        /// <summary>
+        /// Where a quest is pointing, and how far off that is.
+        ///
+        /// <b>This is the useful fact about a quest with no deadline,</b> and most of them have none. A site
+        /// quest is not waiting on a clock; it is waiting on you to walk there. Nine rows all reading "running
+        /// to no deadline" say nothing, where nine rows naming a place and a distance are a list of somewhere
+        /// to go. Reported on 2026-08-30.
+        ///
+        /// <b>Taken from the quest's own look targets,</b> the same set vanilla lists at the bottom of its
+        /// detail pane, so a target this mod has never heard of still names itself.
+        ///
+        /// <b>A world target is preferred over a thing on a map.</b> Both are valid targets and a quest often
+        /// has several, but the one worth a line is the one that says where to send a caravan; a pawn or an
+        /// item already on your map is somewhere you can see.
+        /// </summary>
+        internal static string Where(Quest quest, out GlobalTargetInfo target)
+        {
+            GlobalTargetInfo found = GlobalTargetInfo.Invalid;
+
+            target = GlobalTargetInfo.Invalid;
+
+            string label = UIGuard.Try("Quests.Targets", () =>
+            {
+                foreach (GlobalTargetInfo candidate in quest.QuestLookTargets)
+                {
+                    if (!candidate.IsValid)
+                        continue;
+
+                    if (!found.IsValid || (candidate.HasWorldObject && !found.HasWorldObject))
+                        found = candidate;
+                }
+
+                return found.IsValid ? found.Label : null;
+            }, null, null);
+
+            if (label.NullOrEmpty())
+                return null;
+
+            target = found;
+
+            return UIGuard.Try("Quests.Distance", () =>
+            {
+                if (!found.IsWorldTarget)
+                    return label;
+
+                Map home = Find.AnyPlayerHomeMap;
+
+                if (home == null)
+                    return label;
+
+                int tiles = Mathf.RoundToInt(Find.WorldGrid.ApproxDistanceInTiles(home.Tile, found.Tile));
+
+                if (tiles <= 0)
+                    return label;
+
+                return label + ", " + tiles + (tiles == 1 ? " tile away" : " tiles away");
+            }, label, null);
         }
 
         /// <summary>The soonest clock on a quest, or int.MaxValue when it is running to no date at all.</summary>
