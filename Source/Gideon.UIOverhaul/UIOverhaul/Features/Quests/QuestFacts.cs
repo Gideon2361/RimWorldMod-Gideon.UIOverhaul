@@ -315,24 +315,34 @@ namespace Gideon.UIOverhaul.Features.Quests
         }
 
         /// <summary>
-        /// A reward description flattened to something that fits on one row.
+        /// A reward description with the rich text tags taken off and its line breaks left alone.
         ///
-        /// <b>Reward wording is written for a paragraph, not a line.</b> Several kinds return two or three
-        /// lines, and a multi-line string drawn into a one-line rect centres the whole block on that line:
-        /// the middle line lands where the text belongs and the others render above and below it, clipped to
-        /// slivers. That is what the empty GET row with marks floating over it was. Reported on 2026-08-30.
-        ///
-        /// Joined with a separator rather than truncated at the first break, because the lines after the
-        /// first are usually the part that says what you actually receive.
+        /// <b>The breaks are the game's list.</b> A reward describing transport pods writes a heading, a blank
+        /// line and then one hyphen-led line per thing, which is a list and reads as one anywhere it is given
+        /// room to be a list. It was being flattened here because the card that drew it was a single line.
         /// </summary>
-        private static string OneLine(string text)
+        private static string Clean(string text)
         {
             if (text.NullOrEmpty())
                 return text;
 
-            string flat = text.StripTags().Replace("\r", string.Empty);
+            return text.StripTags().Replace("\r", string.Empty).Trim();
+        }
 
-            string[] lines = flat.Split('\n');
+        /// <summary>
+        /// The same description folded onto one line, for the places that only have one.
+        ///
+        /// <b>The game's own bullets are taken off rather than run together.</b> Joining the lines with a
+        /// separator left the hyphen that started each one still sitting there, so a two-item reward read as
+        /// "-  - Psychic animal pulser x3  -  - Psylink neuroformer": our separator and the game's bullet, one
+        /// after the other, twice. Reported on 2026-08-30.
+        /// </summary>
+        internal static string Flat(string text)
+        {
+            if (text.NullOrEmpty())
+                return text;
+
+            string[] lines = text.Split('\n');
             string joined = null;
 
             for (int i = 0; i < lines.Length; i++)
@@ -342,13 +352,21 @@ namespace Gideon.UIOverhaul.Features.Quests
                 if (line.NullOrEmpty())
                     continue;
 
-                line = line.TrimEnd('.');
+                // The list marker, whichever of the three the language uses. It is punctuation for a layout
+                // that is not happening here, so it comes off rather than being read out.
+                line = line.TrimStart('-', '*', '\u2022').Trim().TrimEnd('.');
 
-                joined = joined == null ? line : joined + "  -  " + line;
+                if (line.NullOrEmpty())
+                    continue;
+
+                joined = joined == null
+                    ? line
+                    : joined + (joined.EndsWith(":") ? " " : ", ") + line;
             }
 
             return joined ?? string.Empty;
         }
+
 
         private static void Collect(QuestPart_Choice.Choice choice, List<RewardRow> into)
         {
@@ -377,7 +395,7 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 into.Add(new RewardRow
                 {
-                    text = OneLine(text),
+                    text = Clean(text),
                     pawn = offered != null && !offered.detailsHidden ? offered.pawn : null,
                     pawnHidden = offered != null && offered.detailsHidden && offered.pawn != null,
                     things = goods != null ? goods.ItemsListForReading : null

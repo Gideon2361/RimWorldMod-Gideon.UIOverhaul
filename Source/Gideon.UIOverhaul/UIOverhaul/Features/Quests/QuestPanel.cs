@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
@@ -326,10 +327,26 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             if (row.rewards.Count > 0)
             {
-                TabParts.RowLabel(new Rect(view.x + 8f, y, view.width - 8f, 22f), Joined(row.rewards),
-                    palette.TextPrimary, GameFont.Small, QuestFaces.Body, QuestFaces.Size.Body);
+                string listed = Full(row.rewards);
+                float tall = Wrapped(listed, view.width - 8f);
 
-                y += 24f;
+                GameFont previousFont = Text.Font;
+                Color previousColor = GUI.color;
+
+                try
+                {
+                    Text.Font = GameFont.Small;
+                    GUI.color = palette.TextPrimary;
+
+                    Widgets.Label(new Rect(view.x + 8f, y, view.width - 8f, tall), listed);
+                }
+                finally
+                {
+                    GUI.color = previousColor;
+                    Text.Font = previousFont;
+                }
+
+                y += tall + 4f;
                 y = Pawns(view, y, row.rewards, palette);
             }
 
@@ -734,7 +751,7 @@ namespace Gideon.UIOverhaul.Features.Quests
         private static float Alternative(Rect inner, float y, ChoiceRow choice, QuestPart_Choice part,
             QuestPart_Choice.Choice taken, Quest quest, AcceptanceReport can, UIColorPaletteDef palette)
         {
-            string text = Joined(choice.rewards);
+            string text = Full(choice.rewards);
 
             float textWidth = inner.width - TakeWidth - 24f;
             float textHeight = Wrapped(text, textWidth);
@@ -963,7 +980,32 @@ namespace Gideon.UIOverhaul.Features.Quests
             return y;
         }
 
+        /// <summary>Every reward in a set, folded onto one line, for a card row that has one.</summary>
         private static string Joined(List<RewardRow> rewards)
+        {
+            string joined = null;
+
+            for (int i = 0; i < rewards.Count; i++)
+            {
+                string flat = QuestFacts.Flat(rewards[i].text);
+
+                if (flat.NullOrEmpty())
+                    continue;
+
+                joined = joined == null ? flat : joined + ", " + flat;
+            }
+
+            return joined ?? "Nothing";
+        }
+
+        /// <summary>
+        /// The same set with its line breaks kept, for the detail view, which has room to be a list.
+        ///
+        /// <b>Separated by a blank line rather than a comma.</b> Each reward is already a heading and its
+        /// own list of things; running two of those together with a comma would put the second heading at the
+        /// end of the first list.
+        /// </summary>
+        private static string Full(List<RewardRow> rewards)
         {
             string joined = null;
 
@@ -972,7 +1014,9 @@ namespace Gideon.UIOverhaul.Features.Quests
                 if (rewards[i].text.NullOrEmpty())
                     continue;
 
-                joined = joined == null ? rewards[i].text : joined + ", " + rewards[i].text;
+                joined = joined == null
+                    ? rewards[i].text
+                    : joined + Environment.NewLine + Environment.NewLine + rewards[i].text;
             }
 
             return joined ?? "Nothing";
