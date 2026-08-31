@@ -34,7 +34,18 @@ namespace Gideon.UIFramework.Patches.Content
                 int added = UIBundledTextures.Register(__instance);
 
                 if (added > 0)
+                {
                     Log.Message(UILogTag.Prefix + "Registered " + added + " textures from the asset bundle.");
+
+                    return;
+                }
+
+                // Nothing registered is normal for every other mod, which has no manifest of ours to find,
+                // and total failure for this one: all of its art ships in the bundle. So the report is worth
+                // its cost here and only here, and it is a warning because a player seeing this has a mod
+                // that is not working.
+                if (UIBundleReport.IsOurs(__instance))
+                    Log.Warning(UILogTag.Prefix + UIBundleReport.Compose(__instance, added));
             }, "Art shipped only in the asset bundle will draw as the missing texture placeholder.");
         }
     }

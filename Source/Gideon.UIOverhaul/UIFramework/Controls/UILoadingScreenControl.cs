@@ -50,11 +50,15 @@ namespace Gideon.UIFramework.Controls
         /// </summary>
         private const UIFace Mono = UIFace.IBMPlexMono;
 
-        /// <summary>Point size of the stage line.</summary>
-        protected const float StagePoints = 15f;
+        // A point here is the printer's point the rest of the mod counts in, and UIFonts.PixelsPerPoint
+        // turns it into the pixel em Unity rasterizes at. The two sizes below are the mockup's own
+        // through that ratio, which is why neither is round.
 
-        /// <summary>Point size of the step line, taken from the mockup's own path rows.</summary>
-        protected const float StepPoints = 10.5f;
+        /// <summary>Point size of the stage line.</summary>
+        protected const float StagePoints = 11.25f;
+
+        /// <summary>Point size of the step line, from the mockup's own path rows on that scale.</summary>
+        protected const float StepPoints = 7.875f;
 
         // Measured from the faces rather than fixed, because RimWorld's UI scale changes line heights
         // at runtime and any hardcoded number would simply be wrong about them. It also keeps the bar

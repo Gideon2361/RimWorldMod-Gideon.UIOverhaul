@@ -117,10 +117,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         private const UIFace Figures = UIFace.IBMPlexMono;
 
         /// <summary>Point size of a figure in the phase table and the header.</summary>
-        private const float FigurePoints = 11f;
+        private const float FigurePoints = 8.25f;
 
         /// <summary>Point size of a verdict cell's headline figure, which is the largest thing on the panel.</summary>
-        private const float VerdictPoints = 17f;
+        private const float VerdictPoints = 12.75f;
 
         /// <summary>How far a step or definition is indented under the phase it belongs to.</summary>
         private const float StepIndent = 12f;
