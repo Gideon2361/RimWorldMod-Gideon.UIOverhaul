@@ -1,5 +1,6 @@
 using Gideon.UIFramework.Components.Images;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
 using UnityEngine;
 using Verse;
@@ -25,7 +26,32 @@ namespace Gideon.UIFramework.Controls
         /// <summary>How much taller the bar is than the step line beneath it.</summary>
         protected const float BarWeight = 4f;
 
-        // Measured from the fonts rather than fixed, because RimWorld's UI scale changes line heights
+        /// <summary>
+        /// The console's prose face: the stage line, which is a sentence a player reads.
+        ///
+        /// <b>Source Sans 3 rather than the mockup's Segoe UI.</b> The mockup was drawn against a Windows
+        /// system font, which is neither licensed for redistribution nor present on Linux or macOS, so every
+        /// player off Windows would have been reading whatever their system chose to substitute. Source Sans
+        /// 3 is Adobe's, under the OFL, and ships in the mod's own bundle, so the console reads the same
+        /// everywhere.
+        /// </summary>
+        private const UIFace Sans = UIFace.SourceSans3;
+
+        /// <summary>
+        /// The console's figure face: the step line, which is a path rather than a sentence.
+        ///
+        /// The mockup sets paths, timings and footer figures in Cascadia Mono and everything else in the
+        /// sans. A step line is the first of those: "Loading defs: ThingDef_Wall" is a path being walked.
+        /// </summary>
+        private const UIFace Mono = UIFace.CascadiaMono;
+
+        /// <summary>Point size of the stage line.</summary>
+        protected const float StagePoints = 15f;
+
+        /// <summary>Point size of the step line, taken from the mockup's own path rows.</summary>
+        protected const float StepPoints = 10.5f;
+
+        // Measured from the faces rather than fixed, because RimWorld's UI scale changes line heights
         // at runtime and any hardcoded number would simply be wrong about them. It also keeps the bar
         // proportionate to the two text rows it sits between, whatever those rows end up being.
         //
@@ -33,13 +59,13 @@ namespace Gideon.UIFramework.Controls
         // is a drawing method.
 
         /// <summary>Row height for the stage line.</summary>
-        protected static float StageHeight => Mathf.Ceil(LineHeight(GameFont.Small));
+        protected static float StageHeight => Mathf.Ceil(UITextControl.LineHeight(Sans, StagePoints));
 
         /// <summary>Row height for the step line.</summary>
-        protected static float StepHeight => Mathf.Ceil(LineHeight(GameFont.Tiny));
+        protected static float StepHeight => Mathf.Ceil(UITextControl.LineHeight(Mono, StepPoints));
 
         /// <summary>Bar height.</summary>
-        protected static float BarHeight => Mathf.Ceil(LineHeight(GameFont.Tiny)) + BarWeight;
+        protected static float BarHeight => StepHeight + BarWeight;
 
         /// <summary>
         /// Line height of <paramref name="font"/>, falling back to Small where Tiny is unavailable.
@@ -127,10 +153,11 @@ namespace Gideon.UIFramework.Controls
             {
                 if (!progress.Stage.NullOrEmpty())
                 {
-                    Text.Font = GameFont.Small;
                     Text.Anchor = TextAnchor.MiddleLeft;
                     GUI.color = palette.TextPrimary;
-                    Widgets.Label(new Rect(x, y, width, stageHeight), progress.Stage);
+
+                    UITextControl.LabelEllipses(new Rect(x, y, width, stageHeight), progress.Stage, Sans,
+                        StagePoints);
                 }
 
                 // Advanced whether or not anything was drawn, so the bar below does not slide up into
@@ -146,10 +173,13 @@ namespace Gideon.UIFramework.Controls
 
             if (config.showStep && !progress.Step.NullOrEmpty())
             {
-                Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextSecondary;
-                Widgets.Label(new Rect(x, y, width, stepHeight), progress.Step.Truncate(width));
+
+                // Ellipsed through the style that draws it rather than pre-truncated. Truncate measures in
+                // whatever font Text.Font happens to hold, which is no longer the one this row is set in.
+                UITextControl.LabelEllipses(new Rect(x, y, width, stepHeight), progress.Step, Mono,
+                    StepPoints);
             }
 
             GUI.color = previousColor;
