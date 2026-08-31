@@ -174,6 +174,15 @@ namespace Gideon.UIOverhaul.Features.Inspector
             if (constructible == null)
                 return y;
 
+            // An install blueprint is asked for nothing, and asking it anyway writes an error to the log on
+            // every frame the pane is open. Its own TotalMaterialCost logs "Called MaterialsNeededTotal on a
+            // Blueprint_Install" and gives back an empty list, because the building being reinstalled already
+            // exists: there is no material cost, only the walking and the work. Reported on 2026-08-30.
+            Blueprint_Install install = thing as Blueprint_Install;
+
+            if (install != null)
+                return Reinstall(view, y, install, palette);
+
             List<ThingDefCountClass> cost = UIGuard.Try("Inspector.BuildCost",
                 constructible.TotalMaterialCost, null, null);
 
@@ -254,6 +263,37 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     palette.TextPrimary, progress, palette.Accent, null,
                     Mathf.Max(0f, work - done).ToString("F0") + " left", palette);
             }
+
+            return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// What a reinstall is waiting on, which is a haul rather than a bill of materials.
+        ///
+        /// <b>Its own block because it is its own question.</b> The building exists; nothing is being spent on
+        /// it and nothing has to be delivered. What somebody clicking a reinstall marker wants to know is
+        /// which building is coming and whether it has been picked up yet.
+        /// </summary>
+        private static float Reinstall(Rect view, float y, Blueprint_Install install, UIColorPaletteDef palette)
+        {
+            Thing moving = UIGuard.Try("Inspector.Reinstall", () => install.ThingToInstall, null, null);
+
+            if (moving == null)
+                return y;
+
+            y = InspectPaneParts.Cap(view, y, "Construction summary", "reinstall", palette);
+
+            y = InspectPaneParts.Fact(view, y, "Moving", moving.LabelCap, palette.TextPrimary, palette);
+
+            bool carried = UIGuard.Try("Inspector.ReinstallHeld",
+                () => install.MiniToInstallOrBuildingToReinstall is MinifiedThing, false, null);
+
+            y = InspectPaneParts.Fact(view, y, "Materials", "none, it already exists", palette.TextSecondary,
+                palette);
+
+            y = InspectPaneParts.Fact(view, y, "State",
+                carried ? "uninstalled, waiting to be carried here" : "still standing where it is",
+                palette.TextSecondary, palette);
 
             return y + InspectPaneParts.BlockGap;
         }
