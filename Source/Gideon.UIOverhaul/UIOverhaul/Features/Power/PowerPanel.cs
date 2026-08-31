@@ -82,7 +82,7 @@ namespace Gideon.UIOverhaul.Features.Power
 
             y = Lists(view, y, shown, palette);
             y = Burners(view, y, shown, palette);
-            y = Trouble(view, y, shown, palette);
+            y = Cellar(view, y, shown, palette);
 
             if (Event.current.type == EventType.Layout)
                 viewHeight = Mathf.Max(1f, y);
@@ -640,17 +640,151 @@ namespace Gideon.UIOverhaul.Features.Power
             return band.yMax;
         }
 
+        private static readonly List<BatteryRow> Cells = new List<BatteryRow>();
+
+        /// <summary>
+        /// The batteries and the trouble, side by side.
+        ///
+        /// <b>Trouble was full width and did not need to be.</b> Its rows are a name and a chip, so most of
+        /// that width was empty and a colony with ten unpowered things got a very wide column of the same
+        /// short line. Halving it leaves room for the batteries, which are the other half of the countdown at
+        /// the top: the hours come from what these hold.
+        /// </summary>
+        private static float Cellar(Rect view, float y, GridRow grid, UIColorPaletteDef palette)
+        {
+            PowerFacts.Batteries(grid.net, Cells);
+            PowerFacts.Faults(grid, Faults);
+
+            if (Cells.Count == 0 && Faults.Count == 0)
+                return y;
+
+            float half = (view.width - RowGap) * 0.5f;
+
+            float left = Cells.Count > 0
+                ? Storage(new Rect(view.x, y, half, 0f), y, grid, palette)
+                : y;
+
+            float right = Faults.Count > 0
+                ? Trouble(new Rect(view.x + half + RowGap, y, half, 0f), y, palette)
+                : y;
+
+            return Mathf.Max(left, right);
+        }
+
+        /// <summary>
+        /// Every battery on the grid, emptiest first.
+        ///
+        /// <b>Emptiest first because that is the one that stops carrying.</b> A bank drains together but does
+        /// not always fill together: a battery that was built later, or was disconnected for a while, sits
+        /// lower than the rest and is the first to leave the countdown short.
+        /// </summary>
+        private static float Storage(Rect view, float y, GridRow grid, UIColorPaletteDef palette)
+        {
+            float height = 30f + Cells.Count * 22f + 26f;
+
+            Rect box = new Rect(view.x, y, view.width, height);
+
+            UIElementPainter.OutlineRounded(box, palette.Border, palette.PanelBackground);
+
+            Rect cap = new Rect(box.x, box.y, box.width, 22f);
+
+            UIElementPainter.FillRounded(cap,
+                UIElementPainter.Composite(palette.PanelBackground, palette.HoverOverlay));
+
+            TabParts.RowLabel(new Rect(cap.x + 10f, cap.y, cap.width - 20f, cap.height),
+                PowerFaces.Caps("Batteries"), palette.TextSecondary, GameFont.Tiny, PowerFaces.Mono,
+                PowerFaces.Size.BlockHead);
+
+            float share = grid.capacity > 0f ? Mathf.Clamp01(grid.stored / grid.capacity) : 0f;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.LabelEllipses(new Rect(cap.x + 10f, cap.y, cap.width - 20f, cap.height),
+                    PowerFaces.Caps(Mathf.RoundToInt(share * 100f) + "% of "
+                                    + Mathf.RoundToInt(grid.capacity).ToString("N0") + " Wd"),
+                    PowerFaces.Mono, PowerFaces.Size.BlockHead);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            float cursor = cap.yMax + 4f;
+
+            for (int i = 0; i < Cells.Count; i++)
+                cursor = Cell(box, cursor, Cells[i], palette);
+
+            // The bank total sits under the individual ones rather than only in the header, because it is the
+            // figure the countdown at the top of the screen is divided from.
+            Rect footer = new Rect(box.x + 12f, cursor + 2f, box.width - 24f, 20f);
+
+            TabParts.RowLabel(footer,
+                Mathf.RoundToInt(grid.stored).ToString("N0") + " Wd across "
+                + Cells.Count + (Cells.Count == 1 ? " battery" : " batteries"),
+                palette.TextDisabled, GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
+
+            return box.yMax + RowGap;
+        }
+
+        private static float Cell(Rect box, float y, BatteryRow cell, UIColorPaletteDef palette)
+        {
+            const float height = 22f;
+            const float figure = 74f;
+            const float bar = 70f;
+
+            Rect band = new Rect(box.x + 12f, y, box.width - 24f, height);
+
+            float share = cell.capacity > 0f ? Mathf.Clamp01(cell.stored / cell.capacity) : 0f;
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = InspectPaneParts.Level(share, palette);
+
+                UITextControl.LabelEllipses(new Rect(band.xMax - figure, band.y, figure, height),
+                    Mathf.RoundToInt(cell.stored).ToString("N0") + " Wd", PowerFaces.Mono,
+                    PowerFaces.Size.Small);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+
+            Rect track = new Rect(band.xMax - figure - bar - 8f, band.y + (height - 6f) * 0.5f, bar, 6f);
+
+            UIElementPainter.OutlineRounded(track, palette.Border, palette.SurfaceSunken);
+
+            if (share > 0f)
+            {
+                Widgets.DrawBoxSolid(new Rect(track.x + 1f, track.y + 1f,
+                        Mathf.Max(1f, (track.width - 2f) * share), track.height - 2f),
+                    InspectPaneParts.Level(share, palette));
+            }
+
+            TabParts.RowLabel(new Rect(band.x, band.y, track.x - band.x - 8f, height), cell.name,
+                cell.on ? palette.TextPrimary : palette.TextDisabled, GameFont.Small, PowerFaces.Body,
+                PowerFaces.Size.Body);
+
+            return band.yMax;
+        }
+
         // -------------------------------------------------------------------------------------------
         // Trouble
         // -------------------------------------------------------------------------------------------
 
-        private static float Trouble(Rect view, float y, GridRow grid, UIColorPaletteDef palette)
+        private static float Trouble(Rect view, float y, UIColorPaletteDef palette)
         {
-            PowerFacts.Faults(grid, Faults);
-
-            if (Faults.Count == 0)
-                return y;
-
             float height = 30f + Faults.Count * 22f + 8f;
 
             Rect box = new Rect(view.x, y, view.width, height);
