@@ -959,7 +959,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>The point size the state pill sets at, named because the height is measured from it.</summary>
-        private const float PillPoints = 9f;
+        private const float PillPoints = 6.75f;
 
         /// <summary>
         /// What a battery loses to self-discharge, read out of RimWorld rather than copied from it.

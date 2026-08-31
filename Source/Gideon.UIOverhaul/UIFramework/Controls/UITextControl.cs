@@ -253,7 +253,9 @@ namespace Gideon.UIFramework.Controls
             // Rounded once, here, and used as the key as well as the size. Keying on the unrounded float would
             // give 10.4 and 10.6 two cache entries that draw identically, and keying on the rounded size while
             // drawing at the float would be a cache that lies about what it holds.
-            int size = Mathf.Max(1, Mathf.RoundToInt(points));
+            // The one place points become pixels. Unity rasterizes at a pixel em size, so the HTML
+            // ratio is applied here and nowhere else -- every caller above this line is in points.
+            int size = Mathf.Max(1, Mathf.RoundToInt(UIFonts.ToPixels(points)));
 
             long key = (long) face | ((long) anchor << 8) | ((long) weight << 16)
                        | ((wrap ? 1L : 0L) << 24) | ((long) size << 32);

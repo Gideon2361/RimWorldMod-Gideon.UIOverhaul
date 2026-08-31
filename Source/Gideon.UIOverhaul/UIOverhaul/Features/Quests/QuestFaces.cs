@@ -34,47 +34,47 @@ namespace Gideon.UIOverhaul.Features.Quests
         internal static class Size
         {
             /// <summary>The window's title, and a quest's name when the detail pane is showing it.</summary>
-            internal const float Title = 21f;
+            internal const float Title = 15.75f;
 
             /// <summary>The line under a title.</summary>
-            internal const float Subtitle = 14f;
+            internal const float Subtitle = 10.5f;
 
             /// <summary>A header readout's figure, and the caption under it.</summary>
-            internal const float Readout = 17f;
+            internal const float Readout = 12.75f;
 
-            internal const float Caption = 10f;
+            internal const float Caption = 7.5f;
 
             /// <summary>A block heading and the suffix on the right of it.</summary>
-            internal const float BlockHead = 10.5f;
+            internal const float BlockHead = 7.875f;
 
             /// <summary>The rail's two headings, which head the panel rather than a box inside it.</summary>
-            internal const float RailHead = 12.5f;
+            internal const float RailHead = 9.375f;
 
             /// <summary>A rail entry, and the count beside it.</summary>
-            internal const float RailName = 17f;
+            internal const float RailName = 12.75f;
 
-            internal const float RailCount = 13f;
+            internal const float RailCount = 9.75f;
 
             /// <summary>A quest's name on a card.</summary>
-            internal const float Name = 17f;
+            internal const float Name = 12.75f;
 
             /// <summary>A sentence: what a quest gives, costs, risks.</summary>
-            internal const float Body = 14f;
+            internal const float Body = 10.5f;
 
             /// <summary>The small-caps label at the head of one of those lines.</summary>
-            internal const float Label = 10.5f;
+            internal const float Label = 7.875f;
 
             /// <summary>A figure that lines up down the screen.</summary>
-            internal const float Figure = 12f;
+            internal const float Figure = 9f;
 
             /// <summary>The quieter second figure on a row.</summary>
-            internal const float Small = 11f;
+            internal const float Small = 8.25f;
 
             /// <summary>A deadline.</summary>
-            internal const float When = 11.5f;
+            internal const float When = 8.625f;
 
             /// <summary>A chip.</summary>
-            internal const float Chip = 10f;
+            internal const float Chip = 7.5f;
         }
 
         /// <summary>
