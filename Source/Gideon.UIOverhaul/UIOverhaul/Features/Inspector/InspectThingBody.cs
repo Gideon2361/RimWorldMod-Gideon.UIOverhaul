@@ -948,8 +948,14 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 // word whatever the caption is translated to.
                 float caption = Text.CalcSize("Charge").x;
 
-                Rect band = new Rect(view.x + caption + 8f, y - 1f, view.width - caption - 8f,
-                    UIFonts.LineHeightOf(GameFont.Tiny) + 2f);
+                // Centred in the caption's own line rather than nudged up off it. The pill stands two pixels
+                // taller than the row it shares, and lifting it by one put that overhang above the top of the
+                // block, where the pane clips: the border came back with its corners shaved off.
+                float line = UIFonts.LineHeightOf(GameFont.Tiny);
+                float tall = UITextControl.LineHeight(UIFace.IBMPlexMono, PillPoints) + 2f;
+
+                Rect band = new Rect(view.x + caption + 8f, y + Mathf.Max(0f, (line - tall) * 0.5f),
+                    view.width - caption - 8f, Mathf.Max(line, tall));
 
                 float clock = UIGuard.Try("Inspector.PillClock", () => Time.realtimeSinceStartup, 0f, null);
 
@@ -961,7 +967,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                     : tint;
 
                 Rect pill = TabParts.Pill(band, band.x, band.y, word.ToUpperInvariant(), drawn, palette, 9999f,
-                    null, UIFace.IBMPlexMono, 9f);
+                    null, UIFace.IBMPlexMono, PillPoints);
 
                 Highlight(pill, tint, motion, clock);
             }
@@ -971,6 +977,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 Text.Font = previousFont;
             }
         }
+
+        /// <summary>The point size the state pill sets at, named because the height is measured from it.</summary>
+        private const float PillPoints = 9f;
 
         private const float SweepPeriod = 1.9f;
         private const float BreathePeriod = 2.4f;
