@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Reflection;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Integrations;
+using Gideon.UIOverhaul.Shared;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -781,17 +783,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
-        /// A battery's own charge, which the grid total above does not tell you about this one.
+        /// A battery's charge, what the grid around it is doing, and which way it is going.
         ///
-        /// <b>Efficiency and self-discharge are the two facts that explain the bar.</b> Asked for on 2026-08-26.
-        /// A player watching a bank of batteries fail to fill is looking at a 50% efficiency they had forgotten
-        /// about, and one watching them empty overnight with nothing switched on is looking at self-discharge.
-        /// Neither is visible from the bar, and neither changes, which is exactly why they are easy to forget.
-        ///
-        /// <b>Self-discharge is said even at zero, as "none".</b> An empty battery is not losing anything, and
-        /// printing 5 W beside an empty bar would be describing a drain that is not happening -- but dropping the
-        /// row entirely, as vanilla does, makes the fact appear and disappear depending on charge and reads as a
-        /// panel that cannot make up its mind.
+        /// <b>Found by comp, so a modded battery gets this too.</b> <c>TryGetComp</c> matches a subclass, and
+        /// almost every modded battery derives its comp from <c>CompPowerBattery</c> rather than replacing it.
+        /// The grid figures are read through <c>CompPower</c>, the base, because the net is a property of being
+        /// connected rather than of being a battery: anything that reaches this block can answer them.
         /// </summary>
         private static float Charge(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
@@ -804,9 +801,16 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float level = UIGuard.Try("Inspector.BatteryLevel", () => battery.StoredEnergyPct, 0f, null);
             float stored = UIGuard.Try("Inspector.BatteryStored", () => battery.StoredEnergy, 0f, null);
 
-            y = InspectPaneParts.Cap(view, y, "Charge", Mathf.RoundToInt(stored) + " Wd", palette);
+            float capTop = y;
 
-            y = InspectPaneParts.Need(view, y, "Stored", InspectPaneParts.Percent(level),
+            y = InspectPaneParts.Cap(view, y, "Charge", null, palette);
+
+            Direction(view, capTop, battery, stored, palette);
+
+            // The stored figure and the percentage are one reading of one thing, so they share a row: the
+            // watt-days are the amount and the percentage is how much of the battery that is.
+            y = InspectPaneParts.Need(view, y, "Stored",
+                Mathf.RoundToInt(stored) + " Wd (" + InspectPaneParts.Percent(level) + ")",
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
                 palette);
 
@@ -820,7 +824,233 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 stored > 0f ? Mathf.RoundToInt(SelfDischargeWatts) + " W" : "none",
                 stored > 0f ? palette.TextSecondary : palette.TextDisabled, palette);
 
+            // The grid's balance belongs on this block rather than in the footer string, because it is the
+            // number that says which way the bar above is about to move.
+            bool connected;
+            float watts = GridWatts(battery, out connected);
+
+            y = InspectPaneParts.Fact(view, y, "Grid excess",
+                connected ? Mathf.RoundToInt(watts) + " W" : "not connected",
+                !connected ? palette.TextDisabled
+                    : watts > 0f ? palette.Success
+                        : watts < 0f ? palette.Warning : palette.TextSecondary,
+                palette);
+
             return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// The grid's net gain in watts, and whether this thing is on a grid at all.
+        ///
+        /// <b>Converted the way vanilla converts it.</b> <c>CurrentEnergyGainRate</c> answers in watt-days per
+        /// tick, and <c>CompPower.WattsToWattDaysPerTick</c> is the constant the game divides by to get back to
+        /// watts for its own inspect string. Reading the constant rather than writing 60000 keeps our figure
+        /// equal to the one in the footer under it.
+        /// </summary>
+        private static float GridWatts(CompPower power, out bool connected)
+        {
+            bool found = false;
+
+            float watts = UIGuard.Try("Inspector.GridWatts", () =>
+            {
+                if (power.PowerNet == null)
+                    return 0f;
+
+                found = true;
+
+                return power.PowerNet.CurrentEnergyGainRate() / CompPower.WattsToWattDaysPerTick;
+            }, 0f, null);
+
+            connected = found;
+
+            return watts;
+        }
+
+        /// <summary>How a state pill moves, which is the part of it that carries the state.</summary>
+        private enum PillMotion
+        {
+            /// <summary>A highlight travels the way the energy is going.</summary>
+            SweepRight,
+
+            SweepLeft,
+
+            /// <summary>The whole pill drops out and returns. For a state that is not a direction.</summary>
+            Blink,
+
+            /// <summary>The wash swells and fades in place. For a state that is a place, not a movement.</summary>
+            Breathe
+        }
+
+        /// <summary>
+        /// The pill beside the Charge heading: filling, emptying, at rest, or flat.
+        ///
+        /// <b>The motion is the state, not decoration.</b> Fading the letters up and down, which is what this
+        /// did first, is the one animation that cannot encode anything: there is no direction in it and no
+        /// shape to read, so all four states moved identically. It also looked like a rendering fault, because
+        /// text going dim and bright is what a broken draw does. Aaron picked the sweep on 2026-08-30 from four
+        /// candidates.
+        ///
+        /// <b>So charge sweeps right and drain sweeps left,</b> and the direction of travel is the reading.
+        /// Empty blinks, because empty is not a direction. Full breathes, because full is a place rather than
+        /// a movement.
+        ///
+        /// <b>Empty and full both outrank the direction.</b> A battery at zero on a gaining grid is still a
+        /// battery with nothing in it; a battery at capacity is not charging, because there is nowhere for the
+        /// gain to go. The grid excess row underneath still says what the rest of the net is doing.
+        /// </summary>
+        private static void Direction(Rect view, float y, CompPowerBattery battery, float stored,
+            UIColorPaletteDef palette)
+        {
+            bool connected;
+            float watts = GridWatts(battery, out connected);
+
+            if (!connected)
+                return;
+
+            string word;
+            Color tint;
+            PillMotion motion;
+
+            float level = UIGuard.Try("Inspector.BatteryPct", () => battery.StoredEnergyPct, 0f, null);
+
+            if (stored <= 0.01f)
+            {
+                word = "empty";
+                tint = palette.Danger;
+                motion = PillMotion.Blink;
+            }
+            else if (level >= 0.999f)
+            {
+                word = "full";
+                tint = palette.Accent;
+                motion = PillMotion.Breathe;
+            }
+            else if (watts > 0f)
+            {
+                word = "charge";
+                tint = palette.Success;
+                motion = PillMotion.SweepRight;
+            }
+            else
+            {
+                // Zero net gain still empties a battery below capacity, because it self-discharges whatever
+                // the grid is doing. Draining is the honest word for standing still at less than full.
+                word = "drain";
+                tint = palette.Warning;
+                motion = PillMotion.SweepLeft;
+            }
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+
+                // In the slot the cap keeps for its value, laid out from the right edge. The state is what this
+                // block is for, so it takes the place a figure would have had rather than sitting beside the
+                // heading and pushing it about.
+                string label = word.ToUpperInvariant();
+
+                float wide = TabParts.PillWidth(label, 9999f, UIFace.IBMPlexMono, PillPoints);
+
+                // Centred in the caption's own line rather than nudged up off it. The pill stands two pixels
+                // taller than the row it shares, and lifting it by one put that overhang above the top of the
+                // block, where the pane clips: the border came back with its corners shaved off.
+                float line = UIFonts.LineHeightOf(GameFont.Tiny);
+                float tall = UITextControl.LineHeight(UIFace.IBMPlexMono, PillPoints) + 2f;
+
+                Rect band = new Rect(view.xMax - wide, y + Mathf.Max(0f, (line - tall) * 0.5f), wide,
+                    Mathf.Max(line, tall));
+
+                float clock = UIGuard.Try("Inspector.PillClock", () => Time.realtimeSinceStartup, 0f, null);
+
+                // Blink is the one state that changes the pill itself rather than overlaying it, because what
+                // it wants to say is that the pill is going away.
+                Color drawn = motion == PillMotion.Blink && clock % BlinkPeriod > BlinkPeriod * 0.62f
+                    ? UIElementPainter.Composite(palette.PanelBackground,
+                        new Color(tint.r, tint.g, tint.b, 0.34f))
+                    : tint;
+
+                Rect pill = TabParts.Pill(band, band.x, band.y, label, drawn, palette, 9999f, null,
+                    UIFace.IBMPlexMono, PillPoints);
+
+                Highlight(pill, tint, motion, clock);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>The point size the state pill sets at, named because the height is measured from it.</summary>
+        private const float PillPoints = 9f;
+
+        private const float SweepPeriod = 1.9f;
+        private const float BreathePeriod = 2.4f;
+        private const float BlinkPeriod = 1.15f;
+
+        /// <summary>
+        /// The moving part, drawn over the finished pill.
+        ///
+        /// <b>An overlay rather than a second copy of the pill.</b> Redrawing the pill brighter behind a clip
+        /// would mean measuring and laying out the text again every frame; a translucent wash over the top
+        /// lifts the border, the fill and the letters together, which is the whole point of the sweep, and
+        /// costs no text work at all.
+        ///
+        /// <b>The band is drawn in slices with a sine of alpha across it,</b> because a single rect gives a
+        /// hard-edged block sliding past rather than a highlight. Seven is enough that the edges are not
+        /// countable at this size and few enough that the whole effect is seven filled rects.
+        ///
+        /// <b>It never leaves the pill.</b> Each slice is clamped to the pill's own rect, so the highlight
+        /// arrives and departs by being cut off at the ends rather than by overhanging the border.
+        /// </summary>
+        private static void Highlight(Rect pill, Color tint, PillMotion motion, float clock)
+        {
+            if (motion == PillMotion.Blink)
+                return;
+
+            if (motion == PillMotion.Breathe)
+            {
+                float swell = 0.06f + 0.16f * (1f - Mathf.Cos(clock / BreathePeriod * Mathf.PI * 2f)) * 0.5f;
+
+                Widgets.DrawBoxSolid(pill.ContractedBy(1f), new Color(tint.r, tint.g, tint.b, swell));
+
+                return;
+            }
+
+            const int slices = 7;
+
+            float width = Mathf.Max(10f, pill.width * 0.42f);
+            float travel = pill.width + width;
+            float phase = clock % SweepPeriod / SweepPeriod;
+
+            if (motion == PillMotion.SweepLeft)
+                phase = 1f - phase;
+
+            float head = pill.x - width + travel * phase;
+
+            for (int i = 0; i < slices; i++)
+            {
+                float across = (i + 0.5f) / slices;
+
+                // Brightest in the middle of the band and nothing at either end, so it reads as a highlight
+                // passing over rather than as a block sliding past.
+                float alpha = Mathf.Sin(across * Mathf.PI) * 0.3f;
+
+                float left = head + width * across - width / (slices * 2f);
+                float right = left + width / slices;
+
+                left = Mathf.Max(left, pill.x + 1f);
+                right = Mathf.Min(right, pill.xMax - 1f);
+
+                if (right <= left)
+                    continue;
+
+                Widgets.DrawBoxSolid(new Rect(left, pill.y + 1f, right - left, pill.height - 2f),
+                    new Color(tint.r, tint.g, tint.b, alpha));
+            }
         }
 
         /// <summary>

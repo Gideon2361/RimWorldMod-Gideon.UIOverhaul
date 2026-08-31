@@ -133,6 +133,21 @@ namespace Gideon.UIOverhaul.Features.ThingFilters
         /// </summary>
         internal List<SpecialThingFilterDef> HiddenSpecials => hiddenSpecials;
 
+        /// <summary>
+        /// The defs the caller wants excluded, as a set rather than as whatever it handed us.
+        ///
+        /// <b>This exists to be passed to <c>ThingFilter.SetAllow</c>, and the difference is seconds.</b> That
+        /// method tests <c>exceptedDefs.Contains</c> once per descendant of the category being toggled, and
+        /// callers hand the exclusion list over as a lazy <c>IEnumerable</c>. Passing that through means every
+        /// one of those tests re-runs the whole query, so toggling a category with a thousand descendants runs
+        /// the caller's filter a thousand times over every def in the game.
+        ///
+        /// A <c>HashSet</c> is enumerated once here and answers each test in constant time, because LINQ's
+        /// <c>Contains</c> defers to <c>ICollection.Contains</c> when it is handed one. Aaron reported a ten
+        /// second freeze toggling Buildings on 2026-08-30.
+        /// </summary>
+        internal HashSet<ThingDef> ForceHidden => forceHidden;
+
         internal ThingFilterRow RowAt(int slot) => rows[order[slot]];
 
         /// <summary>Indent level of a shown row, for the renderer.</summary>

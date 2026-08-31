@@ -62,10 +62,92 @@ namespace Gideon.UIOverhaul.Features.Inspector
             Rect second = split ? right : left;
             float secondY = split ? view.y : leftY;
 
+            secondY = Faith(second, secondY, pawn, palette);
             secondY = Standing(second, secondY, pawn, palette);
             secondY = Interactions(second, secondY, pawn, palette);
 
             return (split ? Mathf.Max(leftY, secondY) : secondY) - view.y;
+        }
+
+        /// <summary>
+        /// What this pawn believes and how firmly, when Ideology is loaded.
+        ///
+        /// <b>Certainty belongs on the social tab because losing it is a social event.</b> It moves on what a
+        /// pawn sees other people do, and it is the number that says whether they are about to stop being one
+        /// of yours. Vanilla keeps it on the Bio tab's ideoligion strip and in the ideoligions window, neither
+        /// of which is open while you are reading somebody's relationships.
+        ///
+        /// <b>Absent rather than empty without the expansion.</b> <c>pawn.ideo</c> is null in an install with
+        /// no Ideology, and the tracker is also null for a pawn who has no faith at all, so one test covers
+        /// both and the block simply does not appear.
+        ///
+        /// <b>The thresholds are the ideoligions tab's own,</b> so a colonist called doubting here is called
+        /// doubting there. Two screens disagreeing about the same pawn on the same tick is the fault this
+        /// avoids, and it costs one reference to do it.
+        /// </summary>
+        private static float Faith(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        {
+            if (!ModsConfig.IdeologyActive)
+                return y;
+
+            Ideo ideo = UIGuard.Try("Inspector.Ideo", () => pawn.ideo?.Ideo, null, null);
+
+            if (ideo == null)
+                return y;
+
+            float certainty = UIGuard.Try("Inspector.Certainty", () => pawn.ideo.Certainty, 0f, null);
+
+            Color tint = certainty < Ideoligions.IdeoFacts.ConvertingBelow
+                ? palette.Danger
+                : certainty < Ideoligions.IdeoFacts.DoubtingBelow
+                    ? palette.Warning
+                    : certainty >= Ideoligions.IdeoFacts.DevoutFrom
+                        ? palette.Success
+                        : palette.Accent;
+
+            string word = certainty < Ideoligions.IdeoFacts.ConvertingBelow
+                ? "slipping"
+                : certainty < Ideoligions.IdeoFacts.DoubtingBelow
+                    ? "doubting"
+                    : certainty >= Ideoligions.IdeoFacts.DevoutFrom
+                        ? "devout"
+                        : "settled";
+
+            y = InspectPaneParts.Cap(view, y, "Faith", word, palette);
+
+            // The faith's own colour, which is how it reads everywhere else in the game.
+            y = InspectPaneParts.Fact(view, y, "Ideoligion", ideo.name,
+                UIGuard.Try("Inspector.IdeoColor", () => ideo.TextColor, palette.TextPrimary, null), palette);
+
+            y = InspectPaneParts.Need(view, y, "Certainty", InspectPaneParts.Percent(certainty), tint,
+                certainty, tint, null, null, palette);
+
+            // Read through a guard of its own: the drift is recomputed from the pawn's situational thoughts
+            // and their role, and it is the one read here that walks somebody else's data.
+            float drift = UIGuard.Try("Inspector.Drift", () => pawn.ideo.CertaintyChangePerDay, 0f, null);
+
+            y = InspectPaneParts.Fact(view, y, "Per day",
+                drift > 0.0005f
+                    ? "+" + drift.ToStringPercent("0")
+                    : drift < -0.0005f
+                        ? drift.ToStringPercent("0")
+                        : "steady",
+                drift > 0.0005f
+                    ? palette.Success
+                    : drift < -0.0005f
+                        ? palette.Danger
+                        : palette.TextDisabled,
+                palette);
+
+            Precept_Role role = UIGuard.Try("Inspector.Role",
+                () => ideo.GetRole(pawn), null, null);
+
+            if (role != null)
+            {
+                y = InspectPaneParts.Fact(view, y, "Role", role.LabelCap, palette.Accent, palette);
+            }
+
+            return y + InspectPaneParts.BlockGap;
         }
 
         /// <summary>
