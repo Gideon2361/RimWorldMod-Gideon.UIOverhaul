@@ -32,6 +32,12 @@ namespace Gideon.UIOverhaul
         {
             ApplyPatches();
 
+            // Before defs load, so the loading screen can draw in our own typefaces. RimWorld would otherwise
+            // load the bundles at the end of the load sequence, long after that screen has come and gone.
+            // Patch_EarlyBundleLoad stops the deferred call loading the same files a second time.
+            UIGuard.Try("Mod.EarlyBundles", () => content.assetBundles.ReloadAll(),
+                "The loading screen falls back to RimWorld's font.");
+
             // Guarded like everything else reachable from here. A throw in the settings loader would escape this
             // constructor, and RimWorld's response to that is to report the mod as failing to instantiate and
             // apply none of it -- the same total loss the patch loop above was split up to prevent. Leaving the

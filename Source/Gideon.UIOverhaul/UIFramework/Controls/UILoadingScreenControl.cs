@@ -1,5 +1,6 @@
 using Gideon.UIFramework.Components.Images;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using Gideon.UIFramework.Stages;
 using UnityEngine;
 using Verse;
@@ -24,6 +25,30 @@ namespace Gideon.UIFramework.Controls
 
         /// <summary>How much taller the bar is than the step line beneath it.</summary>
         protected const float BarWeight = 4f;
+
+        /// <summary>
+        /// The stage heading's face and size.
+        ///
+        /// <b>Condensed rather than wide.</b> Stage names vary enormously -- "Reading XML" against "Resolve
+        /// cross-references between non-implied Defs" -- and a wide face that suits the short ones overflows the
+        /// long ones. This is also the face the mod's own panels use for headers, so the loading screen
+        /// foreshadows the interface it is loading rather than looking like a different product.
+        ///
+        /// These are named here rather than taken from a feature's typography helper because this control lives
+        /// in the framework, which must not reach into a feature.
+        /// </summary>
+        internal const UIFace StageFace = UIFace.BarlowCondensed;
+
+        protected const float StagePoints = 12f;
+
+        /// <summary>
+        /// The step line's face and size: mono, because a step is machine status -- a name, a colon, a value.
+        /// Mono reads as the computer talking rather than the game talking, and it stops the values jittering
+        /// sideways as one step replaces another.
+        /// </summary>
+        internal const UIFace StepFace = UIFace.IBMPlexMono;
+
+        protected const float StepPoints = 8.25f;
 
         // Measured from the fonts rather than fixed, because RimWorld's UI scale changes line heights
         // at runtime and any hardcoded number would simply be wrong about them. It also keeps the bar
@@ -127,10 +152,11 @@ namespace Gideon.UIFramework.Controls
             {
                 if (!progress.Stage.NullOrEmpty())
                 {
-                    Text.Font = GameFont.Small;
                     Text.Anchor = TextAnchor.MiddleLeft;
                     GUI.color = palette.TextPrimary;
-                    Widgets.Label(new Rect(x, y, width, stageHeight), progress.Stage);
+
+                    UITextControl.LabelEllipses(new Rect(x, y, width, stageHeight), progress.Stage,
+                        StageFace, StagePoints, FontStyle.Bold);
                 }
 
                 // Advanced whether or not anything was drawn, so the bar below does not slide up into
@@ -146,10 +172,13 @@ namespace Gideon.UIFramework.Controls
 
             if (config.showStep && !progress.Step.NullOrEmpty())
             {
-                Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextSecondary;
-                Widgets.Label(new Rect(x, y, width, stepHeight), progress.Step.Truncate(width));
+
+                // Ellipsed by the control that draws it rather than Truncate, which measures against
+                // RimWorld's font and would cut a bundled face in the wrong place.
+                UITextControl.LabelEllipses(new Rect(x, y, width, stepHeight), progress.Step,
+                    StepFace, StepPoints);
             }
 
             GUI.color = previousColor;

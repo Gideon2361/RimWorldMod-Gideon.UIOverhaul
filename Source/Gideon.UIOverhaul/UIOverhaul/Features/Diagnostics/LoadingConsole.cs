@@ -729,7 +729,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(rect, "Loading console");
+                UITextControl.Label(rect, "Loading console", LoadingFaces.Condensed, LoadingFaces.Size.Title,
+                    FontStyle.Bold);
 
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = palette.TextSecondary;
@@ -740,7 +741,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 // Same reason as the last phase span: the clock runs until a game starts, so reporting it here
                 // would tell the reader their load took as long as they have been sitting on the main menu.
-                Widgets.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds));
+                UITextControl.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds), LoadingFaces.Mono,
+                    LoadingFaces.Size.Counter);
             }
             finally
             {
@@ -807,6 +809,13 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             GUI.color = previousColor;
         }
 
+        /// <summary>
+        /// One readout: a small caps caption, the figure, and a line of prose under it.
+        ///
+        /// <b>The figure is mono and the prose is not.</b> These numbers change while the panel is open, and a
+        /// proportional face makes them jitter sideways as the digits change width. The caption is mono too,
+        /// because small caps in the mono face is what this suite uses for a label over a value.
+        /// </summary>
         private static void Cell(Rect rect, string label, string value, string sub, Color tint,
             UIColorPaletteDef palette)
         {
@@ -825,17 +834,20 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 float line = inner.height / 3f;
 
-                Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
-                Widgets.Label(new Rect(inner.x, inner.y, inner.width, line), label.ToUpperInvariant());
 
-                Text.Font = GameFont.Small;
+                UITextControl.LabelEllipses(new Rect(inner.x, inner.y, inner.width, line),
+                    label.ToUpperInvariant(), LoadingFaces.Mono, LoadingFaces.Size.Caption);
+
                 GUI.color = tint;
-                Widgets.Label(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f), value);
 
-                Text.Font = GameFont.Tiny;
+                UITextControl.LabelEllipses(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f),
+                    value, LoadingFaces.Mono, LoadingFaces.Size.Readout);
+
                 GUI.color = palette.TextSecondary;
-                Widgets.LabelEllipses(new Rect(inner.x, inner.y + line * 2f + 2f, inner.width, line), sub);
+
+                UITextControl.LabelEllipses(new Rect(inner.x, inner.y + line * 2f + 2f, inner.width, line),
+                    sub, LoadingFaces.Condensed, LoadingFaces.Size.Sub);
             }
             finally
             {
@@ -994,7 +1006,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
             if (count > 0 && !chosen)
                 GUI.color = palette.Warning;
 
-            Widgets.Label(rect, count >= 0 ? label + " " + count : label);
+            UITextControl.Label(rect, count >= 0 ? label + " " + count : label, LoadingFaces.Condensed,
+                LoadingFaces.Size.Title);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
@@ -1100,7 +1113,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = palette.TextDisabled;
-            Widgets.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height), row.Seconds.ToString("F2"));
+            UITextControl.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height),
+                row.Seconds.ToString("F2"), LoadingFaces.Mono, LoadingFaces.Size.Figure);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1156,8 +1170,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 ? 20f + row.Children.ToString().Length * 6f
                 : 0f;
 
-            Widgets.LabelEllipses(new Rect(x, rect.y, Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f),
-                rect.height), label);
+            UITextControl.LabelEllipses(new Rect(x, rect.y,
+                Mathf.Max(0f, rect.xMax - x - rightWidth - pill - 8f), rect.height), label,
+                LoadingFaces.Condensed, LoadingFaces.Size.Row);
 
             if (pill > 0f)
             {
@@ -1264,11 +1279,12 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 // above it. "Time by phase" alone did not say it was sorted, so the first row being the worst
                 // offender read as a coincidence.
                 GUI.color = palette.TextDisabled;
-                Widgets.Label(new Rect(inner.x, inner.y, inner.width, lineHeight), "WHERE THE TIME WENT");
+                UITextControl.Label(new Rect(inner.x, inner.y, inner.width, lineHeight), "WHERE THE TIME WENT",
+                    LoadingFaces.Mono, LoadingFaces.Size.Caption);
 
                 GUI.color = palette.TextSecondary;
-                Widgets.Label(new Rect(inner.x, inner.y + lineHeight - 6f, inner.width, lineHeight),
-                    "Longest first. Click to jump.");
+                UITextControl.Label(new Rect(inner.x, inner.y + lineHeight - 6f, inner.width, lineHeight),
+                    "Longest first. Click to jump.", LoadingFaces.Condensed, LoadingFaces.Size.Sub);
 
                 // <b>Built from the same merged model the list uses,</b> so a phase RimWorld runs three times is
                 // one entry with its total here as well. The old version listed every occurrence separately,
@@ -1340,16 +1356,16 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             GUI.color = span.Kind == UILoadingLogKind.Section ? palette.Accent : palette.TextPrimary;
 
-            Widgets.LabelEllipses(new Rect(rect.x + 2f, rect.y, rect.width - timeWidth - 6f, textHeight),
-                span.Name);
+            UITextControl.LabelEllipses(new Rect(rect.x + 2f, rect.y, rect.width - timeWidth - 6f, textHeight),
+                span.Name, LoadingFaces.Condensed, LoadingFaces.Size.Row);
 
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = span.Duration >= 10f ? palette.Danger
                 : span.Duration >= 1f ? palette.Warning
                 : palette.TextSecondary;
 
-            Widgets.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
-                UILoadingLog.Duration(span.Duration));
+            UITextControl.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
+                UILoadingLog.Duration(span.Duration), LoadingFaces.Mono, LoadingFaces.Size.Figure);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1894,8 +1910,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 ? dropped + " lines not kept"
                 : visible.Count + " of " + UILoadingLog.Count + " shown";
 
-            Widgets.Label(new Rect(clear.xMax + 6f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 6f),
-                rect.height), status);
+            UITextControl.Label(new Rect(clear.xMax + 6f, rect.y,
+                Mathf.Max(0f, rect.xMax - clear.xMax - 6f), rect.height), status, LoadingFaces.Mono,
+                LoadingFaces.Size.Counter);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
