@@ -40,6 +40,11 @@ namespace Gideon.UIOverhaul.Features.Quests
         private const float HeaderHeight = 66f;
         private const float RowGap = 6f;
 
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
+
         /// <summary>Air between the rail's divider and the heading under it, matched to the panel inset.</summary>
         private const float RuleGap = 12f;
 
@@ -120,7 +125,23 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             Rect inner = rect.ContractedBy(10f);
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 2f, 320f, 26f), "Quests", palette.Accent,
+            float text = inner.x;
+
+            if (Glyph != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize,
+                    GlyphSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = palette.Accent;
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Quests", palette.Accent,
                 GameFont.Medium, QuestFaces.Display, QuestFaces.Size.Title);
 
             int offers = QuestFacts.Count(QuestList.Offers);
@@ -138,7 +159,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                     soon++;
             }
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 28f, 320f, 18f),
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 320f, 18f),
                 offers == 0 ? "Nothing on offer" : offers + (offers == 1 ? " offer waiting" : " offers waiting"),
                 palette.TextSecondary, GameFont.Tiny, QuestFaces.Condensed, QuestFaces.Size.Subtitle);
 
@@ -1332,6 +1353,19 @@ namespace Gideon.UIOverhaul.Features.Quests
 
         private static readonly Texture2D Restore;
 
+        /// <summary>
+        /// The tab's own glyph, drawn beside the title the way the power header draws its bolt.
+        ///
+        /// <b>The same texture the button on the bar uses,</b> so the mark a player clicked to get here is the
+        /// mark waiting at the top of the screen.
+        ///
+        /// <b>Tinted to the accent rather than to a second colour of its own.</b> The power header takes the
+        /// palette's amber because electricity reads amber; a chest has no such association, and giving this
+        /// one amber too would make two tabs that are nothing alike look like each other in the corner of the
+        /// eye. Matching the title is the quieter and more useful choice.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
         static QuestPanel()
         {
             // Through locals, because a readonly field can only be assigned in the constructor itself and
@@ -1339,15 +1373,18 @@ namespace Gideon.UIOverhaul.Features.Quests
             // control its picture, not take the type down before anything has drawn.
             Texture2D dismiss = null;
             Texture2D restore = null;
+            Texture2D glyph = null;
 
             UIGuard.Try("Quests.Icons", () =>
             {
                 dismiss = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
                 restore = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
+                glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Quests", false);
             }, "The set-aside control has no icon this session. It still works.");
 
             Dismiss = dismiss;
             Restore = restore;
+            Glyph = glyph;
         }
 
         /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>
