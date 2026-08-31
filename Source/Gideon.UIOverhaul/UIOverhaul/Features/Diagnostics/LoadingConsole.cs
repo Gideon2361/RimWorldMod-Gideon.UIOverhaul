@@ -54,6 +54,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
     /// claim it is the translation credits box, and only for a player not running the game in English, so this
     /// steps aside when that is drawn rather than sitting on top of it.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class LoadingConsole
     {
         private const float Inset = 8f;
@@ -138,6 +139,44 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
         /// size on screen rather than merely both being called a title.
         /// </summary>
         private const float TitlePoints = 15.75f;
+
+        /// <summary>
+        /// Side of the glyph beside the name, and the air between the two.
+        ///
+        /// <b>20px where the tabs use 34.</b> Their glyph sits in a header block 66px tall; this one has a
+        /// single 28px strip, and 34 does not fit in it. Twenty leaves four pixels above and below and keeps
+        /// the name the largest thing on the row, which is the point of the pairing.
+        /// </summary>
+        private const float GlyphSize = 20f;
+
+        /// <summary>The same gap the tabs leave, so the spacing matches even though the glyph is smaller.</summary>
+        private const float GlyphGap = 10f;
+
+        /// <summary>
+        /// The console's own mark: three staggered bars, which is what the window is a picture of.
+        ///
+        /// <b>Held in a static field, which is why the class carries
+        /// <see cref="StaticConstructorOnStartupAttribute"/>.</b> The game warns about any type with a static
+        /// texture field that lacks it, and the check reads the field's type rather than watching when the
+        /// texture is fetched, so loading lazily would not have avoided the warning.
+        ///
+        /// <b>Null is a supported outcome.</b> The draw is guarded and the name slides left to take the space,
+        /// so a session where the art fails to load costs the glyph and nothing else.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
+        static LoadingConsole()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Console.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/LoadingConsole", false),
+                "The loading console has no glyph this session. Everything on the window still reads.");
+
+            Glyph = glyph;
+        }
 
         /// <summary>How far a step or definition is indented under the phase it belongs to.</summary>
         private const float StepIndent = 12f;
@@ -762,10 +801,24 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             try
             {
+                float name = rect.x;
+
+                if (Glyph != null)
+                {
+                    Rect mark = new Rect(rect.x, rect.y + (rect.height - GlyphSize) * 0.5f, GlyphSize,
+                        GlyphSize);
+
+                    GUI.color = palette.Accent;
+                    GUI.DrawTexture(mark, Glyph);
+
+                    name = mark.xMax + GlyphGap;
+                }
+
                 Text.Anchor = TextAnchor.MiddleLeft;
                 GUI.color = palette.Accent;
 
-                UITextControl.Label(rect, "Loading console", Display, TitlePoints);
+                UITextControl.Label(new Rect(name, rect.y, rect.xMax - name, rect.height),
+                    "Loading console", Display, TitlePoints);
 
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = palette.TextSecondary;
