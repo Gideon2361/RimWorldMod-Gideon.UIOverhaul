@@ -803,11 +803,14 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             float capTop = y;
 
-            y = InspectPaneParts.Cap(view, y, "Charge", Mathf.RoundToInt(stored) + " Wd", palette);
+            y = InspectPaneParts.Cap(view, y, "Charge", null, palette);
 
             Direction(view, capTop, battery, stored, palette);
 
-            y = InspectPaneParts.Need(view, y, "Stored", InspectPaneParts.Percent(level),
+            // The stored figure and the percentage are one reading of one thing, so they share a row: the
+            // watt-days are the amount and the percentage is how much of the battery that is.
+            y = InspectPaneParts.Need(view, y, "Stored",
+                Mathf.RoundToInt(stored) + " Wd (" + InspectPaneParts.Percent(level) + ")",
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
                 palette);
 
@@ -944,9 +947,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
             {
                 Text.Font = GameFont.Tiny;
 
-                // Placed after the heading's own text rather than at a fixed offset, so it sits beside the
-                // word whatever the caption is translated to.
-                float caption = Text.CalcSize("Charge").x;
+                // In the slot the cap keeps for its value, laid out from the right edge. The state is what this
+                // block is for, so it takes the place a figure would have had rather than sitting beside the
+                // heading and pushing it about.
+                string label = word.ToUpperInvariant();
+
+                float wide = TabParts.PillWidth(label, 9999f, UIFace.IBMPlexMono, PillPoints);
 
                 // Centred in the caption's own line rather than nudged up off it. The pill stands two pixels
                 // taller than the row it shares, and lifting it by one put that overhang above the top of the
@@ -954,8 +960,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 float line = UIFonts.LineHeightOf(GameFont.Tiny);
                 float tall = UITextControl.LineHeight(UIFace.IBMPlexMono, PillPoints) + 2f;
 
-                Rect band = new Rect(view.x + caption + 8f, y + Mathf.Max(0f, (line - tall) * 0.5f),
-                    view.width - caption - 8f, Mathf.Max(line, tall));
+                Rect band = new Rect(view.xMax - wide, y + Mathf.Max(0f, (line - tall) * 0.5f), wide,
+                    Mathf.Max(line, tall));
 
                 float clock = UIGuard.Try("Inspector.PillClock", () => Time.realtimeSinceStartup, 0f, null);
 
@@ -966,8 +972,8 @@ namespace Gideon.UIOverhaul.Features.Inspector
                         new Color(tint.r, tint.g, tint.b, 0.34f))
                     : tint;
 
-                Rect pill = TabParts.Pill(band, band.x, band.y, word.ToUpperInvariant(), drawn, palette, 9999f,
-                    null, UIFace.IBMPlexMono, PillPoints);
+                Rect pill = TabParts.Pill(band, band.x, band.y, label, drawn, palette, 9999f, null,
+                    UIFace.IBMPlexMono, PillPoints);
 
                 Highlight(pill, tint, motion, clock);
             }
