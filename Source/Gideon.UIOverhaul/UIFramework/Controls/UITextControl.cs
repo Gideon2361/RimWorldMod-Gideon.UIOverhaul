@@ -116,6 +116,65 @@ namespace Gideon.UIFramework.Controls
         }
 
         /// <summary>
+        /// How tall a wrapped block of text is at a point size, measured through the style that draws it.
+        ///
+        /// <b>Measured and drawn by the same style or the two disagree.</b> A paragraph sized against
+        /// RimWorld's font and then drawn in Barlow is either clipped at the bottom or trailed by a band of
+        /// empty space, and which of the two depends on the words.
+        /// </summary>
+        internal static float Height(string text, UIFace face, float points, float width)
+        {
+            if (string.IsNullOrEmpty(text))
+                return 0f;
+
+            GUIStyle style = StyleFor(face, points, TextAnchor.UpperLeft, true, FontStyle.Normal);
+
+            if (style != null)
+                return style.CalcHeight(new GUIContent(text), width);
+
+            GameFont previous = Text.Font;
+
+            Text.Font = UIFonts.Nearest(points);
+
+            float vanilla = Text.CalcHeight(text, width);
+
+            Text.Font = previous;
+
+            return vanilla;
+        }
+
+        /// <summary>
+        /// A paragraph, wrapped, in a bundled face.
+        ///
+        /// <b>Rich text is on, as it is on every label this draws.</b> RimWorld writes colour into the strings
+        /// it hands out -- faction names, thing names, dates -- and a paragraph drawn without it is a wall of
+        /// one grey.
+        /// </summary>
+        internal static void Paragraph(Rect rect, string text, UIFace face, float points,
+            FontStyle weight = FontStyle.Normal)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            GUIStyle style = StyleFor(face, points, TextAnchor.UpperLeft, true, weight);
+
+            if (style == null)
+            {
+                GameFont previous = Text.Font;
+
+                Text.Font = UIFonts.Nearest(points);
+
+                Widgets.Label(rect, text);
+
+                Text.Font = previous;
+
+                return;
+            }
+
+            UIGuard.Try("UIText.Paragraph", () => GUI.Label(rect, text, style));
+        }
+
+        /// <summary>
         /// The point size a <see cref="GameFont"/> means for this face: the size at which the face's own line
         /// box matches the one RimWorld draws that GameFont in.
         /// </summary>

@@ -326,7 +326,10 @@ namespace Gideon.UIOverhaul.Features.Quests
             if (text.NullOrEmpty())
                 return text;
 
-            return text.StripTags().Replace("\r", string.Empty).Trim();
+            // The colour tags stay on. RimWorld writes faction and thing names into reward text already
+            // coloured, every label this mod draws has rich text enabled, and stripping them here threw that
+            // away for no gain. Reported on 2026-08-30, with a faction name reading as plain grey.
+            return text.Replace("\r", string.Empty).Trim();
         }
 
         /// <summary>
@@ -342,7 +345,9 @@ namespace Gideon.UIOverhaul.Features.Quests
             if (text.NullOrEmpty())
                 return text;
 
-            string[] lines = text.Split('\n');
+            // Tags come off here and only here: a one-line row is ellipsed to fit, and a cut landing
+            // inside a colour tag would leave the markup showing.
+            string[] lines = text.StripTags().Split((char) 10);
             string joined = null;
 
             for (int i = 0; i < lines.Length; i++)
