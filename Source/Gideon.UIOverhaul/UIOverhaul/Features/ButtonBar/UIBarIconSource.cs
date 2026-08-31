@@ -49,6 +49,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
 
             AddFromButtonDefs(icons, seen);
             AddFromIconFolders(icons, seen);
+            AddFromContentHolders(icons, seen);
 
             icons.Sort((a, b) => string.Compare(a.Path, b.Path, StringComparison.OrdinalIgnoreCase));
             return icons;
@@ -141,6 +142,82 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
                             Source = mod.Name
                         });
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The same folder, read out of what each mod has actually loaded rather than off the disk.
+        ///
+        /// <b>This exists because the disk stopped being the whole answer.</b> This mod's own art moved into
+        /// an AssetBundle, so its icons are registered straight into the content holder and there is no file
+        /// under <c>Textures/UI/MainButtonIcons</c> to walk any more. The folder pass found nothing of ours
+        /// and the picker quietly lost every icon this mod ships, which is most of them. Reported on
+        /// 2026-08-30, with twenty six icons listed where there should have been sixty.
+        ///
+        /// <b>The holder is keyed by path,</b> which is the objection the folder pass was written against: a
+        /// Texture2D does not carry where it came from, but the dictionary holding it does, and that key is
+        /// exactly the extension-less path both ContentFinder and our config use.
+        ///
+        /// <b>Both passes stay.</b> A mod shipping loose files and a mod shipping a bundle are both ordinary,
+        /// several ship one of each, and the shared <c>seen</c> set means a texture reachable by either route
+        /// is still listed once.
+        /// </summary>
+        private static void AddFromContentHolders(List<UIBarIcon> icons, HashSet<string> seen)
+        {
+            List<ModContentPack> mods = LoadedModManager.RunningModsListForReading;
+
+            if (mods == null)
+                return;
+
+            string prefix = IconFolder + "/";
+
+            foreach (ModContentPack mod in mods)
+            {
+                if (mod == null)
+                    continue;
+
+                Dictionary<string, Texture2D> loaded;
+
+                try
+                {
+                    ModContentHolder<Texture2D> holder = mod.GetContentHolder<Texture2D>();
+
+                    loaded = holder?.contentList;
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (loaded == null)
+                    continue;
+
+                // Copied before walking, because a lookup on a missing texture can load one and add to the
+                // dictionary being enumerated. Sixty odd entries is nothing to copy and an InvalidOperation
+                // thrown out of an icon picker is a window that never opens.
+                List<string> paths = new List<string>(loaded.Keys);
+
+                foreach (string path in paths)
+                {
+                    if (path.NullOrEmpty()
+                        || !path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!seen.Add(path))
+                        continue;
+
+                    Texture2D texture;
+
+                    if (!loaded.TryGetValue(path, out texture) || texture == null)
+                        continue;
+
+                    icons.Add(new UIBarIcon
+                    {
+                        Path = path,
+                        Texture = texture,
+                        Source = mod.Name
+                    });
                 }
             }
         }

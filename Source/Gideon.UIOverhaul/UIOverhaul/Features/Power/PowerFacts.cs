@@ -33,6 +33,17 @@ namespace Gideon.UIOverhaul.Features.Power
         internal bool severe;
     }
 
+    /// <summary>One battery, and how much of it is full.</summary>
+    internal struct BatteryRow
+    {
+        internal string name;
+        internal float stored;
+        internal float capacity;
+
+        /// <summary>Whether it is switched on. A battery flicked off still holds its charge and gives none.</summary>
+        internal bool on;
+    }
+
     /// <summary>One generator, and how long its own tank lasts.</summary>
     internal struct BurnerRow
     {
@@ -392,6 +403,52 @@ namespace Gideon.UIOverhaul.Features.Power
 
         // -------------------------------------------------------------------------------------------
         // Fuel
+        /// <summary>
+        /// Every battery on the grid, emptiest first.
+        ///
+        /// <b>Emptiest first because that is the one that stops carrying.</b> A bank drains together but does
+        /// not always fill together: a battery built later, or disconnected for a while, sits lower than the
+        /// rest and is the first to leave the countdown short.
+        /// </summary>
+        internal static List<BatteryRow> Batteries(PowerNet net, List<BatteryRow> into)
+        {
+            into.Clear();
+
+            List<CompPowerBattery> cells = UIGuard.Try("Power.Batteries", () => net?.batteryComps, null, null);
+
+            for (int i = 0; cells != null && i < cells.Count; i++)
+            {
+                CompPowerBattery cell = cells[i];
+
+                if (cell?.parent == null || cell.Props == null)
+                    continue;
+
+                into.Add(new BatteryRow
+                {
+                    name = UIGuard.Try("Power.BatteryName",
+                        () => cell.parent.LabelCapNoCount.ToString(), "Battery", null),
+                    stored = UIGuard.Try("Power.BatteryStored", () => cell.StoredEnergy, 0f, null),
+                    capacity = cell.Props.storedEnergyMax,
+                    on = UIGuard.Try("Power.BatteryOn", () =>
+                    {
+                        CompFlickable flick = cell.parent.TryGetComp<CompFlickable>();
+
+                        return flick == null || flick.SwitchIsOn;
+                    }, true, null)
+                });
+            }
+
+            into.Sort((a, b) =>
+            {
+                float mine = a.capacity > 0f ? a.stored / a.capacity : 0f;
+                float theirs = b.capacity > 0f ? b.stored / b.capacity : 0f;
+
+                return mine.CompareTo(theirs);
+            });
+
+            return into;
+        }
+
         // -------------------------------------------------------------------------------------------
 
         /// <summary>
