@@ -1,4 +1,5 @@
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -28,6 +29,12 @@ namespace Gideon.UIFramework.Controls
         internal bool Uppercase;
 
         internal float Rise = 24f;
+
+        /// <summary>Typeface for the caption. Game uses RimWorld own font.</summary>
+        internal UIFace Face = UIFace.Game;
+
+        /// <summary>Point size when <see cref="Face"/> is a bundled face.</summary>
+        internal float Points;
 
         internal UIRailSectionHeaderControl()
         {
@@ -72,7 +79,16 @@ namespace Gideon.UIFramework.Controls
             }
 
             if (!Label.NullOrEmpty())
-                Widgets.LabelEllipses(inner, Uppercase ? Label.ToUpperInvariant() : Label);
+            {
+                string text = Uppercase ? Label.ToUpperInvariant() : Label;
+
+                if (Face == UIFace.Game)
+                    Widgets.LabelEllipses(inner, text);
+                else if (Points > 0f)
+                    UITextControl.LabelEllipses(inner, text, Face, Points);
+                else
+                    UITextControl.LabelEllipses(inner, text, Face, GameFont.Tiny);
+            }
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;

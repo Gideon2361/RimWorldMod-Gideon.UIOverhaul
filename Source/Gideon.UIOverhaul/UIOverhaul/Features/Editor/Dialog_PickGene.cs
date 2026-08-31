@@ -100,6 +100,8 @@ namespace Gideon.UIOverhaul.Features.Editor
         private Vector2 scroll;
 
         private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
 
         private Dialog_PickGene(string heading, List<GeneChoice> choices, string placeholder)
         {
@@ -247,24 +249,21 @@ namespace Gideon.UIOverhaul.Features.Editor
         /// picture whose parts relate to each other; this is a catalogue, and "show me the mood genes" is the
         /// whole question somebody opens it with.
         /// </summary>
+        /// <summary>
+        /// All genes, then one row per category with how many are in it.
+        ///
+        /// <b>Clicking the row you are already on clears the filter,</b> so the rail is its own way back and
+        /// "All genes" is a shortcut rather than the only route.
+        /// </summary>
         private void Rail(Rect rail, UIColorPaletteDef palette)
         {
-            float height = (categories.Count + 1) * RailRowHeight;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            Rect view = new Rect(0f, 0f, rail.width - (height > rail.height ? ScrollBar : 0f), height);
-
-            Widgets.BeginScrollView(rail, ref railScroll, view);
-
-            float y = 0f;
-
-            if (RailRow(new Rect(0f, y, view.width, RailRowHeight), "All genes", choices.Count, only == null,
-                    palette))
+            elements.Add(new UIRailClickableEntry(string.Empty, "All genes")
             {
-                only = null;
-                scroll = Vector2.zero;
-            }
-
-            y += RailRowHeight;
+                Count = choices.Count,
+                Rise = RailRowHeight
+            });
 
             for (int i = 0; i < categories.Count; i++)
             {
@@ -273,65 +272,33 @@ namespace Gideon.UIOverhaul.Features.Editor
                 int tally;
                 tallies.TryGetValue(category, out tally);
 
-                if (RailRow(new Rect(0f, y, view.width, RailRowHeight), category.LabelCap, tally,
-                        only == category, palette))
+                elements.Add(new UIRailClickableEntry(category.defName, category.LabelCap)
                 {
-                    // Clicking the row you are already on clears the filter, so the rail is its own way back and
-                    // "All genes" is a shortcut rather than the only route.
-                    only = only == category ? null : category;
-                    scroll = Vector2.zero;
+                    Count = tally,
+                    Rise = RailRowHeight
+                });
+            }
+
+            string picked = UIRailControl.Draw(rail, elements, only == null ? string.Empty : only.defName,
+                ref railScroll, ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
+                return;
+
+            GeneCategoryDef wanted = null;
+
+            for (int i = 0; i < categories.Count; i++)
+            {
+                if (categories[i].defName == picked)
+                {
+                    wanted = categories[i];
+
+                    break;
                 }
-
-                y += RailRowHeight;
             }
 
-            Widgets.EndScrollView();
-        }
-
-        private static bool RailRow(Rect row, string label, int tally, bool selected, UIColorPaletteDef palette)
-        {
-            bool over = Mouse.IsOver(row);
-
-            if (selected)
-                UIElementPainter.FillRounded(row, palette.Accent);
-            else if (over)
-                UIElementPainter.FillRounded(row, palette.SurfaceRaised);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
-
-            try
-            {
-                Text.WordWrap = false;
-
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleRight;
-                GUI.color = selected ? palette.WindowBackground : palette.TextDisabled;
-
-                string count = tally.ToString();
-                float countWidth = UIRichText.WidthOf(count) + 8f;
-
-                UIRichText.Label(new Rect(row.xMax - countWidth - 4f, row.y, countWidth, row.height), count);
-
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = selected ? palette.WindowBackground : palette.TextPrimary;
-
-                UIRichText.Label(
-                    new Rect(row.x + 6f, row.y, Mathf.Max(10f, row.width - countWidth - 12f), row.height),
-                    label ?? string.Empty);
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-
-            return Widgets.ButtonInvisible(row);
+            only = wanted == null || only == wanted ? null : wanted;
+            scroll = Vector2.zero;
         }
 
         /// <summary>
