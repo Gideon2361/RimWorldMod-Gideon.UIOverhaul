@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using RimWorld;
@@ -55,32 +56,33 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
     internal static class TradeRail
     {
         private const float EntryHeight = 26f;
-        private const float GroupHeight = 24f;
 
         /// <summary>
         /// Draws the rail and returns the key the player picked, or null if they picked nothing this frame.
         ///
-        /// The caller keeps the selection. This control holds no state at all, which is what lets one screen use
-        /// two of them -- the beacon screen's "which beacon" and "what to show" rails are the same code.
+        /// The caller keeps the selection. This holds no state at all, which is what lets one screen use two of
+        /// them -- the beacon screen's "which beacon" and "what to show" rails are the same code.
+        ///
+        /// <b>Now an adapter over <see cref="UIRailControl"/>.</b> This rail was the version that had been
+        /// through enough revisions to be worth keeping, so it became the shared control rather than being
+        /// replaced by it. What survives here is the translation from a trade entry to a rail element: the
+        /// upper cased captions, and the rule that a category with nothing in it dims instead of vanishing.
+        ///
+        /// <see cref="TradeRailEntry"/> stays because <see cref="Pills"/> and <see cref="Segments"/> lay the
+        /// same entries out in two other shapes.
         /// </summary>
         internal static string Draw(Rect rect, List<TradeRailEntry> entries, string selected,
             ref Vector2 scroll, ref bool dragging, ref float dragOffset, UIColorPaletteDef palette)
         {
-            string picked = null;
-
             if (entries == null || entries.Count == 0)
                 return null;
 
-            float height = 0f;
+            palette = palette ?? UIColorPaletteDef.Active;
 
-            for (int i = 0; i < entries.Count; i++)
-                height += entries[i].Key == null ? GroupHeight : EntryHeight;
+            if (palette == null)
+                return null;
 
-            Rect view = new Rect(0f, 0f, GrowZones.UI.GzpPalette.ContentWidth(rect), height + 2f);
-
-            Widgets.BeginScrollView(rect, ref scroll, view, false);
-
-            float y = 0f;
+            List<UIRailElement> elements = new List<UIRailElement>(entries.Count);
 
             for (int i = 0; i < entries.Count; i++)
             {
@@ -88,130 +90,30 @@ namespace Gideon.UIOverhaul.Features.Trade.Shell
 
                 if (entry.Key == null)
                 {
-                    Group(new Rect(0f, y, view.width, GroupHeight), entry.Label, palette);
-
-                    y += GroupHeight;
+                    elements.Add(new UIRailSectionHeaderControl(entry.Label)
+                    {
+                        Uppercase = true,
+                        Color = palette.TextDisabled
+                    });
 
                     continue;
                 }
 
-                if (Entry(new Rect(0f, y, view.width, EntryHeight), entry, entry.Key == selected, palette))
-                    picked = entry.Key;
+                // A category the search has emptied stays clickable and goes dim. Removing it would make the
+                // rail change shape as the box is typed into, moving whatever the player was reaching for.
+                bool empty = entry.Count == 0;
 
-                y += EntryHeight;
-            }
-
-            Widgets.EndScrollView();
-
-            GrowZones.UI.GzpPalette.FlatScrollbar(rect, view.height, ref scroll, ref dragging, ref dragOffset);
-
-            return picked;
-        }
-
-        private static void Group(Rect rect, string label, UIColorPaletteDef palette)
-        {
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.LowerLeft;
-                GUI.color = palette.TextDisabled;
-                Text.WordWrap = false;
-
-                Widgets.Label(new Rect(rect.x + 4f, rect.y, rect.width - 8f, rect.height - 3f),
-                    label != null ? label.ToUpperInvariant() : string.Empty);
-            }
-            finally
-            {
-                Text.WordWrap = true;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
-        }
-
-        private static bool Entry(Rect rect, TradeRailEntry entry, bool selected, UIColorPaletteDef palette)
-        {
-            bool empty = entry.Count == 0;
-            bool over = Mouse.IsOver(rect);
-
-            if (selected)
-            {
-                Widgets.DrawBoxSolid(rect, palette.SelectionOverlay);
-
-                // A three-pixel bar at the left edge, the same mark a selected card carries elsewhere in the mod.
-                // The wash alone is easy to lose on a light theme; the bar is not.
-                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, 3f, rect.height), palette.Accent);
-            }
-            else if (over)
-            {
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
-            }
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            try
-            {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                Text.WordWrap = false;
-
-                GUI.color = selected
-                    ? palette.TextPrimary
-                    : empty
-                        ? palette.TextDisabled
-                        : palette.TextSecondary;
-
-                float countWidth = 0f;
-
-                if (entry.Count >= 0)
+                elements.Add(new UIRailClickableEntry(entry.Key, entry.Label)
                 {
-                    Text.Font = GameFont.Tiny;
-
-                    string count = entry.Count.ToStringCached();
-
-                    countWidth = Text.CalcSize(count).x + 10f;
-
-                    Color was = GUI.color;
-
-                    GUI.color = entry.CountColor ?? (empty ? palette.TextDisabled : palette.TextSecondary);
-
-                    Text.Anchor = TextAnchor.MiddleRight;
-
-                    Widgets.Label(new Rect(rect.xMax - countWidth, rect.y, countWidth - 4f, rect.height), count);
-
-                    GUI.color = was;
-
-                    Text.Font = GameFont.Small;
-                    Text.Anchor = TextAnchor.MiddleLeft;
-                }
-
-                Widgets.LabelEllipses(
-                    new Rect(rect.x + 9f, rect.y, Mathf.Max(20f, rect.width - 13f - countWidth), rect.height),
-                    entry.Label ?? string.Empty);
-            }
-            finally
-            {
-                Text.WordWrap = true;
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
+                    Count = entry.Count,
+                    CountColor = entry.CountColor,
+                    TextColor = empty ? palette.TextDisabled : (Color?) null,
+                    Rise = EntryHeight
+                });
             }
 
-            if (!Widgets.ButtonInvisible(rect))
-                return false;
-
-            if (selected)
-                return false;
-
-            SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
-
-            return true;
+            return UIRailControl.Draw(rect, elements, selected, ref scroll, ref dragging, ref dragOffset,
+                palette, false);
         }
 
         /// <summary>

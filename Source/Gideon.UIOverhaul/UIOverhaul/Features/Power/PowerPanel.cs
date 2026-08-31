@@ -242,63 +242,77 @@ namespace Gideon.UIOverhaul.Features.Power
         // Rail
         // -------------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// One row per grid: a status dot, the grid's name, and its balance.
+        ///
+        /// <b>The dot is a glyph rather than a swatch</b> because it is a small centered mark, not a stripe
+        /// down the leading edge. Colour carries the same three states as the figure beside it -- no source,
+        /// running at a deficit, or healthy -- so the row reads at a glance and again on inspection.
+        /// </summary>
+        private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railDragOffset;
+
         private static void Rail(Rect rect, List<GridRow> grids, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
-            Rect view = rect.ContractedBy(6f);
-            float y = view.y + 2f;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            // The leading space is deliberate: the heading is drawn from the panel's own x, so without it the
-            // first letter sits on the border.
-            y = TabParts.Heading(view, y, PowerFaces.Caps(" Grids"), palette, false, PowerFaces.Mono,
-                PowerFaces.Size.RailHead);
+            elements.Add(new UIRailSectionHeaderControl(PowerFaces.Caps("Grids"))
+            {
+                Face = PowerFaces.Mono,
+                Points = PowerFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            });
 
             for (int i = 0; i < grids.Count; i++)
-                y = Entry(view, y, grids[i], palette);
-        }
-
-        private static float Entry(Rect view, float y, GridRow grid, UIColorPaletteDef palette)
-        {
-            const float height = 30f;
-
-            Rect row = new Rect(view.x, y, view.width, height);
-            bool on = grid.net == PowerFacts.Selected;
-
-            if (on)
-                UIElementPainter.FillRounded(row, palette.SelectionOverlay);
-            else if (Mouse.IsOver(row))
-                UIElementPainter.FillRounded(row, palette.HoverOverlay);
-
-            Color dot = !grid.hasSource
-                ? palette.Danger
-                : grid.balance < 0f
-                    ? palette.Warning
-                    : palette.Success;
-
-            Widgets.DrawBoxSolid(new Rect(row.x + 7f, row.y + (height - 7f) * 0.5f, 7f, 7f), dot);
-
-            string figure = grid.hasSource ? PowerFacts.Power(grid.balance) : "dark";
-
-            float width = UITextControl.Width(figure, PowerFaces.Mono, PowerFaces.Size.RailCount) + 8f;
-
-            TabParts.RowLabel(new Rect(row.xMax - width - 4f, row.y, width, height), figure,
-                !grid.hasSource ? palette.Danger : grid.balance < 0f ? palette.Warning : palette.Success,
-                GameFont.Tiny, PowerFaces.Mono, PowerFaces.Size.RailCount);
-
-            TabParts.RowLabel(new Rect(row.x + 20f, row.y, row.width - width - 30f, height), grid.name,
-                on ? palette.Accent : palette.TextPrimary, GameFont.Small, PowerFaces.Condensed,
-                PowerFaces.Size.RailName);
-
-            if (Widgets.ButtonInvisible(row))
             {
-                SoundDefOf.Tick_Tiny.PlayOneShotOnCamera();
+                GridRow grid = grids[i];
+                bool on = grid.net == PowerFacts.Selected;
 
-                PowerFacts.Selected = grid.net;
-                scroll = Vector2.zero;
+                Color state = !grid.hasSource
+                    ? palette.Danger
+                    : grid.balance < 0f
+                        ? palette.Warning
+                        : palette.Success;
+
+                elements.Add(new UIRailClickableEntry(i.ToString(), grid.name)
+                {
+                    Rise = 30f,
+                    Face = PowerFaces.Condensed,
+                    Points = PowerFaces.Size.RailName,
+                    TextColor = on ? palette.Accent : (Color?) null,
+                    Trailing = grid.hasSource ? PowerFacts.Power(grid.balance) : "dark",
+                    CountFace = PowerFaces.Mono,
+                    CountPoints = PowerFaces.Size.RailCount,
+                    CountColor = state,
+                    IconSize = 7f,
+                    Glyph = (slot, color) => Widgets.DrawBoxSolid(slot, state)
+                });
             }
 
-            return y + height + 2f;
+            string picked = UIRailControl.Draw(rect.ContractedBy(6f), elements,
+                IndexOfSelected(grids), ref railScroll, ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
+                return;
+
+            int index;
+
+            if (int.TryParse(picked, out index) && index >= 0 && index < grids.Count)
+                PowerFacts.Selected = grids[index].net;
+        }
+
+        private static string IndexOfSelected(List<GridRow> grids)
+        {
+            for (int i = 0; i < grids.Count; i++)
+            {
+                if (grids[i].net == PowerFacts.Selected)
+                    return i.ToString();
+            }
+
+            return null;
         }
 
         // -------------------------------------------------------------------------------------------
@@ -355,7 +369,7 @@ namespace Gideon.UIOverhaul.Features.Power
         }
 
         /// <summary>The point size the grid's state pill sets at.</summary>
-        private const float PillPoints = 9f;
+        private const float PillPoints = 6.75f;
 
         /// <summary>
         /// What the batteries hold, as a bar, with the grid's state moving beside it.

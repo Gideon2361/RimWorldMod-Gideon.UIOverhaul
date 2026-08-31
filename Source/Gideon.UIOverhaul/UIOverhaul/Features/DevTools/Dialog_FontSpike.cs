@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using LudeonTK;
 using UnityEngine;
@@ -8,16 +10,16 @@ using Verse;
 namespace Gideon.UIOverhaul.Features.DevTools
 {
     /// <summary>
-    /// Every bundled typeface beside RimWorld's own text, at every interface size.
+    /// One bundled typeface at a time, chosen from a rail that previews each face in itself.
     ///
-    /// <b>This window is the survivor of the one that settled the font architecture.</b> Its ancestor drew the
-    /// same sample through four renderers at once -- baked glyph loop, runtime-assembled font, OS-registered
-    /// TTF and the AssetBundle -- and the bundle won: real Barlow at 181 pixels where the OS route drew
-    /// substituted Arial at 243, with working bold and italic tags. The losing paths are deleted; what remains
-    /// checks the winner and any face added later.
+    /// <b>This replaced a grid that drew every face at once.</b> That worked at four typefaces and had become
+    /// unreadable at ten, with each new family stealing rows from the one before it. Picking a face and giving
+    /// it the whole pane scales to as many as the bundle ever carries, and the rail stays useful because every
+    /// entry is drawn in the face it names -- browsing the list is itself the comparison.
     ///
-    /// The sample carries bold and italic tags on purpose, and the weight column draws the named weights,
-    /// which come from their own files where the bundle has them rather than from synthesis.
+    /// <b>The rail is the preview; the pane is the test.</b> The rail answers "which face do I want", so it
+    /// only needs each name in its own letters. The pane answers "does this face actually work", which takes
+    /// RimWorld's text beside it, all four styles, and every interface size at once.
     /// </summary>
     public class Dialog_FontSpike : Window
     {
@@ -27,7 +29,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
         {
             List<UIFace> faces = new List<UIFace>();
 
-            foreach (UIFace face in (UIFace[]) System.Enum.GetValues(typeof(UIFace)))
+            foreach (UIFace face in (UIFace[]) Enum.GetValues(typeof(UIFace)))
             {
                 if (face != UIFace.Game)
                     faces.Add(face);
@@ -36,19 +38,27 @@ namespace Gideon.UIOverhaul.Features.DevTools
             return faces.ToArray();
         }
 
+        /// <summary>Ascenders, descenders, a cap, digits, a comma and both tags.</summary>
+        private const string Sample = "Bulk goods trader, 1,240 silver <b>bold</b> <i>italic</i>";
+
         /// <summary>
         /// Loads reaching well past anything a real screen draws, because vsync hides any reading that fits
         /// inside a frame.
         /// </summary>
         private static readonly int[] Loads = { 0, 500, 2000, 5000 };
 
-        /// <summary>Ascenders, descenders, a cap, digits, a comma and both tags.</summary>
-        private const string Sample = "Bulk goods trader, 1,240 silver <b>bold</b> <i>italic</i>";
+        private static readonly GameFont[] Sizes = { GameFont.Tiny, GameFont.Small, GameFont.Medium };
 
+        private const float RailWidth = 210f;
+
+        private UIFace selected = Faces.Length > 0 ? Faces[0] : UIFace.Game;
         private GameFont size = GameFont.Small;
         private int load;
-        private bool stressBundle = true;
+        private bool stressFace = true;
 
+        private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
         private float smoothed;
 
         public Dialog_FontSpike()
@@ -62,7 +72,7 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
         public override Vector2 InitialSize
         {
-            get { return new Vector2(1080f, 760f); }
+            get { return new Vector2(1080f, 720f); }
         }
 
         public override void DoWindowContents(Rect inRect)
@@ -70,116 +80,207 @@ namespace Gideon.UIOverhaul.Features.DevTools
             if (Event.current.type == EventType.Repaint)
                 smoothed = Mathf.Lerp(smoothed, Time.unscaledDeltaTime * 1000f, 0.05f);
 
-            float y = inRect.y;
+            UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
-            y = Controls(inRect, y);
-            y = Comparison(inRect, y);
+            float y = Controls(inRect, palette);
 
-            Stress(new Rect(inRect.x, y, inRect.width, inRect.yMax - y));
+            // The stress field is measured from the bottom so the rail and the detail pane share whatever is
+            // left, rather than the field moving when a face changes the pane's height.
+            float stressHeight = load == 0 ? 28f : Mathf.Max(120f, (inRect.height - y) * 0.42f);
+            float bodyHeight = inRect.yMax - y - stressHeight - 8f;
+
+            Rect rail = new Rect(inRect.x, y, RailWidth, bodyHeight);
+            Rect detail = new Rect(rail.xMax + 10f, y, inRect.width - RailWidth - 10f, bodyHeight);
+
+            Rail(rail, palette);
+            Detail(detail, palette);
+            Stress(new Rect(inRect.x, detail.yMax + 8f, inRect.width, stressHeight));
+
+            Text.Anchor = TextAnchor.UpperLeft;
+            Text.Font = GameFont.Small;
+            GUI.color = Color.white;
         }
 
-        private float Controls(Rect inRect, float y)
+        private float Controls(Rect inRect, UIColorPaletteDef palette)
         {
             Text.Font = GameFont.Small;
 
-            Rect row = new Rect(inRect.x, y, inRect.width, 30f);
+            Rect row = new Rect(inRect.x, inRect.y, inRect.width, 30f);
             float x = row.x;
 
-            x = Toggle(row, x, "Tiny", size == GameFont.Tiny, () => size = GameFont.Tiny);
-            x = Toggle(row, x, "Small", size == GameFont.Small, () => size = GameFont.Small);
-            x = Toggle(row, x, "Medium", size == GameFont.Medium, () => size = GameFont.Medium);
+            for (int i = 0; i < Sizes.Length; i++)
+            {
+                GameFont candidate = Sizes[i];
 
-            x += 20f;
+                x = Toggle(row, x, candidate.ToString(), size == candidate, palette,
+                    () => size = candidate);
+            }
+
+            x += 18f;
 
             for (int i = 0; i < Loads.Length; i++)
             {
                 int count = Loads[i];
 
-                x = Toggle(row, x, count + " labels", load == count, () => load = count);
+                x = Toggle(row, x, count == 0 ? "no load" : count + " labels", load == count, palette,
+                    () => load = count);
             }
 
-            x += 20f;
+            x += 18f;
 
-            x = Toggle(row, x, "vanilla", !stressBundle, () => stressBundle = false);
+            x = Toggle(row, x, "stress: RimWorld", !stressFace, palette, () => stressFace = false);
 
-            Toggle(row, x, "bundle", stressBundle, () => stressBundle = true);
+            Toggle(row, x, "stress: face", stressFace, palette, () => stressFace = true);
 
-            return y + 36f;
+            return row.yMax + 8f;
         }
 
-        private static float Toggle(Rect row, float x, string label, bool on, System.Action pick)
+        private static float Toggle(Rect row, float x, string label, bool on, UIColorPaletteDef palette,
+            Action pick)
         {
-            float width = Text.CalcSize(label).x + 20f;
+            float width = Text.CalcSize(label).x + 22f;
             Rect button = new Rect(x, row.y, width, row.height);
 
-            if (Widgets.ButtonText(button, label))
+            if (UIActionButtonControl.Draw(button, label, palette, toggled: on))
                 pick();
-
-            if (on)
-                Widgets.DrawBox(button, 2);
 
             return x + width + 6f;
         }
 
         /// <summary>
-        /// Per face: RimWorld's text, the face itself, and the face at its named bold -- which is a real file
-        /// for Barlow and IBM Plex and synthesis for the rest.
+        /// Every face, each drawn in itself, so browsing the list is the comparison.
+        ///
+        /// A face the bundle does not carry is dimmed and unclickable rather than dropped, and drawn in
+        /// RimWorld's font, because a row that silently fell back would look like a face that merely resembles
+        /// the game's.
         /// </summary>
-        private float Comparison(Rect inRect, float y)
+        private void Rail(Rect rect, UIColorPaletteDef palette)
         {
-            float lineHeight = UIFonts.LineHeightOf(size);
-            float cellWidth = Mathf.Min(330f, (inRect.width - 160f) / 3f);
-            float cellHeight = lineHeight + 8f;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            Text.Font = GameFont.Tiny;
-            GUI.color = new Color(1f, 1f, 1f, 0.6f);
-
-            Widgets.Label(new Rect(inRect.x, y, inRect.width, 20f),
-                "RimWorld / bundled face / bundled face asked for bold");
-
-            GUI.color = Color.white;
-            Text.Font = GameFont.Small;
-
-            y += 22f;
+            elements.Add(new UIRailSectionHeaderControl("bundled typefaces"));
 
             for (int i = 0; i < Faces.Length; i++)
             {
                 UIFace face = Faces[i];
+                bool available = UIFaces.Available(face);
 
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = Color.white;
-
-                for (int column = 0; column < 3; column++)
+                elements.Add(new UIRailClickableEntry(face.ToString(), UIFaces.Named(face))
                 {
-                    Rect cell = new Rect(inRect.x + column * (cellWidth + 8f), y, cellWidth, cellHeight);
-
-                    Widgets.DrawBoxSolid(cell, new Color(1f, 1f, 1f, 0.04f));
-                    Widgets.DrawBox(cell);
-
-                    Rect text = cell.ContractedBy(4f);
-
-                    if (column == 0)
-                        Vanilla(text);
-                    else
-                        UITextControl.LabelEllipses(text, Sample, face, size,
-                            column == 2 ? FontStyle.Bold : FontStyle.Normal);
-                }
-
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = new Color(1f, 1f, 1f, 0.6f);
-
-                Widgets.Label(new Rect(inRect.x + 3f * (cellWidth + 8f) + 4f, y, 150f, cellHeight),
-                    UIFaces.Named(face) + (UIFaces.Available(face) ? "" : "  (missing)"));
-
-                GUI.color = Color.white;
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.UpperLeft;
-
-                y += cellHeight + 4f;
+                    Face = available ? face : UIFace.Game,
+                    Font = GameFont.Medium,
+                    Rise = UIFonts.LineHeightOf(GameFont.Medium) + 10f,
+                    Disabled = !available,
+                    Tooltip = available ? null : "The bundle carries no file for this face.",
+                    Label = available ? UIFaces.Named(face) : UIFaces.Named(face) + "  (missing)"
+                });
             }
 
-            return y + 8f;
+            string picked = UIRailControl.Draw(rect, elements, selected.ToString(), ref railScroll,
+                ref railDragging, ref railDragOffset, palette);
+
+            if (picked != null)
+                selected = UIFaces.Parse(picked);
+        }
+
+        /// <summary>
+        /// The chosen face put through everything worth checking: RimWorld's text for reference, the four
+        /// styles, and all three interface sizes.
+        ///
+        /// <b>Bold and italic are two questions, not one.</b> The tags inside the sample ask whether rich text
+        /// still works; the style rows ask whether the face has a real file for that weight or is being
+        /// synthesized. A family with drawn italics and one with slanted uprights look quite different here,
+        /// which is the point.
+        /// </summary>
+        private void Detail(Rect rect, UIColorPaletteDef palette)
+        {
+            Widgets.DrawBoxSolid(rect, palette.SurfaceRaised);
+            Widgets.DrawBox(rect);
+
+            Rect inner = rect.ContractedBy(8f);
+            float y = inner.y;
+
+            Text.Font = GameFont.Small;
+            Text.Anchor = TextAnchor.UpperLeft;
+            GUI.color = palette.TextPrimary;
+
+            Widgets.Label(new Rect(inner.x, y, inner.width, 26f), UIFaces.Named(selected));
+
+            y += 28f;
+
+            if (!UIFaces.Available(selected))
+            {
+                GUI.color = palette.TextSecondary;
+
+                Widgets.Label(new Rect(inner.x, y, inner.width, 44f),
+                    "The bundle carries no file for this face, so nothing below would be it. Check the bake.");
+
+                GUI.color = Color.white;
+
+                return;
+            }
+
+            y = Row(inner, y, "RimWorld", palette, Vanilla);
+            y = Row(inner, y, "regular", palette, r => Faced(r, FontStyle.Normal));
+            y = Row(inner, y, "bold", palette, r => Faced(r, FontStyle.Bold));
+            y = Row(inner, y, "italic", palette, r => Faced(r, FontStyle.Italic));
+            y = Row(inner, y, "bold italic", palette, r => Faced(r, FontStyle.BoldAndItalic));
+
+            y += 6f;
+
+            Text.Font = GameFont.Tiny;
+            GUI.color = palette.TextSecondary;
+
+            Widgets.Label(new Rect(inner.x, y, inner.width, 18f), "every interface size");
+
+            GUI.color = Color.white;
+
+            y += 20f;
+
+            for (int i = 0; i < Sizes.Length; i++)
+            {
+                float height = UIFonts.LineHeightOf(Sizes[i]) + 6f;
+                Rect line = new Rect(inner.x, y, inner.width, height);
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+
+                UITextControl.LabelEllipses(line, Sizes[i] + " -- " + Sample, selected, Sizes[i]);
+
+                Text.Anchor = TextAnchor.UpperLeft;
+
+                y += height + 2f;
+            }
+        }
+
+
+        /// <summary>One labeled line: a caption in RimWorld's font, then whatever the caller draws beside it.</summary>
+        private float Row(Rect inner, float y, string caption, UIColorPaletteDef palette, Action<Rect> draw)
+        {
+            float height = UIFonts.LineHeightOf(size) + 8f;
+
+
+            Text.Font = GameFont.Tiny;
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = palette.TextSecondary;
+
+            Widgets.Label(new Rect(inner.x, y, 92f, height), caption);
+
+            GUI.color = palette.TextPrimary;
+
+            draw(new Rect(inner.x + 96f, y, inner.width - 96f, height));
+
+            GUI.color = Color.white;
+            Text.Anchor = TextAnchor.UpperLeft;
+            Text.Font = GameFont.Small;
+
+            return y + height + 2f;
+        }
+
+        private void Faced(Rect rect, FontStyle weight)
+        {
+            Text.Anchor = TextAnchor.MiddleLeft;
+
+            UITextControl.LabelEllipses(rect, Sample, selected, size, weight);
         }
 
         private void Vanilla(Rect rect)
@@ -187,11 +288,11 @@ namespace Gideon.UIOverhaul.Features.DevTools
             GameFont previous = Text.Font;
 
             Text.Font = size;
+            Text.Anchor = TextAnchor.MiddleLeft;
 
             Widgets.LabelEllipses(rect, Sample);
 
             Text.Font = previous;
-            Text.Anchor = TextAnchor.MiddleLeft;
         }
 
         /// <summary>
@@ -206,12 +307,12 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
             Widgets.Label(new Rect(rect.x, rect.y, rect.width, 24f),
                 string.Format("{0:0.00} ms/frame   {1} labels   {2}", smoothed, load,
-                    stressBundle ? "bundle" : "RimWorld"));
-
-            Rect field = new Rect(rect.x, rect.y + 28f, rect.width, Mathf.Max(0f, rect.height - 28f));
+                    stressFace ? UIFaces.Named(selected) : "RimWorld"));
 
             if (load == 0)
                 return;
+
+            Rect field = new Rect(rect.x, rect.y + 26f, rect.width, Mathf.Max(0f, rect.height - 26f));
 
             float lineHeight = UIFonts.LineHeightOf(GameFont.Tiny);
             float columnWidth = 190f;
@@ -231,9 +332,9 @@ namespace Gideon.UIOverhaul.Features.DevTools
 
                     string text = "Muffalo wool " + i;
 
-                    if (stressBundle)
+                    if (stressFace)
                     {
-                        UITextControl.Label(cell, text, UIFace.BarlowCondensed, GameFont.Tiny);
+                        UITextControl.Label(cell, text, selected, GameFont.Tiny);
                     }
                     else
                     {

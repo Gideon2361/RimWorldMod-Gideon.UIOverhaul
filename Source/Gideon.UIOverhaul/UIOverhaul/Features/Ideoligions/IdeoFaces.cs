@@ -62,21 +62,21 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
         internal static class Size
         {
             /// <summary>The faith's name in the header.</summary>
-            internal const float Title = 21f;
+            internal const float Title = 15.75f;
 
             /// <summary>The line under it: memes, or the classic-mode note.</summary>
-            internal const float Subtitle = 14f;
+            internal const float Subtitle = 10.5f;
 
             /// <summary>A header readout's figure, and the caption under it.</summary>
-            internal const float Readout = 17f;
+            internal const float Readout = 12.75f;
 
-            internal const float Caption = 10f;
+            internal const float Caption = 7.5f;
 
             /// <summary>A block's own heading, and the suffix on the right of it.</summary>
-            internal const float BlockHead = 10.5f;
+            internal const float BlockHead = 7.875f;
 
             /// <summary>A name in a column: a believer, a role, a ritual.</summary>
-            internal const float Name = 15f;
+            internal const float Name = 11.25f;
 
             /// <summary>
             /// A faith in the rail, and the believer count beside it. Two points over the block rows.
@@ -85,33 +85,33 @@ namespace Gideon.UIOverhaul.Features.Ideoligions
             /// block behind it is showing, and at the same size as a role name it read as a fifth list rather
             /// than as the thing choosing between them.
             /// </summary>
-            internal const float RailName = 17f;
+            internal const float RailName = 12.75f;
 
-            internal const float RailCount = 13f;
+            internal const float RailCount = 9.75f;
 
             /// <summary>
             /// The two headings that split the rail. Larger than a block header, unlike everything else in the
             /// mono small caps, because these two head the whole panel rather than one box inside it.
             /// </summary>
-            internal const float RailHead = 12.5f;
+            internal const float RailHead = 9.375f;
 
             /// <summary>A sentence: a demand, a stance, a holder's name.</summary>
-            internal const float Body = 14f;
+            internal const float Body = 10.5f;
 
             /// <summary>A figure that lines up down the screen.</summary>
-            internal const float Figure = 12f;
+            internal const float Figure = 9f;
 
             /// <summary>The quieter second figure on a row: a drift rate, a requirement, a count.</summary>
-            internal const float Small = 11f;
+            internal const float Small = 8.25f;
 
             /// <summary>Ritual timing, which is the longest of the small figures and gets a half point.</summary>
-            internal const float When = 11.5f;
+            internal const float When = 8.625f;
 
             /// <summary>The issue column on the doctrine list, set in small caps.</summary>
-            internal const float Issue = 10.5f;
+            internal const float Issue = 7.875f;
 
             /// <summary>A chip.</summary>
-            internal const float Chip = 10f;
+            internal const float Chip = 7.5f;
         }
         /// <summary>
         /// Upper case, for the labels the mockup sets as small caps: block suffixes, chips, and the issue

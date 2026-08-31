@@ -19,23 +19,23 @@ namespace Gideon.UIOverhaul.Features.Power
 
         internal static class Size
         {
-            internal const float Title = 21f;
-            internal const float Subtitle = 14f;
-            internal const float Readout = 17f;
-            internal const float Caption = 10f;
-            internal const float BlockHead = 10.5f;
-            internal const float RailHead = 12.5f;
-            internal const float RailName = 17f;
-            internal const float RailCount = 12f;
-            internal const float Name = 15f;
-            internal const float Body = 14f;
-            internal const float Label = 10.5f;
+            internal const float Title = 15.75f;
+            internal const float Subtitle = 10.5f;
+            internal const float Readout = 12.75f;
+            internal const float Caption = 7.5f;
+            internal const float BlockHead = 7.875f;
+            internal const float RailHead = 9.375f;
+            internal const float RailName = 12.75f;
+            internal const float RailCount = 9f;
+            internal const float Name = 11.25f;
+            internal const float Body = 10.5f;
+            internal const float Label = 7.875f;
 
             /// <summary>The balance figures, which are the largest thing on the screen after the title.</summary>
-            internal const float Figure = 20f;
+            internal const float Figure = 15f;
 
-            internal const float Small = 11f;
-            internal const float Chip = 10f;
+            internal const float Small = 8.25f;
+            internal const float Chip = 7.5f;
         }
 
         internal static string Caps(string text)

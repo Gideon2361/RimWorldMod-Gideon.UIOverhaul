@@ -189,21 +189,21 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
-        /// The <c>GUIStyle.fontSize</c> that makes this font occupy one RimWorld line at this interface size.
+        /// The point size that makes this font occupy one RimWorld line at this interface size.
         ///
         /// <b>Read from the font's own metrics rather than tabulated.</b> The imported font knows its line
         /// height at its import size, so the ratio between them scales any wanted line height to a point size
         /// -- which is how Oswald's tall line box and Barlow's short one both come out occupying the same row.
         /// The lesson of a session of hardcoded ratios: the face is the authority on its own geometry.
         /// </summary>
-        internal static int PointSizeFor(Font font, GameFont size)
+        internal static float PointSizeFor(Font font, GameFont size)
         {
             float wanted = UIFonts.LineHeightOf(size);
 
             if (font == null || font.lineHeight <= 0 || font.fontSize <= 0)
-                return Mathf.Max(1, Mathf.RoundToInt(wanted * 0.8f));
+                return UIFonts.ToPoints(Mathf.Max(1f, wanted * 0.8f));
 
-            return Mathf.Max(1, Mathf.RoundToInt(wanted * font.fontSize / font.lineHeight));
+            return UIFonts.ToPoints(Mathf.Max(1f, wanted * font.fontSize / font.lineHeight));
         }
 
         /// <summary>Whether text asked for in this face will really be drawn in it.</summary>

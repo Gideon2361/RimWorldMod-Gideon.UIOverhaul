@@ -50,6 +50,9 @@ namespace Gideon.UIOverhaul.Features.Saves
         private string filter;
 
         private Vector2 listScroll;
+        private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
         private List<FileInfo> saves = new List<FileInfo>();
         private FileInfo selected;
 
@@ -245,28 +248,49 @@ namespace Gideon.UIOverhaul.Features.Saves
         }
 
         /// <summary>The folders, as a filter rail.</summary>
+        /// <summary>
+        /// All saves, then one row per folder with how many are in it.
+        ///
+        /// Three states rather than two: no filter at all, the root folder, or a named folder. They are
+        /// distinguished by key prefix, since the rail hands back a string and null and empty are both real
+        /// answers here.
+        /// </summary>
         private void DrawRail(Rect rect, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
-            Rect inner = rect.ContractedBy(6f);
-            float y = inner.y;
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            y = RailItem(new Rect(inner.x, y, inner.width, 24f), "All saves", saves.Count, filter == null,
-                palette, () => filter = null);
+            elements.Add(new UIRailClickableEntry("all", "All saves") { Count = saves.Count, Rise = 24f });
+            elements.Add(new UIRailSectionHeaderControl("Folders")
+            {
+                Uppercase = true,
+                Color = palette.TextDisabled
+            });
 
-            y = RailHeading(new Rect(inner.x, y + 6f, inner.width, 16f), "FOLDERS", palette);
-
-            y = RailItem(new Rect(inner.x, y, inner.width, 24f), SaveFolders.RootLabel, CountIn(string.Empty),
-                filter == string.Empty, palette, () => filter = string.Empty);
+            elements.Add(new UIRailClickableEntry("root", SaveFolders.RootLabel)
+            {
+                Count = CountIn(string.Empty),
+                Rise = 24f
+            });
 
             foreach (string name in SaveFolders.Names())
-            {
-                string captured = name;
+                elements.Add(new UIRailClickableEntry("f:" + name, name) { Count = CountIn(name), Rise = 24f });
 
-                y = RailItem(new Rect(inner.x, y, inner.width, 24f), name, CountIn(name), filter == name,
-                    palette, () => filter = captured);
-            }
+            string current = filter == null ? "all" : filter.Length == 0 ? "root" : "f:" + filter;
+
+            string picked = UIRailControl.Draw(rect.ContractedBy(6f), elements, current, ref railScroll,
+                ref railDragging, ref railDragOffset, palette, false);
+
+            if (picked == null)
+                return;
+
+            if (picked == "all")
+                filter = null;
+            else if (picked == "root")
+                filter = string.Empty;
+            else
+                filter = picked.Substring(2);
         }
 
         private int CountIn(string folder)
@@ -284,61 +308,6 @@ namespace Gideon.UIOverhaul.Features.Saves
             return count;
         }
 
-        private static float RailHeading(Rect rect, string text, UIColorPaletteDef palette)
-        {
-            GameFont previousFont = Text.Font;
-            Color previousColor = GUI.color;
-
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextDisabled;
-
-            Widgets.Label(rect, text);
-
-            GUI.color = previousColor;
-            Text.Font = previousFont;
-
-            return rect.yMax + 2f;
-        }
-
-        private static float RailItem(Rect rect, string label, int count, bool on, UIColorPaletteDef palette,
-            Action chosen)
-        {
-            if (on)
-                UIElementPainter.FillRounded(rect, palette.AccentMuted);
-            else if (Mouse.IsOver(rect))
-                Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
-
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
-
-            Text.Anchor = TextAnchor.MiddleLeft;
-            Text.Font = GameFont.Small;
-            GUI.color = on ? palette.TextPrimary : palette.TextSecondary;
-
-            Rect text = new Rect(rect.x + 8f, rect.y, Mathf.Max(0f, rect.width - 46f), rect.height);
-
-            if (text.width >= 24f)
-                Widgets.LabelEllipses(text, label);
-
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleRight;
-            GUI.color = on ? palette.Accent : palette.TextDisabled;
-
-            Widgets.Label(new Rect(rect.x, rect.y, rect.width - 8f, rect.height), count.ToString());
-
-            GUI.color = previousColor;
-            Text.Anchor = previousAnchor;
-            Text.Font = previousFont;
-
-            if (Widgets.ButtonInvisible(rect))
-            {
-                chosen();
-                SoundDefOf.Click.PlayOneShotOnCamera();
-            }
-
-            return rect.yMax + 2f;
-        }
 
         /// <summary>The saves matching the rail and the search.</summary>
         private void DrawList(Rect rect, UIColorPaletteDef palette)

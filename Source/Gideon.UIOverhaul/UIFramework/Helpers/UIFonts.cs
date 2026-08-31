@@ -58,7 +58,30 @@ namespace Gideon.UIFramework.Helpers
         }
 
         /// <summary>
-        /// The point size the game really draws <paramref name="font"/> at.
+        /// Pixels to a point, fixed at the same ratio HTML uses: CSS defines 1pt as 4/3 of a px, which is 72
+        /// points to 96 pixels per inch.
+        ///
+        /// <b>A convention, not a measurement.</b> A real point is a physical 1/72 inch, and nothing in this
+        /// pipeline knows inches -- the game has a user interface scale on top of whatever DPI the monitor
+        /// happens to report. Fixing the ratio is what every browser and word processor does, and it buys the
+        /// thing that matters: "14pt" here means what "14pt" means in a word processor.
+        /// </summary>
+        internal const float PixelsPerPoint = 4f / 3f;
+
+        /// <summary>Points to the pixel em size Unity actually rasterizes at.</summary>
+        internal static float ToPixels(float points)
+        {
+            return points * PixelsPerPoint;
+        }
+
+        /// <summary>Unity's pixel em size back to points.</summary>
+        internal static float ToPoints(float pixels)
+        {
+            return pixels / PixelsPerPoint;
+        }
+
+        /// <summary>
+        /// The point size the game really draws <paramref name="font"/> at, on the HTML scale above.
         ///
         /// Read off the style rather than tabulated, because the three fonts are assets -- Calibri_tiny,
         /// Arial_small and Arial_medium -- and their imported sizes are the game's to change. A GUIStyle whose
@@ -75,18 +98,18 @@ namespace Gideon.UIFramework.Helpers
             if (style != null)
             {
                 if (style.fontSize > 0)
-                    return style.fontSize;
+                    return ToPoints(style.fontSize);
 
                 if (style.font != null && style.font.fontSize > 0)
-                    return style.font.fontSize;
+                    return ToPoints(style.font.fontSize);
             }
 
             // Only reached before Text has run its static constructor, which is not a frame anything draws in.
             switch (effective)
             {
-                case GameFont.Tiny: return 10f;
-                case GameFont.Medium: return 18f;
-                default: return 12f;
+                case GameFont.Tiny: return ToPoints(10f);
+                case GameFont.Medium: return ToPoints(18f);
+                default: return ToPoints(12f);
             }
         }
 
