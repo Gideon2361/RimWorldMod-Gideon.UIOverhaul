@@ -349,26 +349,88 @@ namespace Gideon.UIOverhaul.Features.Power
             Widgets.DrawBoxSolid(new Rect(track.x + 1f + (track.width - 2f) * (grid.producing / total),
                 track.y + 1f, (track.width - 2f) * (grid.drawing / total), track.height - 2f), palette.Danger);
 
-            string storage = grid.capacity > 0f
-                ? Mathf.RoundToInt(grid.stored).ToString("N0") + " of "
-                  + Mathf.RoundToInt(grid.capacity).ToString("N0") + " Wd stored"
-                : "No batteries on this grid";
-
-            string verdict = !grid.hasSource
-                ? "Nothing on this grid can generate. It is a gap, not a shortage."
-                : grid.hoursLeft >= 0f
-                    ? "The batteries cover this for " + PowerFacts.Hours(grid.hoursLeft) + "."
-                    : grid.capacity > 0f
-                        ? "Filling. " + storage + "."
-                        : storage + ".";
-
-            TabParts.RowLabel(new Rect(inner.x, track.yMax + 4f, inner.width, 20f), verdict,
-                !grid.hasSource || (grid.hoursLeft >= 0f && grid.hoursLeft < 12f)
-                    ? palette.Danger
-                    : palette.TextSecondary,
-                GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
+            Charge(new Rect(inner.x, track.yMax + 6f, inner.width, 22f), grid, palette);
 
             return box.yMax + RowGap;
+        }
+
+        /// <summary>The point size the grid's state pill sets at.</summary>
+        private const float PillPoints = 9f;
+
+        /// <summary>
+        /// What the batteries hold, as a bar, with the grid's state moving beside it.
+        ///
+        /// <b>It was a sentence and a sentence is the wrong shape for it.</b> "Filling. 2,214 of 3,600 Wd
+        /// stored." makes the reader do the division to find out how full that is, which is the only thing
+        /// anybody wants from the line. A bar answers it without arithmetic and leaves the figures beside it
+        /// for whoever wants the exact number.
+        ///
+        /// <b>The pill is the same control the inspect pane draws on a single battery.</b> One grid is one
+        /// bank of them, and the state of that bank is the same four words moving the same four ways.
+        ///
+        /// <b>A grid with no batteries gets neither.</b> An empty bar reading nought of nought is a reading;
+        /// saying there is nothing to read is information.
+        /// </summary>
+        private static void Charge(Rect rect, GridRow grid, UIColorPaletteDef palette)
+        {
+            if (!grid.hasSource)
+            {
+                TabParts.RowLabel(rect, "Nothing on this grid can generate. It is a gap, not a shortage.",
+                    palette.Danger, GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
+
+                return;
+            }
+
+            if (grid.capacity <= 0f)
+            {
+                TabParts.RowLabel(rect, "No batteries on this grid. It runs on what it makes.",
+                    palette.TextDisabled, GameFont.Small, PowerFaces.Body, PowerFaces.Size.Body);
+
+                return;
+            }
+
+            ChargeFlow flow = ChargePill.Flow(grid.stored, grid.capacity, grid.balance);
+
+            float wide = ChargePill.Width(flow, PillPoints);
+            float tall = ChargePill.Height(PillPoints);
+
+            ChargePill.Draw(rect, rect.x, rect.y + (rect.height - tall) * 0.5f, flow, palette, PillPoints);
+
+            string figures = Mathf.RoundToInt(grid.stored).ToString("N0") + " / "
+                             + Mathf.RoundToInt(grid.capacity).ToString("N0") + " Wd";
+
+            float numbers = UITextControl.Width(figures, PowerFaces.Mono, PowerFaces.Size.Small) + 8f;
+
+            Rect bar = new Rect(rect.x + wide + 10f, rect.y + (rect.height - 12f) * 0.5f,
+                Mathf.Max(40f, rect.width - wide - 10f - numbers), 12f);
+
+            UIElementPainter.OutlineRounded(bar, palette.Border, palette.SurfaceSunken);
+
+            float share = Mathf.Clamp01(grid.stored / grid.capacity);
+
+            if (share > 0f)
+            {
+                Widgets.DrawBoxSolid(new Rect(bar.x + 1f, bar.y + 1f,
+                        Mathf.Max(1f, (bar.width - 2f) * share), bar.height - 2f),
+                    InspectPaneParts.Level(share, palette));
+            }
+
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                GUI.color = palette.TextSecondary;
+
+                UITextControl.LabelEllipses(new Rect(bar.xMax, rect.y, numbers, rect.height), figures,
+                    PowerFaces.Mono, PowerFaces.Size.Small);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
         }
 
         private static void Figure(Rect rect, string caption, string value, Color tint,
