@@ -68,7 +68,10 @@ namespace Gideon.UIFramework.Controls
             if (font == null || font.lineHeight <= 0f || font.fontSize <= 0)
                 return UIFonts.LineHeightOf(UIFonts.Nearest(points));
 
-            return Mathf.Ceil(font.lineHeight * points / font.fontSize);
+            // Through the same points to pixels ratio the style that draws this text uses. Both sides of the
+            // division have to be in Unity's pixel em or the row comes out three quarters of the height of
+            // the text standing in it, and the fallback above already answers in pixels.
+            return Mathf.Ceil(font.lineHeight * UIFonts.ToPixels(points) / font.fontSize);
         }
 
         /// <summary>
