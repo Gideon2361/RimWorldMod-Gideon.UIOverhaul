@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Reflection;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Integrations;
+using Gideon.UIOverhaul.Shared;
 using HarmonyLib;
 using RimWorld;
 using UnityEngine;
@@ -781,17 +783,12 @@ namespace Gideon.UIOverhaul.Features.Inspector
         }
 
         /// <summary>
-        /// A battery's own charge, which the grid total above does not tell you about this one.
+        /// A battery's charge, what the grid around it is doing, and which way it is going.
         ///
-        /// <b>Efficiency and self-discharge are the two facts that explain the bar.</b> Asked for on 2026-08-26.
-        /// A player watching a bank of batteries fail to fill is looking at a 50% efficiency they had forgotten
-        /// about, and one watching them empty overnight with nothing switched on is looking at self-discharge.
-        /// Neither is visible from the bar, and neither changes, which is exactly why they are easy to forget.
-        ///
-        /// <b>Self-discharge is said even at zero, as "none".</b> An empty battery is not losing anything, and
-        /// printing 5 W beside an empty bar would be describing a drain that is not happening -- but dropping the
-        /// row entirely, as vanilla does, makes the fact appear and disappear depending on charge and reads as a
-        /// panel that cannot make up its mind.
+        /// <b>Found by comp, so a modded battery gets this too.</b> <c>TryGetComp</c> matches a subclass, and
+        /// almost every modded battery derives its comp from <c>CompPowerBattery</c> rather than replacing it.
+        /// The grid figures are read through <c>CompPower</c>, the base, because the net is a property of being
+        /// connected rather than of being a battery: anything that reaches this block can answer them.
         /// </summary>
         private static float Charge(Rect view, float y, Thing thing, UIColorPaletteDef palette)
         {
@@ -804,7 +801,11 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float level = UIGuard.Try("Inspector.BatteryLevel", () => battery.StoredEnergyPct, 0f, null);
             float stored = UIGuard.Try("Inspector.BatteryStored", () => battery.StoredEnergy, 0f, null);
 
+            float capTop = y;
+
             y = InspectPaneParts.Cap(view, y, "Charge", Mathf.RoundToInt(stored) + " Wd", palette);
+
+            Direction(view, capTop, battery, stored, palette);
 
             y = InspectPaneParts.Need(view, y, "Stored", InspectPaneParts.Percent(level),
                 InspectPaneParts.Level(level, palette), level, InspectPaneParts.Level(level, palette), null, null,
@@ -820,7 +821,124 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 stored > 0f ? Mathf.RoundToInt(SelfDischargeWatts) + " W" : "none",
                 stored > 0f ? palette.TextSecondary : palette.TextDisabled, palette);
 
+            // The grid's balance belongs on this block rather than in the footer string, because it is the
+            // number that says which way the bar above is about to move.
+            bool connected;
+            float watts = GridWatts(battery, out connected);
+
+            y = InspectPaneParts.Fact(view, y, "Grid excess",
+                connected ? Mathf.RoundToInt(watts) + " W" : "not connected",
+                !connected ? palette.TextDisabled
+                    : watts > 0f ? palette.Success
+                        : watts < 0f ? palette.Warning : palette.TextSecondary,
+                palette);
+
             return y + InspectPaneParts.BlockGap;
+        }
+
+        /// <summary>
+        /// The grid's net gain in watts, and whether this thing is on a grid at all.
+        ///
+        /// <b>Converted the way vanilla converts it.</b> <c>CurrentEnergyGainRate</c> answers in watt-days per
+        /// tick, and <c>CompPower.WattsToWattDaysPerTick</c> is the constant the game divides by to get back to
+        /// watts for its own inspect string. Reading the constant rather than writing 60000 keeps our figure
+        /// equal to the one in the footer under it.
+        /// </summary>
+        private static float GridWatts(CompPower power, out bool connected)
+        {
+            bool found = false;
+
+            float watts = UIGuard.Try("Inspector.GridWatts", () =>
+            {
+                if (power.PowerNet == null)
+                    return 0f;
+
+                found = true;
+
+                return power.PowerNet.CurrentEnergyGainRate() / CompPower.WattsToWattDaysPerTick;
+            }, 0f, null);
+
+            connected = found;
+
+            return watts;
+        }
+
+        /// <summary>
+        /// The pill beside the Charge heading: filling, emptying, or flat.
+        ///
+        /// <b>It pulses because it is the one thing on this block that is changing while you read it.</b> Every
+        /// other figure here is a reading; this is a direction, and the panel has no other channel for "this is
+        /// live". Slow and shallow, through RimWorld's own <c>Pulser</c>, so it keeps time with the rest of the
+        /// interface rather than beating against it.
+        ///
+        /// <b>Empty outranks the direction.</b> A battery at zero on a grid that is gaining is still a battery
+        /// with nothing in it, and that is the fact worth the loudest colour.
+        ///
+        /// <b>There is a fourth state, and it says nothing rather than guessing.</b> A grid in exact balance is
+        /// neither charging nor draining; calling it either would be a lie told in colour, so it reads HOLDING
+        /// and does not pulse.
+        /// </summary>
+        private static void Direction(Rect view, float y, CompPowerBattery battery, float stored,
+            UIColorPaletteDef palette)
+        {
+            bool connected;
+            float watts = GridWatts(battery, out connected);
+
+            if (!connected)
+                return;
+
+            string word;
+            Color tint;
+            bool live = true;
+
+            if (stored <= 0.01f)
+            {
+                word = "empty";
+                tint = palette.Danger;
+            }
+            else if (watts > 0f)
+            {
+                word = "charge";
+                tint = palette.Success;
+            }
+            else if (watts < 0f)
+            {
+                word = "drain";
+                tint = palette.Warning;
+            }
+            else
+            {
+                word = "holding";
+                tint = palette.TextSecondary;
+                live = false;
+            }
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                Text.Font = GameFont.Tiny;
+
+                // Placed after the heading's own text rather than at a fixed offset, so it sits beside the word
+                // whatever the caption is translated to.
+                float caption = Text.CalcSize("Charge").x;
+
+                if (live)
+                    tint *= UIGuard.Try("Inspector.ChargePulse", () => Pulser.PulseBrightness(0.6f, 0.4f), 1f,
+                        null);
+
+                Rect band = new Rect(view.x + caption + 8f, y - 1f, view.width - caption - 8f,
+                    UIFonts.LineHeightOf(GameFont.Tiny) + 2f);
+
+                TabParts.Pill(band, band.x, band.y, word.ToUpperInvariant(), tint, palette, 9999f, null,
+                    UIFace.IBMPlexMono, 9f);
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
         }
 
         /// <summary>
