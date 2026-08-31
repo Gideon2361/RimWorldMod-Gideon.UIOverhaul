@@ -916,29 +916,45 @@ namespace Gideon.UIOverhaul.Features.Quests
         /// <b>One per pawn rather than a picker,</b> which is the rule the offer panel settled in 14167: an
         /// offer of several people exists to be compared, and a picker turns a comparison into a memory test.
         /// The click chooses which sheet is expanded, never which is reachable.
+        ///
+        /// <b>Not gated on the letters setting, which is a correction.</b> It was, on the reasoning that
+        /// somebody who turned the panel off on letters had not asked for it on quests. That was wrong about
+        /// what the setting is for: the letters panel appears unasked beside a dialog, and this is a button
+        /// somebody presses. Turning off an interruption is not the same as refusing a door, and the version
+        /// that gated it left a quest offering a joiner with no way at all to read him. Reported on
+        /// 2026-08-30, on a quest offering a muffalo shaman named Clark.
+        ///
+        /// <b>A pawn the quest will not introduce still gets a row,</b> disabled and saying why. An absent
+        /// control reads as a screen that forgot; a greyed one that explains itself reads as the quest keeping
+        /// something back, which is what has actually happened.
         /// </summary>
         private static float Pawns(Rect inner, float y, List<RewardRow> rewards, UIColorPaletteDef palette)
         {
-            if (!QuestPawnSheet.Enabled)
-                return y;
-
             for (int i = 0; i < rewards.Count; i++)
             {
-                Pawn pawn = rewards[i].pawn;
+                RewardRow reward = rewards[i];
 
-                if (pawn == null)
+                if (reward.pawn == null && !reward.pawnHidden)
                     continue;
 
-                string label = "Read " + UIGuard.Try("Quests.PawnName",
-                    () => pawn.LabelShortCap.ToString(), "them", null) + "...";
+                bool known = reward.pawn != null;
+
+                string label = known
+                    ? "Read " + UIGuard.Try("Quests.PawnName",
+                        () => reward.pawn.LabelShortCap.ToString(), "them", null) + "..."
+                    : "Details withheld";
 
                 float width = TabParts.ButtonWidth(label);
                 Rect button = new Rect(inner.x + 76f, y, width, 26f);
 
-                if (TabParts.Button(button, label, palette, true, false,
-                        "Open this person's skills, traits, backstory and health, exactly as they will read "
-                        + "once they have joined. Nothing here can be changed."))
-                    QuestPawnSheet.Open(pawn);
+                if (TabParts.Button(button, label, palette, known, false,
+                        known
+                            ? "Open this person's skills, traits, backstory and health, exactly as they will "
+                              + "read once they have joined. Nothing here can be changed."
+                            : "This quest does not say who they are. Nothing about them is readable until "
+                              + "they arrive.")
+                    && known)
+                    QuestPawnSheet.Open(reward.pawn);
 
                 y = button.yMax + 3f;
             }

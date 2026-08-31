@@ -3,7 +3,6 @@ using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Offers;
-using Gideon.UIOverhaul.Features.Options;
 using Gideon.UIOverhaul.Shared;
 using UnityEngine;
 using Verse;
@@ -18,9 +17,12 @@ namespace Gideon.UIOverhaul.Features.Quests
     /// tab as well means a person read here and the same person read on their letter, or after they join,
     /// cannot disagree; a second implementation would have drifted the first time either was touched.
     ///
-    /// <b>Gated on the same setting for the same reason.</b> Somebody who turned pawn details off on letters did
-    /// not ask for them on quests, and a feature that respects a switch in one place and ignores it in another
-    /// is a switch that has stopped meaning anything.
+    /// <b>Not gated on the letters setting, and that is a correction.</b> It was, on the reasoning that a
+    /// switch respected in one place and ignored in another has stopped meaning anything. That read the
+    /// setting wrongly: <c>pawnDetailsOnOffers</c> governs a panel that appears unasked beside a dialog, and
+    /// this window only exists because somebody pressed a button asking for it. Turning off an interruption
+    /// is not the same as refusing a door, and the gated version left a quest offering a joiner with no way
+    /// to read him at all.
     ///
     /// <b>Read only, and it says so.</b> The window carries a line across the top saying nothing can be changed
     /// until they join, because the panels are the ones the character editor draws and somebody who has used
@@ -28,23 +30,9 @@ namespace Gideon.UIOverhaul.Features.Quests
     /// </summary>
     internal static class QuestPawnSheet
     {
-        /// <summary>Whether an offered person can be opened at all.</summary>
-        internal static bool Enabled
-        {
-            get
-            {
-                return UIGuard.Try("Quests.SheetGate", () =>
-                {
-                    UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;
-
-                    return settings != null && settings.pawnDetailsOnOffers;
-                }, false, null);
-            }
-        }
-
         internal static void Open(Pawn pawn)
         {
-            if (pawn == null || !Enabled)
+            if (pawn == null)
                 return;
 
             UIGuard.Try("Quests.OpenSheet", () => Find.WindowStack.Add(new Dialog_QuestPawn(pawn)),

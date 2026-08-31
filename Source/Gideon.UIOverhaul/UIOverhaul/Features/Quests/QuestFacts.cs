@@ -25,11 +25,15 @@ namespace Gideon.UIOverhaul.Features.Quests
         /// <summary>
         /// The person being offered, when this reward is a person and the quest is willing to say who.
         ///
-        /// Null for every other kind of reward, and null for a pawn whose <c>detailsHidden</c> is set: that
-        /// flag is the quest declining to introduce them, and a screen that opens their skills anyway is
-        /// overriding a decision the content made on purpose.
+        /// Null for every other kind of reward. Also set when the quest marks their details hidden, because
+        /// that flag is the content declining to introduce them and a screen that opened their skills anyway
+        /// would be overriding a decision made on purpose -- but <see cref="pawnHidden"/> says so, rather than
+        /// the row looking like a reward with no person in it.
         /// </summary>
         internal Pawn pawn;
+
+        /// <summary>Whether there is a person here that the quest will not introduce.</summary>
+        internal bool pawnHidden;
     }
 
     /// <summary>One of the alternatives a quest asks you to pick between.</summary>
@@ -375,6 +379,7 @@ namespace Gideon.UIOverhaul.Features.Quests
                 {
                     text = OneLine(text),
                     pawn = offered != null && !offered.detailsHidden ? offered.pawn : null,
+                    pawnHidden = offered != null && offered.detailsHidden && offered.pawn != null,
                     things = goods != null ? goods.ItemsListForReading : null
                 });
             }
