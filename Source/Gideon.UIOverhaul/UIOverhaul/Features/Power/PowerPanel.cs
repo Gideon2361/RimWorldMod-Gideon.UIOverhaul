@@ -26,6 +26,7 @@ namespace Gideon.UIOverhaul.Features.Power
     /// <b>None of it is new data.</b> The read side lives in <see cref="PowerFacts"/> and every figure on it
     /// comes off <c>PowerNet</c>, which maintains them whether anything reads them or not.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class PowerPanel
     {
         internal const float WindowWidth = 1120f;
@@ -114,16 +115,67 @@ namespace Gideon.UIOverhaul.Features.Power
         // Header
         // -------------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The tab's own bolt, drawn beside the title the way the ideoligions header draws a faith's crest.
+        ///
+        /// <b>The same texture the button on the bar uses,</b> so the glyph a player clicked to get here is
+        /// the glyph waiting at the top of the screen. It is the mod's own icon rather than a vanilla one,
+        /// which is why there is a file to point at.
+        ///
+        /// <b>Tinted from the palette rather than to a literal yellow.</b> Warning is the palette's amber and
+        /// the nearest thing it keeps to yellow; taking it from there means the header follows a theme change
+        /// instead of staying the one colour that was hardcoded when it was written.
+        ///
+        /// <b>Loaded in a static constructor under <c>StaticConstructorOnStartup</c>,</b> because the game
+        /// warns about any type holding a static texture field without it: the check reads the field's type
+        /// rather than watching when the texture is fetched.
+        /// </summary>
+        private static readonly Texture2D Bolt;
+
+        static PowerPanel()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D bolt = null;
+
+            UIGuard.Try("Power.Bolt",
+                () => bolt = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Power", false),
+                "The power header has no glyph this session. Everything on the tab still reads.");
+
+            Bolt = bolt;
+        }
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float BoltSize = 34f;
+
+        private const float BoltGap = 10f;
+
         private static void Header(Rect rect, GridRow grid, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
 
             Rect inner = rect.ContractedBy(10f);
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 2f, 320f, 26f), "Power", palette.Accent,
+            float text = inner.x;
+
+            if (Bolt != null)
+            {
+                Rect glyph = new Rect(inner.x, inner.y + (inner.height - BoltSize) * 0.5f, BoltSize,
+                    BoltSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = palette.Warning;
+                GUI.DrawTexture(glyph, Bolt);
+                GUI.color = previous;
+
+                text = glyph.xMax + BoltGap;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Power", palette.Accent,
                 GameFont.Medium, PowerFaces.Display, PowerFaces.Size.Title);
 
-            TabParts.RowLabel(new Rect(inner.x, inner.y + 28f, 320f, 18f),
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 320f, 18f),
                 grid.name + "  -  " + grid.buildings + (grid.buildings == 1 ? " building" : " buildings"),
                 palette.TextSecondary, GameFont.Tiny, PowerFaces.Condensed, PowerFaces.Size.Subtitle);
 
