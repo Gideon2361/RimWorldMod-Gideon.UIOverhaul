@@ -222,6 +222,17 @@ namespace Gideon.UIOverhaul.Features.Quests
                 QuestFacts.Selected = null;
             }
 
+            bool aside = row.quest.dismissed;
+
+            Rect shelf = new Rect(back.xMax + 8f, back.y, 150f, 26f);
+
+            if (TabParts.Button(shelf, aside ? "Put back on the list" : "Set aside", palette, true, false,
+                    aside
+                        ? "Return this to the list it came from."
+                        : "Take this off the list. It carries on and its clock keeps running; it just stops "
+                          + "taking up a row. Dismissed quests are their own entry in the rail."))
+                QuestAccept.SetAside(quest, !aside);
+
             y = back.yMax + 8f;
 
             TabParts.RowLabel(new Rect(view.x, y, view.width, 30f), row.name, palette.Accent, GameFont.Medium,
@@ -459,7 +470,7 @@ namespace Gideon.UIOverhaul.Features.Quests
 
         private static float OfferList(Rect view, float y, UIColorPaletteDef palette)
         {
-            QuestFacts.Offers(Offers);
+            QuestFacts.Offers(Offers, QuestFacts.Showing);
 
             if (Offers.Count == 0)
             {
@@ -470,7 +481,10 @@ namespace Gideon.UIOverhaul.Features.Quests
                     palette.TextDisabled);
             }
 
-            y = Strip(view, y, palette);
+            // Only the live list gets the deadline strip. On the dismissed list every pin would be for
+            // something the player has already said they are not thinking about.
+            if (QuestFacts.Showing == QuestList.Offers)
+                y = Strip(view, y, palette);
 
             for (int i = 0; i < Offers.Count; i++)
                 y = Offer(view, y, Offers[i], palette);
@@ -543,6 +557,10 @@ namespace Gideon.UIOverhaul.Features.Quests
                 : "expires in " + QuestFacts.Period(row.expires);
 
             float whenWidth = UITextControl.Width(when, QuestFaces.Mono, QuestFaces.Size.When) + 8f;
+
+            Aside(new Rect(band.xMax - 20f, band.y + 3f, 16f, 16f), row.quest, row.quest.dismissed, palette);
+
+            band.width -= 26f;
 
             // An offer with no clock on it is not urgent and should not be dressed as though it were. It takes
             // the accent rather than a warning colour, which is the same thing the stripe does.
@@ -866,12 +884,16 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             // The jump control is laid out from the right before the name, so a long quest name gives way to
             // it rather than pushing it off the card.
+            Aside(new Rect(inner.xMax - 18f, inner.y + 3f, 16f, 16f), row.quest, row.quest.dismissed, palette);
+
+            right = inner.xMax - 26f;
+
             bool jumpable = row.target.IsValid && UIGuard.Try("Quests.CanJump",
                 () => CameraJumper.CanJump(row.target), false, null);
 
             if (jumpable)
             {
-                Rect jump = new Rect(inner.xMax - 74f, inner.y, 74f, 24f);
+                Rect jump = new Rect(right - 74f, inner.y, 74f, 24f);
 
                 if (TabParts.Button(jump, "Show me", palette, true, false,
                         "Move the camera to " + row.where + "."))
@@ -1002,6 +1024,83 @@ namespace Gideon.UIOverhaul.Features.Quests
             {
                 GUI.color = previous;
             }
+        }
+
+        /// <summary>
+        /// The set-aside control, drawn in RimWorld's own dismiss and restore icons.
+        ///
+        /// <b>The game's textures rather than a glyph of ours,</b> because a player who has used vanilla's
+        /// quest tab already knows what these two marks mean, and a control that means "hide this" needs to be
+        /// unmistakable from the one on the history rows that means "delete this for ever".
+        ///
+        /// <b>Loaded on first use and remembered.</b> ContentFinder walks the mod list, which is not something
+        /// to do sixty times a second per row.
+        /// </summary>
+        private static void Aside(Rect rect, Quest quest, bool dismissed, UIColorPaletteDef palette)
+        {
+            Texture2D icon = dismissed ? Restore : Dismiss;
+
+            if (icon == null)
+                return;
+
+            Color previous = GUI.color;
+
+            try
+            {
+                GUI.color = Mouse.IsOver(rect) ? palette.Accent : palette.TextSecondary;
+
+                GUI.DrawTexture(rect, icon);
+            }
+            finally
+            {
+                GUI.color = previous;
+            }
+
+            TooltipHandler.TipRegion(rect, (TipSignal) (dismissed
+                ? "Put this back on the list."
+                : "Set this aside. It carries on and its clock keeps running; it just stops taking up a row "
+                  + "here. You can put it back from the Dismissed list."));
+
+            if (Widgets.ButtonInvisible(rect))
+                QuestAccept.SetAside(quest, !dismissed);
+        }
+
+        private static Texture2D dismissIcon;
+        private static Texture2D restoreIcon;
+        private static bool iconsLooked;
+
+        private static Texture2D Dismiss
+        {
+            get
+            {
+                Icons();
+
+                return dismissIcon;
+            }
+        }
+
+        private static Texture2D Restore
+        {
+            get
+            {
+                Icons();
+
+                return restoreIcon;
+            }
+        }
+
+        private static void Icons()
+        {
+            if (iconsLooked)
+                return;
+
+            iconsLooked = true;
+
+            UIGuard.Try("Quests.Icons", () =>
+            {
+                dismissIcon = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
+                restoreIcon = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
+            }, null);
         }
 
         /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>
@@ -1299,14 +1398,14 @@ namespace Gideon.UIOverhaul.Features.Quests
         }
 
         /// <summary>
-        /// The button that clears out finished quests, and the count it will and will not take.
+        /// The two controls that clear out finished quests.
         ///
-        /// <b>It says what it will leave behind before you press it.</b> A sweep that silently does less than
-        /// its label promises is worse than one that refuses: the label is the only thing telling you whether
-        /// the save was really cleaned. Chained quests are counted separately and named in the tooltip.
+        /// <b>Both say what they will leave behind before you press them.</b> A sweep that silently does less
+        /// than its label promises is worse than one that refuses, because the label is the only thing telling
+        /// you whether the save was really cleaned.
         ///
-        /// <b>Confirmed, because it cannot be undone.</b> Removing a quest drops it from the save; there is no
-        /// bin to fish it back out of, so it gets a confirmation rather than a bare click.
+        /// <b>Both are confirmed, because neither can be undone.</b> Removing a quest drops it from the save;
+        /// there is no bin to fish it back out of.
         /// </summary>
         private static float Sweep(Rect view, float y, UIColorPaletteDef palette)
         {
@@ -1316,32 +1415,29 @@ namespace Gideon.UIOverhaul.Features.Quests
             QuestHistory.Sweepable(out removable, out chained);
 
             Rect band = new Rect(view.x, y, view.width, 30f);
-            Rect button = new Rect(band.x, band.y, 150f, 28f);
+            Rect all = new Rect(band.x, band.y, 130f, 28f);
 
             string tip = removable == 0
                 ? "Nothing here can be removed."
                 : "Removes " + removable + " finished "
-                  + (removable == 1 ? "quest" : "quests")
-                  + " from the save for good."
-                  + (chained > 0
-                      ? "\n\n" + chained + (chained == 1 ? " quest is" : " quests are")
-                        + " part of a chain and will be left. Removing one end of a chain would leave the "
-                        + "other pointing at nothing."
-                      : string.Empty);
+                  + (removable == 1 ? "quest" : "quests") + " from the save for good."
+                  + Kept(chained);
 
-            if (TabParts.Button(button, "Remove all", palette, removable > 0, false, tip))
+            if (TabParts.Button(all, "Remove all", palette, removable > 0, false, tip))
             {
                 int count = removable;
 
                 Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
                     "Remove " + count + " finished " + (count == 1 ? "quest" : "quests")
-                    + " from this save?\n\nThis cannot be undone."
-                    + (chained > 0
-                        ? "\n\n" + chained + (chained == 1 ? " quest is" : " quests are")
-                          + " part of a chain and will be kept."
-                        : string.Empty),
+                    + " from this save?\n\nThis cannot be undone." + Kept(chained),
                     () => QuestHistory.Sweep(), true));
             }
+
+            Rect group = new Rect(all.xMax + 8f, band.y, 150f, 28f);
+
+            if (TabParts.Button(group, "Remove group...", palette, removable > 0, false,
+                    "Remove the finished quests of one outcome: completed, failed or expired."))
+                GroupMenu();
 
             string note = chained > 0
                 ? chained + (chained == 1 ? " quest is" : " quests are") + " chained and will be kept"
@@ -1349,11 +1445,61 @@ namespace Gideon.UIOverhaul.Features.Quests
 
             if (!note.NullOrEmpty())
             {
-                TabParts.RowLabel(new Rect(button.xMax + 10f, band.y, band.width - button.width - 10f, 28f),
+                TabParts.RowLabel(new Rect(group.xMax + 12f, band.y, band.width - group.width - all.width - 28f,
+                        28f),
                     note, palette.TextDisabled, GameFont.Tiny, QuestFaces.Body, QuestFaces.Size.Small);
             }
 
             return band.yMax + RowGap;
+        }
+
+        /// <summary>The tail both tooltips share, naming what a sweep will not touch.</summary>
+        private static string Kept(int chained)
+        {
+            if (chained <= 0)
+                return string.Empty;
+
+            return "\n\n" + chained + (chained == 1 ? " quest is" : " quests are")
+                   + " part of a chain and will be kept. Removing one end of a chain would leave the other "
+                   + "pointing at nothing.";
+        }
+
+        /// <summary>
+        /// The outcome picker.
+        ///
+        /// <b>Every group is listed, including the empty ones, and the empty ones are disabled.</b> A menu that
+        /// hides what it has none of makes the reader wonder whether they misremembered the option; one that
+        /// greys it out answers the question in place.
+        /// </summary>
+        private static void GroupMenu()
+        {
+            List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+            for (int i = 0; i < QuestHistory.Groups.Length; i++)
+            {
+                QuestState group = QuestHistory.Groups[i];
+                int count = QuestHistory.CountOf(group);
+                string label = QuestHistory.GroupLabel(group) + "  -  " + count;
+
+                if (count == 0)
+                {
+                    options.Add(new FloatMenuOption(label + " (none)", null));
+
+                    continue;
+                }
+
+                QuestState local = group;
+                string name = QuestHistory.GroupLabel(group);
+
+                options.Add(new FloatMenuOption(label, () =>
+                    Find.WindowStack.Add(Dialog_MessageBox.CreateConfirmation(
+                        "Remove " + count + " " + name + " " + (count == 1 ? "quest" : "quests")
+                        + " from this save?\n\nThis cannot be undone.",
+                        () => QuestHistory.SweepOf(local), true))));
+            }
+
+            if (options.Count > 0)
+                Find.WindowStack.Add(new FloatMenu(options));
         }
 
         /// <summary>The column headings, in the same small caps the block heading uses.</summary>

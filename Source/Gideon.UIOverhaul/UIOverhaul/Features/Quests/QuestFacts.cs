@@ -139,22 +139,25 @@ namespace Gideon.UIOverhaul.Features.Quests
             if (!Listed(quest))
                 return false;
 
+            bool historical = UIGuard.Try("Quests.Historical", () => quest.Historical, false, null);
+
             if (which == QuestList.History)
-                return UIGuard.Try("Quests.Historical", () => quest.Historical, false, null);
+                return historical;
+
+            // Set aside covers offers and running quests alike. Dismissing is not refusing: the quest carries
+            // on and its clock keeps running, it just stops taking up a row on the list being read. A running
+            // quest is exactly as ignorable as an offer, and vanilla lets you dismiss both.
+            if (which == QuestList.Dismissed)
+                return !historical && quest.dismissed;
+
+            if (quest.dismissed)
+                return false;
 
             QuestState state = UIGuard.Try("Quests.State", () => quest.State, QuestState.EndedInvalid, null);
 
-            switch (which)
-            {
-                case QuestList.Offers:
-                    return state == QuestState.NotYetAccepted && !quest.dismissed;
-
-                case QuestList.Active:
-                    return state == QuestState.Ongoing;
-
-                default:
-                    return state == QuestState.NotYetAccepted && quest.dismissed;
-            }
+            return which == QuestList.Offers
+                ? state == QuestState.NotYetAccepted
+                : state == QuestState.Ongoing;
         }
 
         /// <summary>
@@ -205,12 +208,18 @@ namespace Gideon.UIOverhaul.Features.Quests
         // Offers
         // -------------------------------------------------------------------------------------------
 
-        /// <summary>Every offer, soonest to lapse first, which is the order a decision has to be made in.</summary>
-        internal static List<OfferRow> Offers(List<OfferRow> into)
+        /// <summary>
+        /// Offer rows for one of the lists, soonest to lapse first, which is the order a decision is made in.
+        ///
+        /// <b>Which list is a parameter because two of them draw as cards.</b> Dismissed holds set-aside
+        /// offers, and reading it while this method was hardwired to Offers showed the offers list back to
+        /// somebody who had asked for the dismissed one.
+        /// </summary>
+        internal static List<OfferRow> Offers(List<OfferRow> into, QuestList which = QuestList.Offers)
         {
             into.Clear();
 
-            List<Quest> quests = Of(QuestList.Offers);
+            List<Quest> quests = Of(which);
 
             for (int i = 0; i < quests.Count; i++)
                 into.Add(Offer(quests[i]));
