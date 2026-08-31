@@ -14,6 +14,15 @@ namespace Gideon.UIOverhaul.Features.Quests
         internal string text;
 
         /// <summary>
+        /// The actual goods, when this reward is goods.
+        ///
+        /// Kept so the panel can draw each one's icon and open its info card. Null for a reward that has no
+        /// things behind it, which is most of them: goodwill, royal favour and a psylink level are all real
+        /// rewards with nothing to point at.
+        /// </summary>
+        internal List<Thing> things;
+
+        /// <summary>
         /// The person being offered, when this reward is a person and the quest is willing to say who.
         ///
         /// Null for every other kind of reward, and null for a pawn whose <c>detailsHidden</c> is set: that
@@ -360,10 +369,13 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 Reward_Pawn offered = reward as Reward_Pawn;
 
+                Reward_Items goods = reward as Reward_Items;
+
                 into.Add(new RewardRow
                 {
                     text = OneLine(text),
-                    pawn = offered != null && !offered.detailsHidden ? offered.pawn : null
+                    pawn = offered != null && !offered.detailsHidden ? offered.pawn : null,
+                    things = goods != null ? goods.ItemsListForReading : null
                 });
             }
         }
