@@ -369,7 +369,7 @@ namespace Gideon.UIOverhaul.Features.Power
         }
 
         /// <summary>The point size the grid's state pill sets at.</summary>
-        private const float PillPoints = 9f;
+        private const float PillPoints = 6.75f;
 
         /// <summary>
         /// What the batteries hold, as a bar, with the grid's state moving beside it.
