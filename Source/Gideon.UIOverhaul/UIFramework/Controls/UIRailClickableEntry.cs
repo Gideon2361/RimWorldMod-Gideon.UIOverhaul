@@ -97,6 +97,17 @@ namespace Gideon.UIFramework.Controls
 
         internal bool Disabled;
 
+        /// <summary>
+        /// Completion from 0 to 1, drawn as a hairline under the label. Negative draws nothing.
+        ///
+        /// Drawn even at zero, because a row with no track under it reads as a row that does not have progress
+        /// rather than one that has none yet.
+        /// </summary>
+        internal float Progress = -1f;
+
+        /// <summary>Null takes the palette accent for the filled part.</summary>
+        internal Color? ProgressColor;
+
         /// <summary>Row height. Raise it for a face drawn large enough to preview properly.</summary>
         internal float Rise = 26f;
 
@@ -245,6 +256,15 @@ namespace Gideon.UIFramework.Controls
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
             Text.Font = previousFont;
+
+            if (Progress >= 0f)
+            {
+                Rect track = new Rect(x, rect.yMax - 3f, Mathf.Max(0f, rect.xMax - 6f - x), 1f);
+
+                Widgets.DrawBoxSolid(track, palette.SurfaceSunken);
+                Widgets.DrawBoxSolid(new Rect(track.x, track.y, track.width * Mathf.Clamp01(Progress), 1f),
+                    ProgressColor ?? palette.Accent);
+            }
 
             if (Disabled || !Widgets.ButtonInvisible(rect))
                 return false;

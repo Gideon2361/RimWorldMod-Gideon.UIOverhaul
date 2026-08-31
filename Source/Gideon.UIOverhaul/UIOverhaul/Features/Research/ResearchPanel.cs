@@ -149,6 +149,8 @@ namespace Gideon.UIOverhaul.Features.Research
         private static bool railFolded;
 
         private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railDragOffset;
 
         /// <summary>Which queue row is being dragged, or -1. Cleared on mouse up wherever that happens.</summary>
         private static int dragFrom = -1;
@@ -842,6 +844,17 @@ namespace Gideon.UIOverhaul.Features.Research
             }
         }
 
+        /// <summary>
+        /// The bands or groups the graph is divided into, with how far each is finished.
+        ///
+        /// <b>The fold strip is drawn here, not as a rail element,</b> because it is a button that changes the
+        /// rail rather than a row inside it. Folded, the rows keep only their colour tick, which is why the
+        /// entries are built differently rather than the control being asked to render two ways.
+        ///
+        /// The label takes the band's own colour. A four pixel tick is not enough of a hue to read as "this is
+        /// the medicine band" at a glance, and the canvas heading it jumps to is coloured, so a grey rail was
+        /// the one place a band had no colour.
+        /// </summary>
         private static void ContentsRail(Rect rail, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rail, palette.Border, palette.PanelBackground);
@@ -857,8 +870,6 @@ namespace Gideon.UIOverhaul.Features.Research
             Text.Anchor = railFolded ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
             GUI.color = palette.TextDisabled;
 
-            // The caption goes with the rows under it. A heading in one typeface over a list in another reads as
-            // two panels rather than one, which is the whole reason a face is chosen for a block and not a line.
             UITextControl.Label(railFolded ? fold : new Rect(fold.x + 5f, fold.y, fold.width - 5f, fold.height),
                 railFolded ? ">>" : RailHeading(), UIFace.BarlowCondensed, GameFont.Tiny, FontStyle.Bold);
 
@@ -880,105 +891,71 @@ namespace Gideon.UIOverhaul.Features.Research
 
             Rect body = new Rect(rail.x + 1f, fold.yMax + 2f, rail.width - 2f, rail.yMax - fold.yMax - 4f);
 
-            // Rows are five pixels taller than their text when open, because each carries a progress hairline
-            // underneath. Folded, a row is the colour tick and nothing else.
-            float rowHeight = railFolded ? 14f : RailRowHeight + RailRowGap;
-            float bar = groups.Count * rowHeight > body.height ? 18f : 0f;
+            List<UIRailElement> elements = new List<UIRailElement>(groups.Count);
 
-            Rect view = new Rect(0f, 0f, body.width - bar, groups.Count * rowHeight);
+            for (int i = 0; i < groups.Count; i++)
+            {
+                ResearchGroup group = groups[i];
 
-            Widgets.BeginScrollView(body, ref railScroll, view);
+                Color tint = group.Band.HasValue
+                    ? ResearchBands.ColorFor(group.Band.Value, palette)
+                    : palette.TextSecondary;
 
-            try
+                int done = Finished(group);
+                bool here = selected != null && selected.Group == group;
+
+                if (railFolded)
+                {
+                    elements.Add(new UIRailClickableEntry(i.ToString(), null)
+                    {
+                        Rise = 14f,
+                        Swatch = tint,
+                        SwatchWidth = 4f,
+                        Silent = true
+                    });
+
+                    continue;
+                }
+
+                elements.Add(new UIRailClickableEntry(i.ToString(), group.Label)
+                {
+                    Rise = RailRowHeight + RailRowGap,
+                    Swatch = tint,
+                    SwatchWidth = 4f,
+                    Face = UIFace.BarlowCondensed,
+                    Font = GameFont.Small,
+                    Style = FontStyle.Bold,
+                    TextColor = here && !group.Band.HasValue ? palette.TextPrimary : tint,
+                    Trailing = done + "/" + group.Nodes.Count,
+                    CountFace = UIFace.BarlowCondensed,
+                    CountColor = here ? palette.TextSecondary : palette.TextDisabled,
+                    Progress = group.Nodes.Count == 0 ? 0f : done / (float) group.Nodes.Count,
+                    ProgressColor = tint,
+                    Silent = true
+                });
+            }
+
+            string current = null;
+
+            if (selected != null)
             {
                 for (int i = 0; i < groups.Count; i++)
-                    RailRow(new Rect(0f, i * rowHeight, view.width, rowHeight), groups[i], palette);
-            }
-            finally
-            {
-                Widgets.EndScrollView();
-            }
-        }
-
-        private static void RailRow(Rect row, ResearchGroup group, UIColorPaletteDef palette)
-        {
-            Color tint = group.Band.HasValue
-                ? ResearchBands.ColorFor(group.Band.Value, palette)
-                : palette.TextSecondary;
-
-            int done = Finished(group);
-
-            bool here = selected != null && selected.Group == group;
-
-            if (here)
-                Widgets.DrawBoxSolid(row, palette.AccentMuted);
-            else if (Mouse.IsOver(row))
-                Widgets.DrawHighlight(row);
-
-            Widgets.DrawBoxSolid(new Rect(row.x + 2f, row.y + 3f, 4f, Mathf.Max(4f, row.height - 8f)), tint);
-
-            if (!railFolded)
-            {
-                Text.Font = GameFont.Tiny;
-
-                string tally = done + "/" + group.Nodes.Count;
-                float tallyWidth = UIRichText.WidthOf(tally) + 4f;
-
-                // Measured at Tiny above, because that is what the tally draws at; the label below switches to
-                // Small. Two fonts in one row means two measurements, and taking one number from the wrong font
-                // is the fault that truncated the node captions.
-
-                GUI.color = here ? palette.TextSecondary : palette.TextDisabled;
-                Text.Anchor = TextAnchor.MiddleRight;
-
-                UITextControl.Label(new Rect(row.xMax - tallyWidth - 3f, row.y, tallyWidth, RailRowHeight),
-                    tally, UIFace.BarlowCondensed, GameFont.Tiny);
-
-                // The label in the band's own colour, not grey. A four pixel tick is not enough of a hue to read
-                // as "this is the medicine band" at a glance, and the canvas heading it jumps to is coloured, so
-                // a grey rail was the one place a band had no colour. Grouped by source or tech level there is no
-                // band, tint is the ordinary secondary text, and this is a no-op.
-                GUI.color = here && !group.Band.HasValue ? palette.TextPrimary : tint;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                Text.Font = GameFont.Small;
-
-                // Bold as a face rather than as a tag. The markup was the only way to get weight out of
-                // RimWorld's one font; with the sheet shipped, the weight is the typeface and the string is just
-                // the name -- which also means UITextControl can set it, since it refuses text carrying markup.
-                // Widths are still measured against the game's font above, so the rail keeps the size it had and
-                // the condensed face simply has more room in it than it needs.
-                UITextControl.LabelEllipses(new Rect(row.x + 11f, row.y,
-                        Mathf.Max(0f, row.width - tallyWidth - 17f), RailRowHeight),
-                    group.Label, UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold);
-
-                Text.Anchor = TextAnchor.UpperLeft;
-
-                // The hairline, drawn even at zero: a row with no track under it reads as a row that does not
-                // have progress rather than one that has none yet.
-                // Pinned under the text rather than to the bottom of the cell, so the extra air added below goes
-                // between one entry and the next instead of between a label and its own progress bar.
-                Rect track = new Rect(row.x + 11f, row.y + RailRowHeight - 1f,
-                    Mathf.Max(0f, row.width - 17f), 2f);
-
-                Widgets.DrawBoxSolid(track, palette.SurfaceSunken);
-
-                if (done > 0 && group.Nodes.Count > 0)
-                    Widgets.DrawBoxSolid(
-                        new Rect(track.x, track.y, track.width * done / group.Nodes.Count, track.height),
-                        new Color(tint.r, tint.g, tint.b, 0.85f));
+                {
+                    if (selected.Group == groups[i])
+                        current = i.ToString();
+                }
             }
 
-            GUI.color = palette.TextPrimary;
+            string picked = UIRailControl.Draw(body, elements, current, ref railScroll, ref railDragging,
+                ref railDragOffset, palette, false);
 
-            TooltipHandler.TipRegion(row, new TipSignal(
-                () => group.Label + "\n" + done + " of " + group.Nodes.Count + " finished"
-                      + (group.Band.HasValue
-                          ? "\n\n" + ResearchBands.Info(group.Band.Value).Tooltip
-                          : string.Empty),
-                group.Label.GetHashCode()));
+            if (picked == null)
+                return;
 
-            if (Widgets.ButtonInvisible(row))
-                JumpTo(group);
+            int index;
+
+            if (int.TryParse(picked, out index) && index >= 0 && index < groups.Count)
+                JumpTo(groups[index]);
         }
 
         /// <summary>
