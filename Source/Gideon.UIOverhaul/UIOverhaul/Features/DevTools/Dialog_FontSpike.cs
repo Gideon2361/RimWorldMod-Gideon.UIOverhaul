@@ -156,26 +156,28 @@ namespace Gideon.UIOverhaul.Features.DevTools
         /// </summary>
         private void Rail(Rect rect, UIColorPaletteDef palette)
         {
-            List<UIRailEntry> entries = new List<UIRailEntry>();
+            List<UIRailElement> elements = new List<UIRailElement>();
+
+            elements.Add(new UIRailSectionHeaderControl("bundled typefaces"));
 
             for (int i = 0; i < Faces.Length; i++)
             {
                 UIFace face = Faces[i];
                 bool available = UIFaces.Available(face);
 
-                entries.Add(new UIRailEntry
+                elements.Add(new UIRailClickableEntry(face.ToString(), UIFaces.Named(face))
                 {
-                    Key = face.ToString(),
-                    Label = available ? UIFaces.Named(face) : UIFaces.Named(face) + "  (missing)",
-                    Count = -1,
                     Face = available ? face : UIFace.Game,
-                    Disabled = !available
+                    Font = GameFont.Medium,
+                    Rise = UIFonts.LineHeightOf(GameFont.Medium) + 10f,
+                    Disabled = !available,
+                    Tooltip = available ? null : "The bundle carries no file for this face.",
+                    Label = available ? UIFaces.Named(face) : UIFaces.Named(face) + "  (missing)"
                 });
             }
 
-            string picked = UIRailControl.Draw(rect, entries, selected.ToString(), ref railScroll,
-                ref railDragging, ref railDragOffset, palette,
-                UIFonts.LineHeightOf(GameFont.Medium) + 10f);
+            string picked = UIRailControl.Draw(rect, elements, selected.ToString(), ref railScroll,
+                ref railDragging, ref railDragOffset, palette);
 
             if (picked != null)
                 selected = UIFaces.Parse(picked);
