@@ -28,6 +28,7 @@ namespace Gideon.UIOverhaul.Features.Quests
     /// are all the game's, and <c>QuestReserves</c> already knows which colonists a quest is holding because the
     /// game needs that to stop you sending them somewhere else. The read side lives in <see cref="QuestFacts"/>.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class QuestPanel
     {
         internal const float WindowWidth = 1180f;
@@ -1269,42 +1270,40 @@ namespace Gideon.UIOverhaul.Features.Quests
                 QuestAccept.SetAside(quest, !dismissed);
         }
 
-        private static Texture2D dismissIcon;
-        private static Texture2D restoreIcon;
-        private static bool iconsLooked;
+        /// <summary>
+        /// RimWorld's own dismiss and restore marks.
+        ///
+        /// <b>Loaded in a static constructor under <c>StaticConstructorOnStartup</c>,</b> which is the
+        /// arrangement the game checks for: it warns about any type holding a static texture field without
+        /// that attribute, because assets have to be loaded on the main thread and it cannot know when a
+        /// lazily loaded one will be touched. This type used to load them on first draw, which worked and
+        /// still drew the warning, since the check reads the field's type rather than watching what happens
+        /// to it.
+        ///
+        /// <b>The game's textures rather than glyphs of ours,</b> because a player who has used vanilla's
+        /// quest tab already knows what these two marks mean, and a control meaning "hide this" needs to be
+        /// unmistakable from the one on the history rows meaning "delete this for ever".
+        /// </summary>
+        private static readonly Texture2D Dismiss;
 
-        private static Texture2D Dismiss
+        private static readonly Texture2D Restore;
+
+        static QuestPanel()
         {
-            get
-            {
-                Icons();
-
-                return dismissIcon;
-            }
-        }
-
-        private static Texture2D Restore
-        {
-            get
-            {
-                Icons();
-
-                return restoreIcon;
-            }
-        }
-
-        private static void Icons()
-        {
-            if (iconsLooked)
-                return;
-
-            iconsLooked = true;
+            // Through locals, because a readonly field can only be assigned in the constructor itself and
+            // the guard runs its work in a closure. Guarded all the same: a missing texture should cost the
+            // control its picture, not take the type down before anything has drawn.
+            Texture2D dismiss = null;
+            Texture2D restore = null;
 
             UIGuard.Try("Quests.Icons", () =>
             {
-                dismissIcon = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
-                restoreIcon = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
-            }, null);
+                dismiss = ContentFinder<Texture2D>.Get("UI/Buttons/Dismiss", false);
+                restore = ContentFinder<Texture2D>.Get("UI/Buttons/UnDismiss", false);
+            }, "The set-aside control has no icon this session. It still works.");
+
+            Dismiss = dismiss;
+            Restore = restore;
         }
 
         /// <summary>The day ticks under an axis, at whatever interval keeps the labels apart.</summary>
