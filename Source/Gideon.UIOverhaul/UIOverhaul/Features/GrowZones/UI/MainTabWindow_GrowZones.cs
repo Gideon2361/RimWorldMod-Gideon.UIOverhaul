@@ -506,12 +506,12 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             string state = cold ? "too cold to grow" : hot ? "too hot to grow" : "growing";
 
             TabParts.RowLabel(new Rect(body.x, body.y, body.width, 20f),
-                temp.ToStringTemperature("F0"), tint, GameFont.Small, GrowFaces.Mono,
+                TemperatureText.Of(temp), tint, GameFont.Small, GrowFaces.Mono,
                 GrowFaces.Size.Figure);
 
             TabParts.RowLabel(new Rect(body.x, body.y + 24f, body.width, 16f),
-                state + "  -  " + props.minGrowthTemperature.ToStringTemperature("F0") + " to "
-                + props.maxGrowthTemperature.ToStringTemperature("F0"), palette.TextSecondary,
+                state + "  -  " + TemperatureText.Of(props.minGrowthTemperature) + " to "
+                + TemperatureText.Of(props.maxGrowthTemperature), palette.TextSecondary,
                 GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Small);
         }
 

@@ -4,6 +4,7 @@ using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Gideon.UIOverhaul.Shared;
 
 namespace Gideon.UIOverhaul.Features.Inspector
 {
@@ -299,7 +300,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float ambient = UIGuard.Try("Inspector.Ambient", () => pawn.AmbientTemperature, 0f, null);
 
             y = InspectPaneParts.Cap(view, y, "Comfortable in",
-                "now " + ambient.ToStringTemperature("F0"), palette);
+                "now " + TemperatureText.Of(ambient), palette);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -312,7 +313,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
                 GUI.color = range.Includes(ambient) ? palette.TextSecondary : palette.Warning;
 
                 Widgets.Label(new Rect(view.x, y, view.width, UIFonts.LineHeightOf(GameFont.Tiny)),
-                    range.min.ToStringTemperature("F0") + " to " + range.max.ToStringTemperature("F0"));
+                    TemperatureText.Of(range.min) + " to " + TemperatureText.Of(range.max));
             }
             finally
             {

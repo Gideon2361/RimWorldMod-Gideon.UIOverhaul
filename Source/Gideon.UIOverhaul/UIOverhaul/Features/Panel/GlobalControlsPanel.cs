@@ -12,6 +12,7 @@ using RimWorld;
 using RimWorld.Planet;
 using UnityEngine;
 using Verse;
+using Gideon.UIOverhaul.Shared;
 
 namespace Gideon.UIOverhaul.Features.Panel
 {
@@ -418,7 +419,7 @@ namespace Gideon.UIOverhaul.Features.Panel
                     {
                         string text = TemperatureString != null
                             ? TemperatureString()
-                            : map.mapTemperature.OutdoorTemp.ToStringTemperature("F0");
+                            : TemperatureText.Of(map.mapTemperature.OutdoorTemp);
 
                         Text.Anchor = TextAnchor.MiddleRight;
                         GUI.color = palette.TextPrimary;
