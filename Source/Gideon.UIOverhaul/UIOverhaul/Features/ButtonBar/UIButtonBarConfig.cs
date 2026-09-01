@@ -202,6 +202,15 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             if (string.Equals(defName, Quests.QuestTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
                 return !Quests.QuestTabs.Available;
 
+            // Vanilla's factions tab, when ours is present, and ours when it is not. The same pair as the
+            // quests one above, and for the same reason: the content moves into ours, so leaving both buttons
+            // on the bar would be two doors into one screen.
+            if (string.Equals(defName, Factions.FactionTabs.VanillaDefName, StringComparison.OrdinalIgnoreCase))
+                return Factions.FactionTabs.Available;
+
+            if (string.Equals(defName, Factions.FactionTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
+                return !Factions.FactionTabs.Available;
+
             // Our own ideoligions tab is suppressed the other way about: the button exists in every install
             // because a MainButtonDef cannot be conditionally undefined, and without Ideology it would open a
             // screen with nothing in it. This is what makes the tab absent rather than empty.

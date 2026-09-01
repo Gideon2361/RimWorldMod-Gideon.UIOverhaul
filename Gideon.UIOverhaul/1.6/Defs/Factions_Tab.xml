@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    The factions tab, with the standing drawn against the band it rests in.
+
+    order 90, validWithoutMap and minimized are vanilla's own, so the button sits exactly where it always
+    did for a player whose bar falls back to the game's ordering. The tab is worth reading from the world
+    view, which is what validWithoutMap buys: a standing is a fact about the planet, not about a map.
+
+    The hotkey is not restated here because vanilla's def carries none.
+    Patch_MainTabsRoot_ToggleTab_Factions catches the toggle and sends it here, which is also how the info
+    card's "show me this faction" and the pawn table's faction icon arrive at our tab.
+
+    The icon is the one already in this mod's own UI/MainButtonIcons folder, so the glyph on the bar and
+    the mark at the top of the tab are the same drawing.
+  -->
+  <MainButtonDef>
+    <defName>Gideon_Factions</defName>
+    <label>factions</label>
+    <description>Every faction on the planet and where you stand with each one. A standing is drawn against the band it settles in, so a faction that is being pulled back toward neutral is told apart from one that is simply where it belongs. Opening a faction says what is holding its standing down, what the resting value is made of, and what you did this year that moved it.</description>
+    <tabWindowClass>Gideon.UIOverhaul.Features.Factions.MainTabWindow_Factions</tabWindowClass>
+    <order>90</order>
+    <validWithoutMap>true</validWithoutMap>
+    <minimized>True</minimized>
+    <iconPath>UI/MainButtonIcons/Factions</iconPath>
+  </MainButtonDef>
+
+</Defs>
