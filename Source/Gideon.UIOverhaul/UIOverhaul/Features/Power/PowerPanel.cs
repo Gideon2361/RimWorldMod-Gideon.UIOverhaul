@@ -168,7 +168,12 @@ namespace Gideon.UIOverhaul.Features.Power
 
                 Color previous = GUI.color;
 
-                GUI.color = palette.Warning;
+                // The same colour as the title beside it. The bolt was drawn in Warning, which reads as a
+                // caution the moment a grid is actually in trouble -- amber is the tab saying something is
+                // wrong, and it cannot also be the tab saying its own name. The Dead mockup makes the same
+                // pairing: the mark and the title are one colour, because together they are the tab.
+                GUI.color = palette.Accent;
+
                 GUI.DrawTexture(glyph, Bolt);
                 GUI.color = previous;
 
@@ -415,6 +420,13 @@ namespace Gideon.UIOverhaul.Features.Power
 
             string figures = Mathf.RoundToInt(grid.stored).ToString("N0") + " / "
                              + Mathf.RoundToInt(grid.capacity).ToString("N0") + " Wd";
+
+            // How long the charge lasts, but only while it is going down. Draining is the only state where
+            // the number is a warning rather than trivia: filling already says where it is heading, and a grid
+            // holding steady has no end to count toward. The figure is the same countdown the grid readouts
+            // carry, so the bar and the strip above it cannot disagree.
+            if (flow == ChargeFlow.Draining && grid.hoursLeft >= 0f)
+                figures += "   " + PowerFacts.Hours(grid.hoursLeft) + " left";
 
             float numbers = UITextControl.Width(figures, PowerFaces.Mono, PowerFaces.Size.Small) + 8f;
 

@@ -66,6 +66,34 @@ namespace Gideon.UIFramework.Controls
         internal float IconSize = 20f;
 
         /// <summary>
+        /// Clear space before the swatch or glyph. Lowered by a row that needs the width for its label more
+        /// than it needs the breathing room.
+        /// </summary>
+        internal float LeadPad = 6f;
+
+        /// <summary>
+        /// Drawn hard against the trailing edge, right of the count, for a row that carries its own action --
+        /// a remove cross, a pin, a lock.
+        ///
+        /// <b>It may consume the click.</b> Same contract as <see cref="Glyph"/>: the delegate hit tests and
+        /// calls <c>Event.current.Use()</c> itself, and a consumed event stops the row reporting a plain click,
+        /// so removing a row does not also select it.
+        /// </summary>
+        internal Action<Rect, Color> TrailingGlyph;
+
+        internal float TrailingGlyphSize = 16f;
+
+        /// <summary>
+        /// Called with the whole row rect once the row has drawn, for a caller that needs the row as a region
+        /// rather than as a click -- a drop target, an overlay, a drag highlight.
+        ///
+        /// The escape hatch that keeps this control from having to know about drag and drop: the research queue
+        /// reorders by testing a mouse release against the row it lands on, which is its own logic and not
+        /// something every rail should carry.
+        /// </summary>
+        internal Action<Rect> Decorate;
+
+        /// <summary>
         /// Typeface for the label. <see cref="UIFace.Game"/> uses RimWorld's own, which is what almost every
         /// rail wants; the font picker sets this per row so each entry previews itself.
         /// </summary>
@@ -152,7 +180,7 @@ namespace Gideon.UIFramework.Controls
             }
 
             Color content = TextColor ?? (Disabled ? palette.TextDisabled : palette.TextPrimary);
-            float x = rect.x + 6f;
+            float x = rect.x + LeadPad;
 
             if (Swatch.HasValue)
             {
@@ -164,7 +192,11 @@ namespace Gideon.UIFramework.Controls
 
             if (Glyph != null || Icon != null)
             {
-                Rect slot = new Rect(x, rect.y + (rect.height - IconSize) / 2f, IconSize, IconSize);
+                // Square only while it fits. A slot taller than its row would hang into the rows above and
+                // below, and the row that drew first would take clicks meant for this one.
+                float tall = Mathf.Min(IconSize, rect.height);
+
+                Rect slot = new Rect(x, rect.y + (rect.height - tall) / 2f, IconSize, tall);
 
                 if (Glyph != null)
                 {
@@ -207,7 +239,19 @@ namespace Gideon.UIFramework.Controls
                 }
             }
 
-            Rect label = new Rect(x, rect.y, Mathf.Max(0f, rect.xMax - 6f - countWidth - x), rect.height);
+            float rightEdge = rect.xMax - 6f;
+
+            if (TrailingGlyph != null)
+            {
+                Rect slot = new Rect(rightEdge - TrailingGlyphSize,
+                    rect.y + (rect.height - TrailingGlyphSize) / 2f, TrailingGlyphSize, TrailingGlyphSize);
+
+                TrailingGlyph(slot, content);
+
+                rightEdge = slot.x - 4f;
+            }
+
+            Rect label = new Rect(x, rect.y, Mathf.Max(0f, rightEdge - countWidth - x), rect.height);
 
             Text.Anchor = TextAnchor.MiddleLeft;
             GUI.color = content;
@@ -232,7 +276,7 @@ namespace Gideon.UIFramework.Controls
 
             if (count != null)
             {
-                Rect box = new Rect(rect.xMax - 6f - countWidth, rect.y, countWidth, rect.height);
+                Rect box = new Rect(rightEdge - countWidth, rect.y, countWidth, rect.height);
 
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = CountColor ?? (Disabled ? palette.TextDisabled : palette.TextSecondary);
@@ -265,6 +309,9 @@ namespace Gideon.UIFramework.Controls
                 Widgets.DrawBoxSolid(new Rect(track.x, track.y, track.width * Mathf.Clamp01(Progress), 1f),
                     ProgressColor ?? palette.Accent);
             }
+
+            if (Decorate != null)
+                Decorate(rect);
 
             if (Disabled || !Widgets.ButtonInvisible(rect))
                 return false;
