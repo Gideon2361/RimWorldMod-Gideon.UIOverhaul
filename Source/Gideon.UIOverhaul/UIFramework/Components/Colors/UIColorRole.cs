@@ -131,7 +131,19 @@ namespace Gideon.UIFramework.Components.Colors
         TabPower,
 
         /// <summary>
-        /// The Bills tab's own color, the fifth of the per-tab identities.
+        /// The Growing Zones tab's own color, the fifth of the per-tab identities. A muted wheat,
+        /// defaulting to <c>#C0AE6A</c>.
+        ///
+        /// <b>Not the green a grower would reach for first.</b> That hue is taken twice over: <c>success</c>
+        /// is what a healthy temperature reads as inside this very tab, and the sage of
+        /// <see cref="TabAnimals"/> sits next door in the tab strip. Wheat is what the zone is for rather
+        /// than what it is made of, and it is far enough from both to be told apart at a glance.
+        ///
+        /// It shares a hue with <see cref="Warning"/> and is separated by saturation, the same way every tab
+        /// color here is: a state shouts and an identity does not.
+        /// </summary>
+        TabGrowing,
+        /// The Bills tab's own color, the sixth of the per-tab identities.
         ///
         /// <b>A warm clay, and the first identity that is not a cool hue.</b> The others are violet, steel
         /// blue, sage and teal, with the growing tab on a yellow green, so a sixth cold color would have had
@@ -139,6 +151,25 @@ namespace Gideon.UIFramework.Components.Colors
         /// than most: amber is a state bills show often.
         /// </summary>
         TabBills,
+
+        /// <summary>
+        /// The Pawns tab's own color, the seventh of the per-tab identities. A dusty rose, defaulting to
+        /// <c>#C98BA4</c>.
+        ///
+        /// <b>The magenta side, because nothing else in the mod is there.</b> This one tab spends six colors
+        /// on its own categories before an identity is even asked for: <see cref="Accent"/> on colonists,
+        /// <see cref="Warning"/> on prisoners, <see cref="Mood"/> on slaves, <see cref="Danger"/> on patients,
+        /// <see cref="Success"/> on guests and <see cref="Info"/> on the undead. Add the schedule strip's five
+        /// and the six identities above and the wheel is full everywhere but here.
+        ///
+        /// Its one near neighbor is <see cref="Danger"/>, and it is separated the way every identity here is
+        /// separated from a state: by saturation, around forty percent against the red's eighty.
+        ///
+        /// <b>It never touches a row.</b> The category colors say who someone is; this says which tab you are
+        /// on. It is the mark, the title, the chosen map, the open row's wash and the work grid's edges, and
+        /// nothing that belongs to a person.
+        /// </summary>
+        TabPawns,
 
         /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these

@@ -124,6 +124,25 @@ namespace Gideon.UIOverhaul.Features.Pawns
             RowGap = 2f,
             SectionHeaderHeight = 30f,
 
+            // The heading row joins the convention the header block above it uses: upper-case mono at caption
+            // size, on the grid's own surface with a rule under it. It was already pinned -- it is drawn
+            // outside the scroll view -- but on the panel background and in the game font it read as text
+            // floating above the table rather than as the table's own top edge.
+            HeaderFace = PawnFaces.Mono,
+            HeaderPoints = PawnFaces.Size.Caption,
+            HeaderUppercase = true,
+            HeaderSeated = true,
+
+            // No PinnedColumns here, and it is not an oversight. The name column is the obvious candidate --
+            // scrolled right this table is a screen of toggles with nobody attached to them -- but pinning
+            // makes the control walk the rows twice, once per region, and each pass invokes a row's
+            // DrawBackground. This panel's registers the whole-row click that opens the schedule, so it would
+            // be registered twice and a single click would open and immediately close the row.
+            //
+            // The work tab pins its first column safely because its own DrawBackground only paints. Fixing
+            // this properly means the control telling a row which pass it is in, which is its change to make
+            // and not this restyle's.
+
             // No column banding here, unlike the work tab. Banding exists to keep the eye on one column across a
             // wide grid of like values; this tab has six wide columns of unlike things -- a name, a sentence, two
             // bars -- where every column already looks different from its neighbors. The stripes only competed
@@ -146,10 +165,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
             {
                 EnsureColumns();
 
-                // Nothing to widen for since 2026-08-22. The work priorities used to be a 330px pane beside the
-                // table, which the window had to grow for and then shrink back from; they are drawn inside the
-                // opened row now, so the tab asks for the width its columns need and keeps it.
-                return Mathf.Min(Grid.RequestedWidth + WindowChrome, UI.screenWidth - 16f);
+                // The rail is the one thing that widens this again, and only while there is more than one map
+                // to pick between. The work priorities used to widen it too -- a 330px pane beside the table
+                // that the window grew for and shrank back from -- but those are drawn inside the opened row
+                // now.
+                return Mathf.Min(Grid.RequestedWidth + WindowChrome + PawnMapRail.WidthNow,
+                    UI.screenWidth - 16f);
             }
         }
 
@@ -218,21 +239,176 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Collect();
 
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
+            Color hue = Identity(palette);
 
             Rect content = inRect.ContractedBy(6f);
 
-            // Above the table. The filters govern what the whole tab is about, so putting them inside the grid's
-            // own area would read as a property of the table rather than of the view.
+            Rect head = new Rect(content.x, content.y, content.width, HeaderHeight);
+            DrawHeader(head, palette, hue);
+
+            content = new Rect(content.x, head.yMax + HeaderGap, content.width,
+                Mathf.Max(0f, content.yMax - head.yMax - HeaderGap));
+
+            // Above both the rail and the table. The filters govern what the whole tab is about, so putting them
+            // inside the grid's own area would read as a property of the table rather than of the view -- and
+            // they are not a property of the rail either, which keeps its counts whatever is filtered.
             Rect filters = new Rect(content.x, content.y, content.width, FilterBarHeight);
             DrawFilterBar(filters, palette);
 
             content = new Rect(content.x, filters.yMax + FilterBarGap, content.width,
                 Mathf.Max(0f, content.height - FilterBarHeight - FilterBarGap));
 
+            if (PawnMapRail.Wanted)
+            {
+                Rect rail = new Rect(content.x, content.y, PawnMapRail.Width, content.height);
+
+                // Collected again rather than left a frame stale. The pick changes which rows exist, and the
+                // grid is drawn below this in the same frame; the second pass costs one click's worth of work.
+                if (PawnMapRail.Draw(rail, palette, hue))
+                {
+                    Grid.Scroll = Vector2.zero;
+                    Collect();
+                }
+
+                content = new Rect(rail.xMax + PawnMapRail.Gap, content.y,
+                    Mathf.Max(0f, content.xMax - rail.xMax - PawnMapRail.Gap), content.height);
+            }
+
             Grid.Draw(content, palette);
 
             // After the grid, so the scroll view a portrait was clicked in has been closed out.
             PawnCameraJump.Resolve();
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Header
+        // ---------------------------------------------------------------------------------------
+
+        private const float HeaderHeight = 60f;
+        private const float HeaderGap = 8f;
+        private const float MarkSize = 28f;
+
+        /// <summary>
+        /// This tab's own color, the seventh of the per-tab identities.
+        ///
+        /// <b>It never touches a row.</b> This tab already spends six palette colors on its categories, and
+        /// those say who a person is; this says which tab you are on. Keeping the two jobs apart is what lets
+        /// a rose title sit above a blue-striped row without reading as two accents arguing.
+        /// </summary>
+        private static Color Identity(UIColorPaletteDef palette)
+        {
+            return palette.TabPawns;
+        }
+
+        /// <summary>
+        /// The mark, the tab's name, which map is being read, and the four figures worth having without
+        /// opening anything.
+        ///
+        /// <b>The figures ignore the category filters.</b> The subtitle says what is here and the filters say
+        /// what you are looking at; unticking Patients should not make a hurt one stop counting.
+        /// </summary>
+        private static void DrawHeader(Rect rect, UIColorPaletteDef palette, Color hue)
+        {
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
+
+            PawnMapRail.MapTally showing = PawnMapRail.Showing();
+
+            Rect inner = rect.ContractedBy(10f);
+            float text = inner.x;
+
+            if (PawnTex.Mark != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - MarkSize) * 0.5f, MarkSize, MarkSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = hue;
+
+                GUI.DrawTexture(mark, PawnTex.Mark, ScaleMode.ScaleToFit);
+
+                GUI.color = previous;
+
+                text = mark.xMax + 10f;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 1f, 420f, 24f), "Pawns", hue, GameFont.Medium,
+                PawnFaces.Display, PawnFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 25f, 420f, 18f), Subtitle(showing),
+                palette.TextSecondary, GameFont.Tiny, PawnFaces.Condensed, PawnFaces.Size.Subtitle);
+
+            float right = inner.xMax;
+
+            right = Readout(inner, right, showing.People.ToString(),
+                PawnMapRail.Wanted && PawnMapRail.Selected == PawnMapRail.AllMaps ? "everywhere" : "on this map",
+                palette.TextPrimary, palette);
+
+            right = Readout(inner, right,
+                showing.MoodCount > 0
+                    ? (showing.MoodTotal / showing.MoodCount).ToStringPercent()
+                    : "--",
+                "avg mood", palette.TextPrimary, palette);
+
+            right = Readout(inner, right, showing.Idle.ToString(), "idle",
+                showing.Idle > 0 ? palette.TextPrimary : palette.TextDisabled, palette);
+
+            Readout(inner, right, showing.NeedsCare.ToString(), "needs care",
+                showing.NeedsCare > 0 ? (showing.Urgent ? palette.Danger : palette.Warning)
+                    : palette.TextDisabled, palette);
+        }
+
+        /// <summary>
+        /// Which map, and what kind of people are on it.
+        ///
+        /// The breakdown rather than a bare total, because the total is already the rightmost figure and the
+        /// question the rest of the tab is about is what the mix is.
+        /// </summary>
+        private static string Subtitle(PawnMapRail.MapTally showing)
+        {
+            string text = showing.Label;
+            bool first = true;
+
+            for (int i = 0; i < PawnCategories.All.Length; i++)
+            {
+                int members = showing.ByCategory[i];
+
+                if (members == 0)
+                    continue;
+
+                string word = PawnCategories.Label(PawnCategories.All[i]).ToLowerInvariant();
+
+                // "1 patients" reads as a bug. Undead has no plural s to shed, so it survives this unchanged.
+                if (members == 1 && word.EndsWith("s"))
+                    word = word.Substring(0, word.Length - 1);
+
+                text += (first ? "  -  " : ", ") + members + " " + word;
+                first = false;
+            }
+
+            return first ? text + "  -  nobody here" : text;
+        }
+
+        /// <summary>One figure and its caption, laid out from the right edge inward.</summary>
+        private static float Readout(Rect inner, float right, string value, string caption, Color tint,
+            UIColorPaletteDef palette)
+        {
+            float width = Mathf.Max(UITextControl.Width(value, PawnFaces.Mono, PawnFaces.Size.Readout),
+                UITextControl.Width(caption.ToUpperInvariant(), PawnFaces.Mono, PawnFaces.Size.Caption)) + 4f;
+
+            Rect box = new Rect(right - width, inner.y, width, inner.height);
+            TextAnchor previousAnchor = Text.Anchor;
+
+            Text.Anchor = TextAnchor.MiddleRight;
+
+            TabParts.RowLabel(new Rect(box.x, box.y + 2f, box.width, 20f), value, tint, GameFont.Small,
+                PawnFaces.Mono, PawnFaces.Size.Readout);
+
+            TabParts.RowLabel(new Rect(box.x, box.y + 24f, box.width, 14f), caption.ToUpperInvariant(),
+                palette.TextDisabled, GameFont.Tiny, PawnFaces.Mono, PawnFaces.Size.Caption);
+
+            Text.Anchor = previousAnchor;
+
+            return box.x - 18f;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -243,9 +419,6 @@ namespace Gideon.UIOverhaul.Features.Pawns
         private const float FilterBarGap = 6f;
         private const float FilterButtonGap = 4f;
 
-        /// <summary>Padding either side of a filter button's label.</summary>
-        private const float FilterButtonPadding = 22f;
-
         /// <summary>
         /// One button per category the game can actually produce.
         ///
@@ -255,32 +428,41 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// off half of a choice read as broken rather than as available. See <c>Dialog_XmlWorkbench.Mode</c>,
         /// where the same mistake was made and fixed.
         ///
-        /// <b>Selected is filled in the category's own colour</b> rather than in one accent for all of them, so
-        /// each button says which kind of person it governs and not merely that it is on.
+        /// <b>The colour is a bar inside the chip, not a fill behind it.</b> Filling six chips in six saturated
+        /// colours put the loudest thing in the mod above a table whose own bars are trying to be the coloured
+        /// thing, and emphasising everything emphasises nothing. The bar is the same width and shape as the
+        /// stripe down a row's left edge, which is what it stands for -- a closer match to its meaning than a
+        /// filled rectangle was. See <see cref="DrawRowBackground"/>.
         ///
-        /// The same colours are the accent stripe on every row, so this bar reads as the legend for them. See
-        /// <see cref="DrawRowBackground"/>.
+        /// <b>The counts are the real gain.</b> Without them the only way to learn there are two prisoners is
+        /// to scroll to the Prisoners heading, and a filter worth pressing looks exactly like one that would
+        /// empty the table.
         /// </summary>
         private static void DrawFilterBar(Rect bar, UIColorPaletteDef palette)
         {
+            PawnMapRail.MapTally showing = PawnMapRail.Showing();
+
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
             Color previousColor = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-
                 float x = bar.x;
 
-                foreach (PawnCategory category in PawnCategories.All)
+                for (int i = 0; i < PawnCategories.All.Length; i++)
                 {
+                    PawnCategory category = PawnCategories.All[i];
+
                     if (!PawnCategories.Available(category))
                         continue;
 
                     string label = PawnCategories.Label(category);
-                    float width = Text.CalcSize(label).x + FilterButtonPadding;
+                    string count = showing.ByCategory[i].ToString();
+
+                    float width = FilterBarWidth + UITextControl.Width(label, PawnFaces.Condensed,
+                        PawnFaces.Size.Chip) + UITextControl.Width(count, PawnFaces.Mono,
+                        PawnFaces.Size.RailCount);
 
                     // Stops rather than wrapping or clipping. The bar sits above a table that is already the
                     // width it needs, so running out of room here means the window is narrower than anything
@@ -290,7 +472,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
                     Rect button = new Rect(x, bar.y, width, bar.height);
 
-                    if (DrawFilterButton(button, label, PawnCategories.Shown(category),
+                    if (DrawFilterButton(button, label, count, PawnCategories.Shown(category),
                             PawnCategories.Color(category, palette), palette))
                     {
                         PawnCategories.Toggle(category);
@@ -309,25 +491,53 @@ namespace Gideon.UIOverhaul.Features.Pawns
             }
         }
 
-        private static bool DrawFilterButton(Rect rect, string label, bool on, Color color,
+        /// <summary>The chip's fixed parts: lead pad, bar, both gaps, and the trailing pad.</summary>
+        private const float FilterBarWidth = 9f + BarWidth + 7f + 7f + 11f;
+
+        /// <summary>Matched to <c>UICardControl.AccentWidth</c> on a row, because it stands for that stripe.</summary>
+        private const float BarWidth = 3f;
+
+        private static bool DrawFilterButton(Rect rect, string label, string count, bool on, Color color,
             UIColorPaletteDef palette)
         {
             bool over = Mouse.IsOver(rect);
 
-            if (on)
-                UIElementPainter.FillRounded(rect, color);
-            else
-                UIElementPainter.OutlineRounded(rect, palette.Border,
-                    over ? palette.SurfaceRaised : palette.PanelBackground);
+            // Selected tints the border and washes the inside; unselected leaves the panel showing through.
+            // Neither state is filled, so the six of them cannot compete with each other or with the table.
+            UIElementPainter.OutlineRounded(rect,
+                on ? UIElementPainter.Composite(palette.Border, Wash(color, 0.55f)) : palette.Border,
+                on ? UIElementPainter.Composite(palette.PanelBackground, Wash(color, 0.10f))
+                    : over ? palette.SurfaceRaised : palette.PanelBackground);
 
-            // Near black on the filled state, full strength text on the empty one. Both are the workbench's,
-            // and both are chosen for contrast against what they actually sit on rather than for a rule about
-            // selected controls being brighter.
-            GUI.color = on ? palette.WindowBackground : palette.TextPrimary;
+            Rect stripe = new Rect(rect.x + 9f, rect.y + 6f, BarWidth, rect.height - 12f);
 
-            Widgets.Label(rect, label);
+            // Square rather than rounded: the 9-slice's corners are wider than a 3px bar, so it would round
+            // itself away to nothing. The row stripe this stands for is square for the same reason.
+            //
+            // Dimmed with its label rather than hidden, so an off chip reads as available rather than absent.
+            Widgets.DrawBoxSolid(stripe, on ? color : Wash(color, 0.4f));
+
+            float x = stripe.xMax + 7f;
+            float labelWidth = UITextControl.Width(label, PawnFaces.Condensed, PawnFaces.Size.Chip);
+
+            Text.Anchor = TextAnchor.MiddleLeft;
+            GUI.color = on ? palette.TextPrimary : palette.TextDisabled;
+
+            UITextControl.Label(new Rect(x, rect.y, labelWidth, rect.height), label, PawnFaces.Condensed,
+                PawnFaces.Size.Chip);
+
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = on ? palette.TextSecondary : palette.TextDisabled;
+
+            UITextControl.Label(new Rect(x + labelWidth, rect.y, rect.xMax - 11f - x - labelWidth,
+                rect.height), count, PawnFaces.Mono, PawnFaces.Size.RailCount);
 
             return Widgets.ButtonInvisible(rect);
+        }
+
+        private static Color Wash(Color color, float alpha)
+        {
+            return new Color(color.r, color.g, color.b, alpha);
         }
 
         // ---------------------------------------------------------------------------------------
@@ -407,6 +617,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Condition",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = HealthStateColumnWidth,
                 DrawCell = DrawConditionCell
             });
@@ -414,6 +625,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Health",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = BarColumnWidth,
                 DrawCell = DrawHealthBarCell
             });
@@ -421,6 +633,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Mood",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = BarColumnWidth,
                 DrawCell = DrawMoodCell
             });
@@ -428,6 +641,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Activity",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = ActivityColumnWidth,
                 DrawCell = DrawActivityCell
             });
@@ -437,6 +651,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Schedule",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = 110f,
                 DrawCell = DrawScheduleHintCell
             });
@@ -450,6 +665,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Area",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = AreaColumnWidth,
                 Tooltip = "Where each pawn is allowed to be. Unrestricted lets them use the whole map.",
                 OwnsClicks = true,
@@ -466,6 +682,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Attack mode",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = ResponseColumnWidth,
                 Tooltip = "HostilityReponseTip".Translate().ToString() + "\n\nIgnore, attack, or flee, left to right.",
                 OwnsClicks = true,
@@ -475,6 +692,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Self-tend",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = SelfTendColumnWidth,
                 Tooltip = "Whether each colonist patches their own wounds up rather than waiting for a doctor.",
                 OwnsClicks = true,
@@ -488,6 +706,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Edit",
+                HeaderAnchor = TextAnchor.MiddleRight,
                 Width = EditColumnWidth,
                 OwnsClicks = true,
                 Tooltip = "Clear, copy, paste and template everything about a pawn at once: their work "
@@ -514,9 +733,24 @@ namespace Gideon.UIOverhaul.Features.Pawns
             // its bands, and a toolbar centred in that would float somewhere down beside the work grid.
             Rect band = TopBand(cell);
 
+            // Five buttons on every row is fifty glyphs on a screen of ten people, all of them drawn at the
+            // same strength as the data they sit beside. They come up to full on the row under the pointer and
+            // on the open one. Nothing moves and nothing is hidden: the cluster keeps its place, its width and
+            // its hit targets, so a click aimed from muscle memory still lands.
+            bool lit = expandedPawn == pawn || hoveredPawn == pawn;
+
             PawnTools.Row(new Rect(band.x + 4f, band.y, band.width - 8f, band.height), pawn,
-                PawnTemplateScope.Everything, palette);
+                PawnTemplateScope.Everything, palette, lit ? 1f : RestingTools);
         }
+
+        /// <summary>How much of the row tools is drawn when the row is neither hovered nor open.</summary>
+        private const float RestingTools = 0.3f;
+
+        /// <summary>
+        /// The pawn whose row is under the pointer, or null. Written by <see cref="DrawRowBackground"/> and
+        /// cleared each time the rows are rebuilt.
+        /// </summary>
+        private static Pawn hoveredPawn;
 
         /// <summary>Reused between frames, so a rebuild does not allocate a list per map.</summary>
         private static readonly List<Pawn> Considered = new List<Pawn>();
@@ -611,6 +845,44 @@ namespace Gideon.UIOverhaul.Features.Pawns
         /// it changes with the tabs across the top: filtering down to colonists alone should put the list back
         /// to a plain alphabetical run under the map, not leave one heading sitting over the whole of it.
         /// </summary>
+        /// <summary>
+        /// Folds one pawn into their map's readings.
+        ///
+        /// Everything here is already being paid for elsewhere on the frame: the condition comes from the
+        /// cache the Condition column reads, and the rest are live properties vanilla keeps behind its own
+        /// dirty flags. Nothing is walked twice to fill the header and the rail.
+        /// </summary>
+        private static void Tally(PawnMapRail.MapTally tally, Pawn pawn)
+        {
+            tally.People++;
+
+            int slot = System.Array.IndexOf(PawnCategories.All, PawnCategories.Of(pawn));
+
+            if (slot >= 0)
+                tally.ByCategory[slot]++;
+
+            PawnHealthSummary summary = PawnAttributes.Condition.Get(pawn);
+
+            if (summary.NeedsCare)
+            {
+                tally.NeedsCare++;
+                tally.Urgent |= summary.Urgent;
+            }
+
+            // Guarded rather than assumed: this tab lists animals when a necromancer is raising them, and an
+            // undead raccoon has no mood need to read.
+            Need_Mood mood = pawn.needs == null ? null : pawn.needs.mood;
+
+            if (mood != null)
+            {
+                tally.MoodTotal += mood.CurLevelPercentage;
+                tally.MoodCount++;
+            }
+
+            if (pawn.mindState != null && pawn.mindState.IsIdle)
+                tally.Idle++;
+        }
+
         private static int CategoriesIn(List<Pawn> group)
         {
             int found = 0;
@@ -657,6 +929,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
         {
             Grid.Rows.Clear();
             Roster.Clear();
+            PawnMapRail.Tallies.Clear();
+
+            hoveredPawn = null;
 
             // A match inside a folded group would otherwise not be shown, which reads as the search failing. The
             // folds themselves are remembered and come back when the search is cleared.
@@ -666,12 +941,20 @@ namespace Gideon.UIOverhaul.Features.Pawns
             if (maps == null)
                 return;
 
+            PawnMapRail.Validate(maps);
+
             List<Pawn> group = new List<Pawn>();
 
             foreach (Map map in maps)
             {
                 group.Clear();
                 Candidates(map);
+
+                PawnMapRail.MapTally tally = new PawnMapRail.MapTally
+                {
+                    Id = map.uniqueID,
+                    Label = MapLabels.NameOf(map)
+                };
 
                 foreach (Pawn pawn in Considered)
                 {
@@ -681,9 +964,18 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     // instead would close the pane the moment you searched for somebody else.
                     Roster.Add(pawn);
 
+                    Tally(tally, pawn);
+
                     if (PawnCategories.Shown(PawnCategories.Of(pawn)) && PawnSearch.Matches(Search, pawn))
                         group.Add(pawn);
                 }
+
+                // Added whether or not it contributes rows, so the rail keeps a map you have filtered
+                // everybody out of. A map you cannot get back to is worse than an empty table.
+                PawnMapRail.Tallies.Add(tally);
+
+                if (!PawnMapRail.Shows(map))
+                    continue;
 
                 if (group.Count == 0)
                     continue;
@@ -694,20 +986,29 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
                 string fold = "map:" + map.uniqueID;
 
-                Grid.Rows.Add(new UIDesignatorTabRow
+                // Only while every map is on screen at once. With one map picked in the rail, or with only one
+                // map to pick, this heading is the same words above every row below it -- and the rail entry
+                // or the header's subtitle has already said them.
+                if (PawnMapRail.WantsHeadings)
                 {
-                    SectionLabel = MapLabels.NameOf(map),
-                    SectionSuffix = group.Count == 1 ? "1 person" : group.Count + " people",
+                    Grid.Rows.Add(new UIDesignatorTabRow
+                    {
+                        SectionLabel = tally.Label,
+                        SectionSuffix = group.Count == 1 ? "1 person" : group.Count + " people",
 
-                    // Keyed by the map rather than by its name, so two maps that happen to read alike fold
-                    // separately and renaming one does not lose its fold.
-                    SectionKey = fold
-                });
+                        // Keyed by the map rather than by its name, so two maps that happen to read alike fold
+                        // separately and renaming one does not lose its fold.
+                        SectionKey = fold
+                    });
+                }
 
                 // A subgroup heading is worth its line only when there is something to tell apart. A colony of
                 // nothing but colonists would otherwise get a "Colonists" bar under every map heading, saying
                 // exactly what the tab across the top already says.
-                bool split = CategoriesIn(group) > 1;
+                //
+                // Except with the map heading gone: then this is the only heading there is, and dropping it too
+                // would leave the table with nothing saying what it holds.
+                bool split = CategoriesIn(group) > 1 || !PawnMapRail.WantsHeadings;
 
                 foreach (PawnCategory category in PawnCategories.All)
                 {
@@ -722,7 +1023,9 @@ namespace Gideon.UIOverhaul.Features.Pawns
                             Grid.Rows.Add(new UIDesignatorTabRow
                             {
                                 SectionLabel = PawnCategories.Label(category),
-                                SectionDepth = 1,
+
+                                // Indented only while there is a map heading above it to be indented under.
+                                SectionDepth = PawnMapRail.WantsHeadings ? 1 : 0,
                                 SectionKey = fold + "/" + category
                             });
 
@@ -794,6 +1097,13 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             if (expandedPawn == pawn)
                 Widgets.DrawBoxSolid(band, palette.SelectionOverlay);
+
+            // Recorded here because a cell only ever sees its own rect, and the tools cell needs to know
+            // whether the whole row is under the pointer. Safe to read from a cell: the control draws a row's
+            // background before its cells, so by the time the tools are drawn this frame their own row has
+            // already had its say. Cleared at the top of Collect.
+            if (Mouse.IsOver(band))
+                hoveredPawn = pawn;
 
             // The portrait is cut out of the row's hit target geometrically, rather than by relying on the
             // portrait's own button being drawn later and winning. It does not win: this background is drawn
@@ -1029,7 +1339,16 @@ namespace Gideon.UIOverhaul.Features.Pawns
                 // cell never has to know how wide a badge is.
                 float x = UITagControl.DrawLeading(line, summary.Tag, summary.TagColor(palette), palette);
 
-                GUI.color = summary.Color(palette);
+                // Healthy goes quiet, and only here. Healthy is the default state of a colonist, so a green
+                // one on every row is a solid band of colour for the exception to fail to stand out against
+                // -- the column is scanned precisely when something has gone wrong. Everything abnormal keeps
+                // its state colour, which now has an empty column to stand out in.
+                //
+                // Local rather than in Summary.Color, which the hospital panel and the inspect pane also read.
+                // The argument is about a column of mostly-healthy people; neither of those is one.
+                GUI.color = summary.State == PawnHealthState.Healthy
+                    ? palette.TextSecondary
+                    : summary.Color(palette);
 
                 Widgets.Label(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), summary.Label);
             }
