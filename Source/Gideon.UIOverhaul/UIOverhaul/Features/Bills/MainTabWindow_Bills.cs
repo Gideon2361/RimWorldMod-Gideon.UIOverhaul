@@ -612,7 +612,7 @@ namespace Gideon.UIOverhaul.Features.Bills
                 if (Shown(group) == 0)
                     continue;
 
-                height += BenchHeight + (Folded(group) ? 0f : Shown(group) * RowHeight);
+                height += BenchHeight + (Folded(group) ? 0f : ColumnsHeight + Shown(group) * RowHeight);
             }
 
             Rect view = new Rect(0f, 0f, inner.width - 18f, Mathf.Max(height, inner.height));
@@ -636,6 +636,8 @@ namespace Gideon.UIOverhaul.Features.Bills
 
                     if (Folded(group))
                         continue;
+
+                    y = Columns(new Rect(0f, y, view.width, ColumnsHeight), palette);
 
                     foreach (BillEntry entry in group.Bills)
                     {
@@ -744,6 +746,39 @@ namespace Gideon.UIOverhaul.Features.Bills
         {
             return text != null && text.IndexOf(term, StringComparison.OrdinalIgnoreCase) >= 0;
         }
+
+        /// <summary>
+        /// The column headings, once per open bench.
+        ///
+        /// <b>Once per block rather than once per row.</b> Every row used to carry its own captions, so a
+        /// bench with nine bills said "state" nine times. The strip costs one line and the rows get their
+        /// space back.
+        ///
+        /// The three x offsets are the ones the rows use, not new ones: a heading that does not sit over its
+        /// column is worse than no heading at all.
+        /// </summary>
+        private float Columns(Rect rect, UIColorPaletteDef palette)
+        {
+            TabParts.RowLabel(new Rect(rect.x + 72f, rect.y, 200f, rect.height), "Bill",
+                palette.TextDisabled, GameFont.Tiny, BillFaces.Mono, BillFaces.Size.RailHead);
+
+            // Drawn through UITextControl rather than TabParts.RowLabel, which forces MiddleLeft: this
+            // heading has to sit over a right aligned column, and a heading that does not is worse than none.
+            Text.Anchor = TextAnchor.MiddleRight;
+            GUI.color = palette.TextDisabled;
+
+            UITextControl.LabelEllipses(new Rect(rect.xMax - 226f, rect.y, 160f, rect.height), "State",
+                BillFaces.Mono, BillFaces.Size.RailHead);
+
+            Text.Anchor = TextAnchor.UpperLeft;
+
+            Widgets.DrawBoxSolid(new Rect(rect.x + 6f, rect.yMax - 1f, rect.width - 12f, 1f), palette.Border);
+
+            return rect.yMax;
+        }
+
+        /// <summary>Height of the column strip under an open bench.</summary>
+        private const float ColumnsHeight = 18f;
 
         private float Bench(Rect rect, BillGroup group, UIColorPaletteDef palette)
         {
@@ -874,10 +909,18 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Widgets.Label(new Rect(rect.x + 72f, rect.y + 26f, textWidth, 18f), Detail(entry, held));
 
+            // <b>Four states, four colors, in the small caps the rest of the mod uses for a label.</b>
+            // Running, suspended, paused and cannot-run were one grey word in two colors, so a bill somebody
+            // had switched off read the same as one that was working. Green for running is the counterpart of
+            // the green target bar: both mean the bill is doing what it was told.
+            //
+            // Through UITextControl for the same reason as the heading above it: RowLabel would left align
+            // this out from under its own column.
             Text.Anchor = TextAnchor.MiddleRight;
-            GUI.color = entry.Trouble != BillTrouble.None ? palette.Danger : palette.TextSecondary;
+            GUI.color = StateColor(entry, palette);
 
-            Widgets.Label(new Rect(rect.xMax - 226f, rect.y, 160f, rect.height), State(entry));
+            UITextControl.LabelEllipses(new Rect(rect.xMax - 226f, rect.y, 160f, rect.height), State(entry),
+                BillFaces.Mono, BillFaces.Size.RailCount);
 
             Text.Anchor = TextAnchor.UpperLeft;
 
@@ -1160,6 +1203,25 @@ namespace Gideon.UIOverhaul.Features.Bills
                 return "Forever";
 
             return "Do " + bill.repeatCount + "x";
+        }
+
+        /// <summary>
+        /// What color a row's state reads in.
+        ///
+        /// <b>Amber for a bill that cannot run, not red.</b> The rail's counts and the header's readout
+        /// already use amber for exactly this condition, and three colors for one state across one screen is
+        /// worse than any of them being individually debatable. Amber is also the honest severity: a bill
+        /// waiting on ingredients is something to look at, not something that has failed.
+        /// </summary>
+        private static Color StateColor(BillEntry entry, UIColorPaletteDef palette)
+        {
+            if (entry.Suspended)
+                return palette.TextDisabled;
+
+            if (entry.Trouble != BillTrouble.None)
+                return palette.Warning;
+
+            return entry.Bill != null && entry.Bill.paused ? palette.TextSecondary : palette.Success;
         }
 
         private static string State(BillEntry entry)
