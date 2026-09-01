@@ -83,6 +83,54 @@ namespace Gideon.UIFramework.Components.Colors
         Mood,
 
         /// <summary>
+        /// The Dead tab's own color: its title, its glyph and its rail selection.
+        ///
+        /// <b>The first of the per-tab identities.</b> Every screen in the mod titled itself in
+        /// <see cref="Accent"/> until 2026-08-31, which made them consistent and made them hard to tell apart
+        /// at a glance in a screenshot. A tab may now carry a color of its own.
+        ///
+        /// <b>It is a role rather than a constant in the tab so that themes keep working.</b> A hardcoded
+        /// violet would be the one color in the interface that ignored the player's palette, and a theme
+        /// built around warm greys would have this one screen sitting outside it forever. Here, a theme
+        /// author who never heard of this tab still gets a sensible value from the fallback, and one who has
+        /// can set it.
+        ///
+        /// Kept clear of <see cref="Mood"/>, which is also violet: mood means a feeling being measured, and
+        /// this means nothing at all beyond "you are on this screen".
+        /// </summary>
+        TabTheDead,
+
+        /// <summary>
+        /// The Quests tab's own color, the second of the per-tab identities.
+        ///
+        /// <b>A steel blue: the same family as the accent, deliberately softer.</b> Quests were already the
+        /// blue screen and re-hueing them would have cost more than it bought, so this darkens rather than
+        /// moves. It sits at the same weight as <see cref="TabTheDead"/>, which is what keeps the two tabs
+        /// reading as a pair of identities rather than as one styled screen and one unstyled one.
+        /// </summary>
+        TabQuests,
+
+        /// <summary>
+        /// The Animals tab's own color, the third of the per-tab identities.
+        ///
+        /// <b>A muted sage, and deliberately not <see cref="Success"/>.</b> Green is the obvious association
+        /// for animals and the obvious hazard is that this tab is full of real health and state readings,
+        /// which are already green when they are good. Success is saturated and bright; this is neither, so
+        /// the two do not compete even sitting on the same row.
+        /// </summary>
+        TabAnimals,
+
+        /// <summary>
+        /// The Power tab's own color, the fourth of the per-tab identities.
+        ///
+        /// <b>A muted teal, kept well away from amber.</b> Amber is what that tab uses to say a grid is in
+        /// trouble, and the mark beside the title used to be drawn in it, so the screen was saying its own
+        /// name in the color it warns with. Teal is the far side of the wheel from that and is not near any
+        /// other reading the tab makes.
+        /// </summary>
+        TabPower,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

@@ -152,7 +152,10 @@ namespace Gideon.UIOverhaul.Features.Power
 
         private static void Header(Rect rect, GridRow grid, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+            // PanelBackground rather than SurfaceRaised: the two are the same value as the window behind
+            // them in the default dark palette, so a raised header had nothing but its border to separate
+            // it from the page and from the sunken rail beside it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
 
             Rect inner = rect.ContractedBy(10f);
 
@@ -169,7 +172,7 @@ namespace Gideon.UIOverhaul.Features.Power
                 // caution the moment a grid is actually in trouble -- amber is the tab saying something is
                 // wrong, and it cannot also be the tab saying its own name. The Dead mockup makes the same
                 // pairing: the mark and the title are one colour, because together they are the tab.
-                GUI.color = palette.Accent;
+                GUI.color = palette.TabPower;
 
                 GUI.DrawTexture(glyph, Bolt);
                 GUI.color = previous;
@@ -177,7 +180,7 @@ namespace Gideon.UIOverhaul.Features.Power
                 text = glyph.xMax + BoltGap;
             }
 
-            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Power", palette.Accent,
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Power", palette.TabPower,
                 GameFont.Medium, PowerFaces.Display, PowerFaces.Size.Title);
 
             TabParts.RowLabel(new Rect(text, inner.y + 28f, 320f, 18f),
@@ -287,7 +290,7 @@ namespace Gideon.UIOverhaul.Features.Power
                     Rise = 30f,
                     Face = PowerFaces.Condensed,
                     Points = PowerFaces.Size.RailName,
-                    TextColor = on ? palette.Accent : (Color?) null,
+                    TextColor = on ? palette.TabPower : (Color?) null,
                     Trailing = grid.hasSource ? PowerFacts.Power(grid.balance) : "dark",
                     CountFace = PowerFaces.Mono,
                     CountPoints = PowerFaces.Size.RailCount,

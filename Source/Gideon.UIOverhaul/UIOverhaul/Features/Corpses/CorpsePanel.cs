@@ -36,8 +36,32 @@ namespace Gideon.UIOverhaul.Features.Corpses
     /// Every row on the left is a body with nowhere to go, and the reason it has nowhere to go is almost always
     /// a grave that will not take it. Two screens would have put the question and its answer a click apart.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class CorpsePanel
     {
+        /// <summary>
+        /// The tab's own mark, drawn beside the title the way the other tabs draw theirs.
+        ///
+        /// The same texture the button on the bar uses, so the glyph a player clicked to get here is the
+        /// glyph waiting at the top of the screen. Loaded in a static constructor because the game warns
+        /// about any type holding a static texture field without one, and the check reads the field's type
+        /// rather than watching when the texture is fetched.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
+        static CorpsePanel()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Corpses.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Graveyard", false),
+                "The header has no glyph this session. Everything on the tab still reads.");
+
+            Glyph = glyph;
+        }
+
         // ---------------------------------------------------------------------------------------
         // Layout
         // ---------------------------------------------------------------------------------------
@@ -105,6 +129,19 @@ namespace Gideon.UIOverhaul.Features.Corpses
         private const float PaneGap = 8f;
         private const float ToolbarHeight = 34f;
         private const float ToolbarGap = 6f;
+
+        /// <summary>The header block, sized as the ideoligion, quest and power tabs size theirs.</summary>
+        private const float HeaderHeight = 66f;
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
+
+        /// <summary>Width of the rail, and the gap between it and the list.</summary>
+        private const float RailWidth = 190f;
+
+        private const float RailGap = 10f;
         private const float PortraitSize = 40f;
         private const float ButtonHeight = 24f;
 
@@ -171,6 +208,27 @@ namespace Gideon.UIOverhaul.Features.Corpses
 
         private static bool paneOpen;
 
+        /// <summary>
+        /// The rail entry showing, held by its own label rather than by index.
+        ///
+        /// <b>A label, because the sections come and go.</b> The last animal being butchered removes that
+        /// section entirely, and an index would then quietly move the selection onto whatever section slid
+        /// into its place. A label that no longer exists simply falls back to everything, which is the right
+        /// answer for a group that has emptied.
+        ///
+        /// Null means every section, which is the state the tab opens in.
+        /// </summary>
+        private static string section;
+
+        private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railOffset;
+
+        private static readonly List<UIRailElement> RailItems = new List<UIRailElement>();
+
+        /// <summary>Every section, which is what the rail's first entry selects.</summary>
+        private const string AllDead = "*all";
+
         internal static float WindowWidth
         {
             get
@@ -217,6 +275,18 @@ namespace Gideon.UIOverhaul.Features.Corpses
             List<BurialSite> sites = GraveRoster.Sites;
 
             Rect content = inRect.ContractedBy(6f);
+
+            Header(new Rect(content.x, content.y, content.width, HeaderHeight), sections, palette);
+
+            content = new Rect(content.x, content.y + HeaderHeight + ToolbarGap, content.width,
+                Mathf.Max(0f, content.height - HeaderHeight - ToolbarGap));
+
+            // The rail runs the full height beside everything else, so switching group does not move the
+            // toolbar under the cursor.
+            Rail(new Rect(content.x, content.y, RailWidth, content.height), sections, palette);
+
+            content = new Rect(content.x + RailWidth + RailGap, content.y,
+                Mathf.Max(0f, content.width - RailWidth - RailGap), content.height);
 
             Rect toolbar = new Rect(content.x, content.y, content.width, ToolbarHeight);
 
@@ -297,17 +367,205 @@ namespace Gideon.UIOverhaul.Features.Corpses
         /// are lying in the open, what the raid left on the ground in silver, and what the freezer would gain if
         /// somebody went and butchered what is still fresh.
         /// </summary>
+        /// <summary>
+        /// The block that names the screen, with the four readouts seated in it.
+        ///
+        /// <b>The same shape the ideoligion, quest and power tabs use,</b> which is the whole point: a glyph,
+        /// a title in the display face, a line of context under it, and the figures on the right. The
+        /// readouts were already these four and already drawn through <c>TabParts.Readout</c>; they have
+        /// moved off a bare toolbar and into the place every other tab keeps them.
+        ///
+        /// <b>Titled in this tab's violet rather than the palette accent.</b> See
+        /// <see cref="CorpseFaces.AccentOf"/> for where that color comes from.
+        /// </summary>
+        private static void Header(Rect rect, List<CorpseSection> sections, UIColorPaletteDef palette)
+        {
+            // PanelBackground rather than SurfaceRaised: the two are the same value as the window behind
+            // them in the default dark palette, so a raised header had nothing but its border to separate
+            // it from the page and from the sunken rail beside it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
+
+            Rect inner = rect.ContractedBy(10f);
+
+            float text = inner.x;
+
+            if (Glyph != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize,
+                    GlyphSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = CorpseFaces.AccentOf(palette);
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f),
+                view == CorpseView.Dead ? "The Dead" : "Graves", CorpseFaces.AccentOf(palette),
+                GameFont.Medium, CorpseFaces.Display, CorpseFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 360f, 18f), Standing(sections),
+                palette.TextSecondary, GameFont.Tiny, CorpseFaces.Condensed, CorpseFaces.Size.Subtitle);
+
+            Readouts(inner, palette);
+        }
+
+        /// <summary>
+        /// The line under the title: how much is here, and how much of it is still waiting.
+        ///
+        /// <b>Two facts, because either alone misleads.</b> Eight bodies is unalarming when they are buried
+        /// and is the whole problem when they are not, and the tab exists to tell those apart.
+        /// </summary>
+        private static string Standing(List<CorpseSection> sections)
+        {
+            if (view == CorpseView.Graves)
+                return GraveRoster.TotalGraves == 0
+                    ? "No grave has been built yet"
+                    : GraveRoster.TotalGraves + (GraveRoster.TotalGraves == 1 ? " grave" : " graves")
+                      + "  -  " + GraveRoster.FreeGraves + " free";
+
+            int bodies = Total(sections);
+
+            if (bodies == 0)
+                return "Nothing dead on this map";
+
+            int waiting = CorpseRoster.UnburiedColonists;
+
+            return bodies + (bodies == 1 ? " body" : " bodies") + " on this map  -  "
+                   + (waiting == 0
+                       ? "none of ours unburied"
+                       : waiting + " of ours unburied");
+        }
+
+        /// <summary>
+        /// The rail: the groups of the dead, then the ground they go into.
+        ///
+        /// <b>It replaces two segments and a switch.</b> "The dead" and "Graves" were buttons, and animals
+        /// were a checkbox you had to find before you could learn there were eight of them. As rail entries
+        /// with counts, both the choices and their sizes are readable without pressing anything, which is
+        /// what the rail does on the ideoligion tab.
+        ///
+        /// The buried switch stays a switch: it widens the list rather than choosing what the list is of.
+        /// </summary>
+        private static void Rail(Rect rect, List<CorpseSection> sections, UIColorPaletteDef palette)
+        {
+            RailItems.Clear();
+
+            RailItems.Add(new UIRailSectionHeaderControl
+            {
+                Label = "The dead",
+                Uppercase = true,
+                Face = CorpseFaces.Mono,
+                Points = CorpseFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            });
+
+            RailItems.Add(Entry(AllDead, "Everything", Total(sections), palette));
+
+            for (int i = 0; i < sections.Count; i++)
+            {
+                CorpseSection group = sections[i];
+
+                RailItems.Add(Entry(group.Label, group.Label, Count(group), palette));
+            }
+
+            RailItems.Add(new UIRailDividerControl { Color = palette.Border });
+
+            RailItems.Add(new UIRailSectionHeaderControl
+            {
+                Label = "Ground",
+                Uppercase = true,
+                Face = CorpseFaces.Mono,
+                Points = CorpseFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            });
+
+            RailItems.Add(Entry(GraveKey, "Graves", GraveRoster.TotalGraves, palette));
+
+            string picked = UIRailControl.Draw(rect, RailItems, Selected(), ref railScroll, ref railDragging,
+                ref railOffset, palette);
+
+            if (picked == null)
+                return;
+
+            if (picked == GraveKey)
+            {
+                view = CorpseView.Graves;
+
+                return;
+            }
+
+            view = CorpseView.Dead;
+            section = picked == AllDead ? null : picked;
+        }
+
+        /// <summary>The rail key for the graves view, which is not one of the sections.</summary>
+        private const string GraveKey = "*graves";
+
+        /// <summary>Which rail entry is lit, given the view and the chosen section.</summary>
+        private static string Selected()
+        {
+            if (view == CorpseView.Graves)
+                return GraveKey;
+
+            return section ?? AllDead;
+        }
+
+        /// <summary>One rail entry, in this tab's faces and its violet.</summary>
+        private static UIRailClickableEntry Entry(string key, string label, int count,
+            UIColorPaletteDef palette)
+        {
+            return new UIRailClickableEntry(key, label)
+            {
+                Count = count,
+                Face = CorpseFaces.Condensed,
+                Points = CorpseFaces.Size.RailName,
+                CountFace = CorpseFaces.Mono,
+                CountPoints = CorpseFaces.Size.RailCount,
+
+                // Lit in the tab's own color rather than the palette accent, so the rail agrees with the
+                // title above it.
+                TextColor = Selected() == key ? CorpseFaces.AccentOf(palette) : (Color?) null,
+                CountColor = Selected() == key ? CorpseFaces.AccentOf(palette) : (Color?) null
+            };
+        }
+
+        /// <summary>
+        /// Bodies in a section, counting a folded group as the bodies it stands for.
+        ///
+        /// The same rule <see cref="Bodies"/> uses for the section suffix, and it has to be: a rail saying
+        /// eight beside a list whose own heading says twelve is worse than either number alone.
+        /// </summary>
+        private static int Count(CorpseSection group)
+        {
+            int bodies = 0;
+
+            for (int i = 0; i < group.Entries.Count; i++)
+            {
+                if (!group.Entries[i].InGroup)
+                    bodies += group.Entries[i].Members.Count;
+            }
+
+            return bodies;
+        }
+
+        /// <summary>Every body on the map, across all sections.</summary>
+        private static int Total(List<CorpseSection> sections)
+        {
+            int bodies = 0;
+
+            for (int i = 0; i < sections.Count; i++)
+                bodies += Count(sections[i]);
+
+            return bodies;
+        }
+
         private static void Toolbar(Rect bar, UIColorPaletteDef palette)
         {
-            float half = 88f;
-
-            TabParts.Segment(new Rect(bar.x, bar.y + 3f, half, ToolbarHeight - 8f), "The dead",
-                view == CorpseView.Dead, palette, () => view = CorpseView.Dead);
-
-            TabParts.Segment(new Rect(bar.x + half + 3f, bar.y + 3f, half, ToolbarHeight - 8f), "Graves",
-                view == CorpseView.Graves, palette, () => view = CorpseView.Graves);
-
-            float x = bar.x + half * 2f + 14f;
+            float x = bar.x;
 
             Search.Placeholder = view == CorpseView.Dead ? "Search the dead" : "Search graves";
 
@@ -320,7 +578,6 @@ namespace Gideon.UIOverhaul.Features.Corpses
             else
                 BuildButtons(bar, x, palette);
 
-            Readouts(bar, palette);
         }
 
         /// <summary>
@@ -463,13 +720,18 @@ namespace Gideon.UIOverhaul.Features.Corpses
 
             for (int s = 0; s < sections.Count; s++)
             {
-                CorpseSection section = sections[s];
+                CorpseSection group = sections[s];
+
+                // The rail's choice, unless a search is running: typing is a request to look everywhere, and
+                // a search that silently skipped four of the five groups would read as a broken search.
+                if (section != null && Search.IsEmpty && group.Label != section)
+                    continue;
 
                 Filtered.Clear();
 
-                for (int i = 0; i < section.Entries.Count; i++)
+                for (int i = 0; i < group.Entries.Count; i++)
                 {
-                    CorpseEntry entry = section.Entries[i];
+                    CorpseEntry entry = group.Entries[i];
 
                     if (!Search.IsEmpty && !Search.Matches(entry.Name) && !Search.Matches(entry.Subline))
                         continue;
@@ -482,7 +744,7 @@ namespace Gideon.UIOverhaul.Features.Corpses
 
                 Dead.Rows.Add(new UIDesignatorTabRow
                 {
-                    SectionLabel = section.Label,
+                    SectionLabel = group.Label,
                     SectionSuffix = Bodies(Filtered)
                 });
 

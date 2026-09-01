@@ -25,6 +25,13 @@
     <info>#4A90D9</info>
     <accent>#73BFFF</accent>
     <mood>#9B72D9</mood>  <!-- Mood Bar color -->
+
+    <!-- The Dead tab draws its title, glyph and rail selection in this. The first tab with a color of
+         its own; set it to accent to put that tab back in step with the rest. -->
+    <tabTheDead>#A98FC8</tabTheDead>
+    <tabQuests>#7FA3C9</tabQuests>
+    <tabAnimals>#98AC80</tabAnimals>
+    <tabPower>#74AFA6</tabPower>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
