@@ -54,6 +54,7 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
     /// claim it is the translation credits box, and only for a player not running the game in English, so this
     /// steps aside when that is drawn rather than sitting on top of it.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class LoadingConsole
     {
         private const float Inset = 8f;
@@ -101,6 +102,81 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
         /// <summary>Width of the elapsed-time column. Wide enough for three digits of seconds.</summary>
         private const float TimeColumn = 60f;
+
+        /// <summary>
+        /// The face every figure on this console is set in.
+        ///
+        /// <b>IBM Plex Mono, which is what the rest of the mod uses for figures.</b> The mockup for this
+        /// screen named Cascadia Mono, and it is a fine face, but the ideoligion, quest and power tabs all
+        /// count in Plex; a fourth screen counting in something else would be the only place in the mod where
+        /// a column of numbers looks like it came from somewhere else. Aaron called it on 2026-08-31.
+        ///
+        /// <b>Tabular figures are the point of a mono here.</b> These columns are read down, not across, and
+        /// a digit that shifts sideways between rows makes a column unreadable even when every value in it is
+        /// right.
+        /// </summary>
+        private const UIFace Figures = UIFace.IBMPlexMono;
+
+        /// <summary>Point size of a figure in the phase table and the header.</summary>
+        private const float FigurePoints = 8.25f;
+
+        /// <summary>Point size of a verdict cell's headline figure, which is the largest thing on the panel.</summary>
+        private const float VerdictPoints = 12.75f;
+
+        /// <summary>
+        /// The face this window's own name is set in.
+        ///
+        /// <b>Oswald in the accent color, which is how every screen in the mod names itself.</b> The
+        /// ideoligion, quest and power tabs all put their name in this face and this color, and the console
+        /// was still naming itself with a bare <c>Widgets.Label</c> in RimWorld's font. That is the one line
+        /// on the window a reader looks at first, so it was also the line most likely to make a screen that
+        /// belongs to this mod read as though it belonged to the game.
+        /// </summary>
+        private const UIFace Display = UIFace.Oswald;
+
+        /// <summary>
+        /// Point size of the window's name. The same figure the tabs use for theirs, so the two are the same
+        /// size on screen rather than merely both being called a title.
+        /// </summary>
+        private const float TitlePoints = 15.75f;
+
+        /// <summary>
+        /// Side of the glyph beside the name, and the air between the two.
+        ///
+        /// <b>20px where the tabs use 34.</b> Their glyph sits in a header block 66px tall; this one has a
+        /// single 28px strip, and 34 does not fit in it. Twenty leaves four pixels above and below and keeps
+        /// the name the largest thing on the row, which is the point of the pairing.
+        /// </summary>
+        private const float GlyphSize = 20f;
+
+        /// <summary>The same gap the tabs leave, so the spacing matches even though the glyph is smaller.</summary>
+        private const float GlyphGap = 10f;
+
+        /// <summary>
+        /// The console's own mark: three staggered bars, which is what the window is a picture of.
+        ///
+        /// <b>Held in a static field, which is why the class carries
+        /// <see cref="StaticConstructorOnStartupAttribute"/>.</b> The game warns about any type with a static
+        /// texture field that lacks it, and the check reads the field's type rather than watching when the
+        /// texture is fetched, so loading lazily would not have avoided the warning.
+        ///
+        /// <b>Null is a supported outcome.</b> The draw is guarded and the name slides left to take the space,
+        /// so a session where the art fails to load costs the glyph and nothing else.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
+        static LoadingConsole()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Console.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/LoadingConsole", false),
+                "The loading console has no glyph this session. Everything on the window still reads.");
+
+            Glyph = glyph;
+        }
 
         /// <summary>How far a step or definition is indented under the phase it belongs to.</summary>
         private const float StepIndent = 12f;
@@ -725,11 +801,24 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             try
             {
-                Text.Font = GameFont.Small;
-                Text.Anchor = TextAnchor.MiddleLeft;
-                GUI.color = palette.TextPrimary;
+                float name = rect.x;
 
-                Widgets.Label(rect, "Loading console");
+                if (Glyph != null)
+                {
+                    Rect mark = new Rect(rect.x, rect.y + (rect.height - GlyphSize) * 0.5f, GlyphSize,
+                        GlyphSize);
+
+                    GUI.color = palette.Accent;
+                    GUI.DrawTexture(mark, Glyph);
+
+                    name = mark.xMax + GlyphGap;
+                }
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.Accent;
+
+                UITextControl.Label(new Rect(name, rect.y, rect.xMax - name, rect.height),
+                    "Loading console", Display, TitlePoints);
 
                 Text.Anchor = TextAnchor.MiddleRight;
                 GUI.color = palette.TextSecondary;
@@ -740,7 +829,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 // Same reason as the last phase span: the clock runs until a game starts, so reporting it here
                 // would tell the reader their load took as long as they have been sitting on the main menu.
-                Widgets.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds));
+                UITextControl.Label(rect, counts + ", " + UILoadingLog.Duration(logSeconds), Figures,
+                    FigurePoints);
             }
             finally
             {
@@ -829,9 +919,10 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 GUI.color = palette.TextDisabled;
                 Widgets.Label(new Rect(inner.x, inner.y, inner.width, line), label.ToUpperInvariant());
 
-                Text.Font = GameFont.Small;
                 GUI.color = tint;
-                Widgets.Label(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f), value);
+
+                UITextControl.Label(new Rect(inner.x, inner.y + line - 2f, inner.width, line + 4f), value,
+                    Figures, VerdictPoints);
 
                 Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextSecondary;
@@ -1100,7 +1191,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = palette.TextDisabled;
-            Widgets.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height), row.Seconds.ToString("F2"));
+
+            UITextControl.Label(new Rect(rect.x, rect.y, TimeColumn, rect.height),
+                row.Seconds.ToString("F2"), Figures, FigurePoints);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1170,7 +1263,9 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
 
                 GUI.color = palette.TextSecondary;
                 Text.Anchor = TextAnchor.MiddleCenter;
-                Widgets.Label(chip, row.Children.ToString());
+
+                UITextControl.Label(chip, row.Children.ToString(), Figures, FigurePoints);
+
                 Text.Anchor = TextAnchor.MiddleLeft;
             }
 
@@ -1181,8 +1276,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                     : row.Duration >= 1f ? palette.Warning
                     : palette.TextDisabled;
 
-                Widgets.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
-                    UILoadingLog.Duration(row.Duration));
+                UITextControl.Label(new Rect(rect.xMax - rightWidth, rect.y, rightWidth, rect.height),
+                    UILoadingLog.Duration(row.Duration), Figures, FigurePoints);
 
                 Text.Anchor = TextAnchor.MiddleLeft;
             }
@@ -1348,8 +1443,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 : span.Duration >= 1f ? palette.Warning
                 : palette.TextSecondary;
 
-            Widgets.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
-                UILoadingLog.Duration(span.Duration));
+            UITextControl.Label(new Rect(rect.xMax - timeWidth, rect.y, timeWidth, textHeight),
+                UILoadingLog.Duration(span.Duration), Figures, FigurePoints);
 
             Text.Anchor = TextAnchor.MiddleLeft;
 
@@ -1894,8 +1989,8 @@ namespace Gideon.UIOverhaul.Features.Diagnostics
                 ? dropped + " lines not kept"
                 : visible.Count + " of " + UILoadingLog.Count + " shown";
 
-            Widgets.Label(new Rect(clear.xMax + 6f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 6f),
-                rect.height), status);
+            UITextControl.Label(new Rect(clear.xMax + 6f, rect.y, Mathf.Max(0f, rect.xMax - clear.xMax - 6f),
+                rect.height), status, Figures, FigurePoints);
 
             GUI.color = previousColor;
             Text.Anchor = previousAnchor;
