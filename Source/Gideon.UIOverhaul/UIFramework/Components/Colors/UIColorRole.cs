@@ -83,6 +83,24 @@ namespace Gideon.UIFramework.Components.Colors
         Mood,
 
         /// <summary>
+        /// The Dead tab's own color: its title, its glyph and its rail selection.
+        ///
+        /// <b>The first of the per-tab identities.</b> Every screen in the mod titled itself in
+        /// <see cref="Accent"/> until 2026-08-31, which made them consistent and made them hard to tell apart
+        /// at a glance in a screenshot. A tab may now carry a color of its own.
+        ///
+        /// <b>It is a role rather than a constant in the tab so that themes keep working.</b> A hardcoded
+        /// violet would be the one color in the interface that ignored the player's palette, and a theme
+        /// built around warm greys would have this one screen sitting outside it forever. Here, a theme
+        /// author who never heard of this tab still gets a sensible value from the fallback, and one who has
+        /// can set it.
+        ///
+        /// Kept clear of <see cref="Mood"/>, which is also violet: mood means a feeling being measured, and
+        /// this means nothing at all beyond "you are on this screen".
+        /// </summary>
+        TabTheDead,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

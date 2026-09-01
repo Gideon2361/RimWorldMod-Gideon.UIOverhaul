@@ -55,6 +55,7 @@ namespace Gideon.UIFramework.Defs
         public string danger;
         public string info;
         public string mood;
+        public string tabTheDead;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -237,6 +238,9 @@ namespace Gideon.UIFramework.Defs
 
         /// <summary>A pawn's inner state: mood bars and the like. See <see cref="UIColorRole.Mood"/>.</summary>
         public Color Mood => Get(UIColorRole.Mood);
+
+        /// <summary>The Dead tab's own color. See <see cref="UIColorRole.TabTheDead"/>.</summary>
+        public Color TabTheDead => Get(UIColorRole.TabTheDead);
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -398,6 +402,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.Danger => danger,
                 UIColorRole.Info => info,
                 UIColorRole.Mood => mood,
+                UIColorRole.TabTheDead => tabTheDead,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -444,6 +449,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.Danger => 0xE54D33FF,
                 UIColorRole.Info => 0x4A90D9FF,
                 UIColorRole.Mood => 0x9B72D9FF,
+                UIColorRole.TabTheDead => 0xA98FC8FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,
