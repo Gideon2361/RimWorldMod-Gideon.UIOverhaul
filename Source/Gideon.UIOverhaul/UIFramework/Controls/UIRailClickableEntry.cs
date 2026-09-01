@@ -66,6 +66,12 @@ namespace Gideon.UIFramework.Controls
         internal float IconSize = 20f;
 
         /// <summary>
+        /// Clear space before the swatch or glyph. Lowered by a row that needs the width for its label more
+        /// than it needs the breathing room.
+        /// </summary>
+        internal float LeadPad = 6f;
+
+        /// <summary>
         /// Drawn hard against the trailing edge, right of the count, for a row that carries its own action --
         /// a remove cross, a pin, a lock.
         ///
@@ -174,7 +180,7 @@ namespace Gideon.UIFramework.Controls
             }
 
             Color content = TextColor ?? (Disabled ? palette.TextDisabled : palette.TextPrimary);
-            float x = rect.x + 6f;
+            float x = rect.x + LeadPad;
 
             if (Swatch.HasValue)
             {
@@ -186,7 +192,11 @@ namespace Gideon.UIFramework.Controls
 
             if (Glyph != null || Icon != null)
             {
-                Rect slot = new Rect(x, rect.y + (rect.height - IconSize) / 2f, IconSize, IconSize);
+                // Square only while it fits. A slot taller than its row would hang into the rows above and
+                // below, and the row that drew first would take clicks meant for this one.
+                float tall = Mathf.Min(IconSize, rect.height);
+
+                Rect slot = new Rect(x, rect.y + (rect.height - tall) / 2f, IconSize, tall);
 
                 if (Glyph != null)
                 {

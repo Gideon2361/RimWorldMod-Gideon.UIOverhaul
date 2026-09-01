@@ -1823,6 +1823,10 @@ namespace Gideon.UIOverhaul.Features.Research
 
             List<UIRailElement> elements = new List<UIRailElement>();
 
+            // The row the game is actually working on, so the control can highlight it the way it highlights
+            // a selection anywhere else.
+            string currentKey = null;
+
             elements.Add(new UIRailSectionHeaderControl("Queue")
             {
                 Trailing = TotalDays(main),
@@ -1839,7 +1843,7 @@ namespace Gideon.UIOverhaul.Features.Research
             }
 
             for (int i = 0; i < main.Count; i++)
-                AddQueueRow(elements, main[i], i, queue, palette);
+                AddQueueRow(elements, main[i], i, queue, palette, ref currentKey);
 
             if (anomaly.Count > 0)
             {
@@ -1850,11 +1854,11 @@ namespace Gideon.UIOverhaul.Features.Research
                 });
 
                 for (int i = 0; i < anomaly.Count; i++)
-                    AddQueueRow(elements, anomaly[i], -1, queue, palette);
+                    AddQueueRow(elements, anomaly[i], -1, queue, palette, ref currentKey);
             }
 
-            UIRailControl.Draw(view, elements, null, ref queueScroll, ref queueDragging, ref queueDragOffset,
-                palette, false);
+            UIRailControl.Draw(view, elements, currentKey, ref queueScroll, ref queueDragging,
+                ref queueDragOffset, palette, false);
         }
 
         /// <summary>
@@ -1864,28 +1868,34 @@ namespace Gideon.UIOverhaul.Features.Research
         /// runs in parallel and therefore has no order to change.
         /// </summary>
         private static void AddQueueRow(List<UIRailElement> elements, ResearchProjectDef project, int index,
-            GameComponent_ResearchQueue queue, UIColorPaletteDef palette)
+            GameComponent_ResearchQueue queue, UIColorPaletteDef palette, ref string currentKey)
         {
             bool current = Find.ResearchManager != null && Find.ResearchManager.IsCurrentProject(project);
+            string key = (index >= 0 ? "q:" : "a:") + elements.Count;
 
-            elements.Add(new UIRailClickableEntry(null, project.LabelCap)
+            elements.Add(new UIRailClickableEntry(key, project.LabelCap)
             {
                 Rise = RowHeight,
-                TextColor = current ? palette.TextPrimary : (Color?) null,
                 Trailing = project.knowledgeCategory != null
                     ? "parallel"
                     : ResearchRate.Days(ResearchRate.DaysFor(project)),
                 CountColor = palette.TextDisabled,
                 Silent = true,
 
-                // Grip and badge share the leading slot, so the delegate is given room for both.
-                IconSize = 34f,
-                Glyph = (slot, color) => QueueLead(slot, index, current, palette),
+                // The grip alone, tight against the edge. The badge that used to sit beside it said the same
+                // thing as the row highlight, and a 236 pixel rail cannot afford to say anything twice.
+                LeadPad = 2f,
+                IconSize = 12f,
+                Glyph = (slot, color) => QueueGrip(slot, index, palette),
 
                 TrailingGlyphSize = 16f,
                 TrailingGlyph = (slot, color) => QueueCross(slot, project, queue, palette),
-                Decorate = row => QueueDrop(row, index, queue)
+
+                Decorate = row => QueueDrag(row, index, queue)
             });
+
+            if (current)
+                currentKey = key;
 
             if (project.CanStartNow || project.IsFinished)
                 return;
@@ -1897,33 +1907,64 @@ namespace Gideon.UIOverhaul.Features.Research
                 elements.Add(new QueueBlockedNote { Text = why });
         }
 
-        /// <summary>The drag grip and the state badge, in the row's leading slot.</summary>
-        private static void QueueLead(Rect slot, int index, bool current, UIColorPaletteDef palette)
+        /// <summary>The drag handle. Drawing only -- the drag is handled from the row, in <see cref="QueueDrag"/>.</summary>
+        private static void QueueGrip(Rect slot, int index, UIColorPaletteDef palette)
         {
-            if (index >= 0 && ResearchGlyphs.Grip != null)
+            if (index < 0 || ResearchGlyphs.Grip == null)
+                return;
+
+            Color previous = GUI.color;
+
+            GUI.color = palette.TextDisabled;
+
+            GUI.DrawTexture(new Rect(slot.x, slot.y + (slot.height - 16f) / 2f, 12f, 16f),
+                ResearchGlyphs.Grip);
+
+            GUI.color = previous;
+        }
+
+        /// <summary>
+        /// Both halves of a reorder, from the row rather than from the grip's own slot.
+        ///
+        /// <b>The press and the release have to be measured against the same rect.</b> Reading the press off
+        /// the grip's slot and the release off the row meant two coordinate spaces and a slot that did not
+        /// quite sit where it looked, and the drag simply never landed. The row is the rect the control hands
+        /// back, so both are taken from it.
+        /// </summary>
+        private static void QueueDrag(Rect row, int index, GameComponent_ResearchQueue queue)
+        {
+            if (index < 0)
+                return;
+
+            Rect grip = new Rect(row.x, row.y, 16f, row.height);
+
+            if (Event.current.type == EventType.MouseDown && Event.current.button == 0
+                                                          && Mouse.IsOver(grip))
             {
-                Rect grip = new Rect(slot.x, slot.y + 2f, 12f, 16f);
+                dragFrom = index;
 
-                Color previous = GUI.color;
+                Event.current.Use();
 
-                GUI.color = palette.TextDisabled;
-
-                GUI.DrawTexture(grip, ResearchGlyphs.Grip);
-
-                GUI.color = previous;
-
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 0
-                                                              && Mouse.IsOver(grip))
-                {
-                    dragFrom = index;
-
-                    Event.current.Use();
-                }
+                return;
             }
 
-            Rect badge = new Rect(slot.x + 16f, slot.y + 2f, 16f, 16f);
+            if (dragFrom < 0 || dragFrom == index)
+                return;
 
-            UIElementPainter.FillRounded(badge, current ? palette.Accent : palette.SurfaceSunken);
+            if (!Mouse.IsOver(row) || Event.current.type != EventType.MouseUp)
+                return;
+
+            string why;
+
+            if (!queue.Move(dragFrom, index, out why) && why != null)
+            {
+                // Recorded rather than thrown as a game message: the panel shows it in its own footer for a
+                // few seconds, which keeps the answer beside the thing that was refused.
+                refusal = why;
+                refusedAt = Time.frameCount;
+            }
+
+            dragFrom = -1;
         }
 
         /// <summary>The remove cross. Consumes its own click so the row is not selected as well.</summary>
@@ -1949,32 +1990,6 @@ namespace Gideon.UIOverhaul.Features.Research
             SoundDefOf.Click.PlayOneShotOnCamera();
         }
 
-        /// <summary>
-        /// Finishes a reorder when the mouse is released over this row.
-        ///
-        /// The drag is started by the grip and landed here, so the two halves sit a row apart rather than
-        /// inside one method. Anything the queue refuses to move says why rather than failing silently.
-        /// </summary>
-        private static void QueueDrop(Rect row, int index, GameComponent_ResearchQueue queue)
-        {
-            if (index < 0 || dragFrom < 0 || dragFrom == index)
-                return;
-
-            if (!Mouse.IsOver(row) || Event.current.type != EventType.MouseUp)
-                return;
-
-            string why;
-
-            if (!queue.Move(dragFrom, index, out why) && why != null)
-            {
-                // Recorded rather than thrown as a game message: the panel shows it in its own footer for a
-                // few seconds, which keeps the answer beside the thing that was refused.
-                refusal = why;
-                refusedAt = Time.frameCount;
-            }
-
-            dragFrom = -1;
-        }
 
 
         private static string TotalDays(List<ResearchProjectDef> main)
