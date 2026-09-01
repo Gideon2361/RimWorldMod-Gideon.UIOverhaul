@@ -121,6 +121,16 @@ namespace Gideon.UIFramework.Components.Colors
         TabAnimals,
 
         /// <summary>
+        /// The Power tab's own color, the fourth of the per-tab identities.
+        ///
+        /// <b>A muted teal, kept well away from amber.</b> Amber is what that tab uses to say a grid is in
+        /// trouble, and the mark beside the title used to be drawn in it, so the screen was saying its own
+        /// name in the color it warns with. Teal is the far side of the wheel from that and is not near any
+        /// other reading the tab makes.
+        /// </summary>
+        TabPower,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

@@ -58,6 +58,7 @@ namespace Gideon.UIFramework.Defs
         public string tabTheDead;
         public string tabQuests;
         public string tabAnimals;
+        public string tabPower;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -249,6 +250,9 @@ namespace Gideon.UIFramework.Defs
 
         /// <summary>The Animals tab's own color. See <see cref="UIColorRole.TabAnimals"/>.</summary>
         public Color TabAnimals => Get(UIColorRole.TabAnimals);
+
+        /// <summary>The Power tab's own color. See <see cref="UIColorRole.TabPower"/>.</summary>
+        public Color TabPower => Get(UIColorRole.TabPower);
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -413,6 +417,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabTheDead => tabTheDead,
                 UIColorRole.TabQuests => tabQuests,
                 UIColorRole.TabAnimals => tabAnimals,
+                UIColorRole.TabPower => tabPower,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -462,6 +467,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabTheDead => 0xA98FC8FF,
                 UIColorRole.TabQuests => 0x7FA3C9FF,
                 UIColorRole.TabAnimals => 0x98AC80FF,
+                UIColorRole.TabPower => 0x74AFA6FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,
