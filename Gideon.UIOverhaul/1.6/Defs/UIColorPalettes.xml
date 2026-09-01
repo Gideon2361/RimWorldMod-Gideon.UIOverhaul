@@ -29,6 +29,7 @@
     <!-- The Dead tab draws its title, glyph and rail selection in this. The first tab with a color of
          its own; set it to accent to put that tab back in step with the rest. -->
     <tabTheDead>#A98FC8</tabTheDead>
+    <tabQuests>#7FA3C9</tabQuests>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 

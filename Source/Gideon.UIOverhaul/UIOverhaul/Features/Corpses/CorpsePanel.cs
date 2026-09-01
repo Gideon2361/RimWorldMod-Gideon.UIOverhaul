@@ -380,7 +380,10 @@ namespace Gideon.UIOverhaul.Features.Corpses
         /// </summary>
         private static void Header(Rect rect, List<CorpseSection> sections, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+            // PanelBackground rather than SurfaceRaised: the two are the same value as the window behind
+            // them in the default dark palette, so a raised header had nothing but its border to separate
+            // it from the page and from the sunken rail beside it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
 
             Rect inner = rect.ContractedBy(10f);
 

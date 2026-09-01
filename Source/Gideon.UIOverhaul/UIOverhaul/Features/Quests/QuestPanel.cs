@@ -125,7 +125,10 @@ namespace Gideon.UIOverhaul.Features.Quests
 
         private static void Header(Rect rect, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+            // PanelBackground rather than SurfaceRaised: the two are the same value as the window behind
+            // them in the default dark palette, so a raised header had nothing but its border to separate
+            // it from the page and from the sunken rail beside it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
 
             Rect inner = rect.ContractedBy(10f);
 
@@ -138,14 +141,14 @@ namespace Gideon.UIOverhaul.Features.Quests
 
                 Color previous = GUI.color;
 
-                GUI.color = palette.Accent;
+                GUI.color = palette.TabQuests;
                 GUI.DrawTexture(mark, Glyph);
                 GUI.color = previous;
 
                 text = mark.xMax + GlyphGap;
             }
 
-            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Quests", palette.Accent,
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Quests", palette.TabQuests,
                 GameFont.Medium, QuestFaces.Display, QuestFaces.Size.Title);
 
             int offers = QuestFacts.Count(QuestList.Offers);
@@ -487,10 +490,10 @@ namespace Gideon.UIOverhaul.Features.Quests
                 Count = QuestFacts.Count(which),
                 Rise = 26f,
                 Face = QuestFaces.Condensed,
-                TextColor = on ? palette.Accent : (Color?) null,
+                TextColor = on ? palette.TabQuests : (Color?) null,
                 CountFace = QuestFaces.Mono,
                 CountPoints = QuestFaces.Size.RailCount,
-                CountColor = on ? palette.Accent : palette.TextDisabled
+                CountColor = on ? palette.TabQuests : palette.TextDisabled
             };
         }
 
