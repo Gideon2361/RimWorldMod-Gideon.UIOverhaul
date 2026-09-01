@@ -97,6 +97,29 @@ namespace Gideon.UIOverhaul.Features.Mods
 
         private static readonly List<ModRow> Shown = new List<ModRow>();
 
+        private static int filledVersion = -1;
+
+        private static string filledScope;
+
+        private static string filledSearch;
+
+        // The detail pane redraws one mod every frame, so everything it derives from that mod is worked out once
+        // per selection rather than once per frame: the requirement list allocates and enumerates, and measuring
+        // a description wraps a paragraph of text to a width.
+        private static readonly List<ModRequirement> Needs = new List<ModRequirement>();
+
+        private static string detailFor;
+
+        private static int detailVersion = -1;
+
+        private static float detailHeight;
+
+        private static float detailWidth;
+
+        private static string sentence;
+
+        private static int sentenceVersion = -1;
+
         static ModsScreen()
         {
             Texture2D glyph = null;
@@ -265,9 +288,19 @@ namespace Gideon.UIOverhaul.Features.Mods
                 ModsFaces.Size.DetailBody);
         }
 
-        /// <summary>The first two problems in words, and a count for the rest.</summary>
+        /// <summary>
+        /// The first two problems in words, and a count for the rest.
+        ///
+        /// Cached against the roster version, because it walks every row and builds strings, and the answer only
+        /// changes when the roster does.
+        /// </summary>
         private static string Sentence()
         {
+            if (sentenceVersion == ModsRoster.Version)
+                return sentence;
+
+            sentenceVersion = ModsRoster.Version;
+
             List<string> parts = new List<string>();
 
             for (int i = 0; i < ModsRoster.Rows.Count && parts.Count < 2; i++)
@@ -288,7 +321,7 @@ namespace Gideon.UIOverhaul.Features.Mods
                 }
             }
 
-            string sentence = string.Join(".  ", parts.ToArray());
+            sentence = string.Join(".  ", parts.ToArray());
 
             int rest = ModsRoster.ProblemCount - parts.Count;
 
@@ -437,27 +470,66 @@ namespace Gideon.UIOverhaul.Features.Mods
 
             Widgets.BeginScrollView(view, ref listScroll, content);
 
-            float y = 0f;
+            // <b>Only the rows actually on screen are drawn.</b> This used to run over the whole of Shown,
+            // which is fine for a dozen mods and ruinous for two hundred: every row measures and ellipsises a
+            // name, measures and paints a pill, and draws a checkbox. Doing that for rows scrolled far out of
+            // sight is what made this list lag, the same fault and the same fix as the architect tab.
+            //
+            // <b>The scroll view is still told the full height above,</b> so the bar, its travel and what
+            // scrolling reaches are all unchanged. Only the drawing is skipped, and nothing else needs the
+            // skipped rows: hover and clicks can only concern the row under the cursor, which by definition is
+            // on screen.
+            // Two rows of slack at the top rather than one: a row below the separator sits one row further
+            // down than its index suggests, so the index that is first visible can be one lower than the plain
+            // division gives. Cheaper to draw two extra rows than to special case the boundary.
+            int firstDrawn = Mathf.Max(0, Mathf.FloorToInt(listScroll.y / RowHeight) - 2);
+            int lastDrawn = Mathf.Min(Shown.Count - 1,
+                Mathf.CeilToInt((listScroll.y + view.height) / RowHeight) + 1);
 
-            for (int i = 0; i < Shown.Count; i++)
+            for (int i = firstDrawn; i <= lastDrawn; i++)
             {
+                // The separator sits above row firstInactive, so every row from there down is pushed one row
+                // further into the content. Working the offset out per row rather than accumulating a y keeps
+                // the culled loop landing on exactly the same pixels the full loop would have.
+                float y = (i + (separator && i >= firstInactive ? 1 : 0)) * RowHeight;
+
                 if (separator && i == firstInactive)
-                {
-                    Separator(new Rect(0f, y, content.width, RowHeight), palette);
-                    y += RowHeight;
-                }
+                    Separator(new Rect(0f, y - RowHeight, content.width, RowHeight), palette);
 
                 Row(new Rect(0f, y, content.width, RowHeight), Shown[i], page, palette, i);
+            }
 
-                y += RowHeight;
+            // Drawn outside the loop as well, for the case where the separator is above the first drawn row but
+            // its own row is still on screen.
+            if (separator && firstDrawn > firstInactive)
+            {
+                float at = firstInactive * RowHeight;
+
+                if (at + RowHeight >= listScroll.y && at <= listScroll.y + view.height)
+                    Separator(new Rect(0f, at, content.width, RowHeight), palette);
             }
 
             Widgets.EndScrollView();
         }
 
-        /// <summary>Applies the rail scope and the search box to the roster.</summary>
+        /// <summary>
+        /// Applies the rail scope and the search box to the roster.
+        ///
+        /// <b>Only when one of its three inputs moved.</b> Filtering two hundred mods through two case insensitive
+        /// substring tests is not expensive once, and it was being done sixty times a second for an answer that
+        /// only changes when the player types, picks a rail entry, or turns a mod on.
+        /// </summary>
         private static void Fill()
         {
+            string needle = Search.Text ?? "";
+
+            if (ModsRoster.Version == filledVersion && scope == filledScope && needle == filledSearch)
+                return;
+
+            filledVersion = ModsRoster.Version;
+            filledScope = scope;
+            filledSearch = needle;
+
             Shown.Clear();
 
             for (int i = 0; i < ModsRoster.Rows.Count; i++)
@@ -707,6 +779,8 @@ namespace Gideon.UIOverhaul.Features.Mods
                 return;
             }
 
+            Recache(row);
+
             float y = inner.y;
 
             TabParts.RowLabel(new Rect(inner.x, y, inner.width, 24f), row.Name, palette.TextPrimary,
@@ -763,10 +837,14 @@ namespace Gideon.UIOverhaul.Features.Mods
 
                 string text = row.Mod.Description ?? "";
 
-                float height = UITextControl.Height(text, ModsFaces.Body, ModsFaces.Size.DetailBody,
-                    view.width - 16f);
+                if (detailWidth != view.width)
+                {
+                    detailWidth = view.width;
+                    detailHeight = UITextControl.Height(text, ModsFaces.Body, ModsFaces.Size.DetailBody,
+                        view.width - 16f);
+                }
 
-                Rect content = new Rect(0f, 0f, view.width - 16f, height);
+                Rect content = new Rect(0f, 0f, view.width - 16f, detailHeight);
 
                 Widgets.BeginScrollView(view, ref detailScroll, content);
 
@@ -869,18 +947,31 @@ namespace Gideon.UIOverhaul.Features.Mods
             });
         }
 
-        private static float Requirements(Rect inner, float y, ModRow row, UIColorPaletteDef palette)
+        /// <summary>Refreshes the per-selection caches when the selection or the roster moved.</summary>
+        private static void Recache(ModRow row)
         {
-            List<ModRequirement> all = new List<ModRequirement>();
+            if (detailFor == row.PackageId && detailVersion == ModsRoster.Version)
+                return;
+
+            detailFor = row.PackageId;
+            detailVersion = ModsRoster.Version;
+            detailWidth = -1f;
+
+            Needs.Clear();
 
             UIGuard.Try("Mods.Requirements", () =>
             {
                 foreach (ModRequirement requirement in row.Mod.GetRequirements())
                 {
                     if (requirement != null)
-                        all.Add(requirement);
+                        Needs.Add(requirement);
                 }
             });
+        }
+
+        private static float Requirements(Rect inner, float y, ModRow row, UIColorPaletteDef palette)
+        {
+            List<ModRequirement> all = Needs;
 
             if (all.Count == 0)
                 return y;
