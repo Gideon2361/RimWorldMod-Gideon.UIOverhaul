@@ -272,6 +272,28 @@ namespace Gideon.UIFramework.Components.Colors
         /// a second channel to tell tabs apart by.
         /// </summary>
         TabHistory,
+        /// The mods screen draws its title, glyph and rail selection in this.
+        ///
+        /// <b>Page rather than tab, and the prefix is the whole point.</b> Every identity above belongs to a
+        /// <c>MainTabWindow</c> reached from the button bar during play. This one belongs to a page reached
+        /// from the main menu, with no colony behind it, so a theme author reading the field name alone can
+        /// tell which part of the game they are about to recolor.
+        ///
+        /// <b>Not <see cref="Accent"/>, which the other two non-tab screens use.</b> The loading console and
+        /// the modern log can afford the accent because neither means anything else by it. This screen does:
+        /// a mod out of load order is the fixable problem and reads in the accent blue, so taking the same
+        /// blue for the title would put an identity and a state on one screen in one hue.
+        ///
+        /// <b>The same indigo as <see cref="TabResearch"/>, which is deliberate rather than an oversight.</b>
+        /// Ten tab identities and five state colors have used the hue circle up: every gap still open is
+        /// either under twenty degrees from two neighbours at once, or sits on a semantic, and 120 degrees
+        /// is <see cref="Success"/>. Rather than take a color too close to two tabs to be told from either,
+        /// this shares one with the tab it cannot be seen beside. A research tab is reached from the button
+        /// bar during play; this page is reached from the main menu with no colony loaded, so the two are
+        /// never on screen in the same session state and cannot be mistaken for one another. They are
+        /// separate roles, so a theme that wants them apart can move either.
+        /// </summary>
+        PageMods,
 
         /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these

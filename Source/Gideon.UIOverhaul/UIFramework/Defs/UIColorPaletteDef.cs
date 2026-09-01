@@ -66,6 +66,7 @@ namespace Gideon.UIFramework.Defs
         public string tabResearch;
         public string tabFactions;
         public string tabHistory;
+        public string pageMods;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -281,6 +282,8 @@ namespace Gideon.UIFramework.Defs
         /// <summary>The History tab's own color. See <see cref="UIColorRole.TabHistory"/>.</summary>
         public Color TabHistory => Get(UIColorRole.TabHistory);
 
+        /// <summary>The mods screen&apos;s own color. See <see cref="UIColorRole.PageMods"/>.</summary>
+        public Color PageMods => Get(UIColorRole.PageMods);
 
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
@@ -454,6 +457,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabResearch => tabResearch,
                 UIColorRole.TabFactions => tabFactions,
                 UIColorRole.TabHistory => tabHistory,
+                UIColorRole.PageMods => pageMods,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -511,6 +515,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabResearch => 0x8B90CCFF,
                 UIColorRole.TabFactions => 0x65B486FF,
                 UIColorRole.TabHistory => 0x72B3C0FF,
+                UIColorRole.PageMods => 0x8F96C9FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,
