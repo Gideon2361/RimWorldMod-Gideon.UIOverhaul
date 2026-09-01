@@ -72,6 +72,7 @@ UI/MainButtonIcons/Faction
 UI/MainButtonIcons/Factions
 UI/MainButtonIcons/Finance
 UI/MainButtonIcons/Food
+UI/MainButtonIcons/Gauge
 UI/MainButtonIcons/GlobalControls
 UI/MainButtonIcons/Graveyard
 UI/MainButtonIcons/Gravships
@@ -87,12 +88,16 @@ UI/MainButtonIcons/Pawns
 UI/MainButtonIcons/Policies
 UI/MainButtonIcons/Power
 UI/MainButtonIcons/Prisoners
+UI/MainButtonIcons/Prompt
+UI/MainButtonIcons/Pulse
 UI/MainButtonIcons/Quests
 UI/MainButtonIcons/Research
 UI/MainButtonIcons/Schedule
 UI/MainButtonIcons/Slaves
+UI/MainButtonIcons/Stopwatch
 UI/MainButtonIcons/Toilet
 UI/MainButtonIcons/Undead
+UI/MainButtonIcons/Waterfall
 UI/MainButtonIcons/Wildlife
 UI/MainButtonIcons/Work
 UI/MainButtonIcons/World
