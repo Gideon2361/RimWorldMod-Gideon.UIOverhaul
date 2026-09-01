@@ -378,6 +378,19 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showBlastRadius = true;
 
         /// <summary>
+        /// Whether the world map previews the map a tile would generate.
+        ///
+        /// On by default: it draws nothing until the cursor is over a tile, and what it answers is the one
+        /// question the planet view cannot -- what the word mountainous actually costs on this particular tile.
+        ///
+        /// <b>It has a switch because the shape is reproduced from a generation step rather than read from a
+        /// map.</b> That step belongs to Ludeon and changes between versions; if it drifts, the preview goes
+        /// quietly wrong rather than visibly broken, and a player who can see that needs to be able to turn it
+        /// off without removing the mod.
+        /// </summary>
+        public bool showTilePreview = true;
+
+        /// <summary>
         /// Whether a pawn somebody is offering is described beside the letter that offers them.
         ///
         /// On by default. The letters this reaches ask the player to accept, refuse, ransom or pick between
@@ -1507,6 +1520,9 @@ namespace Gideon.UIOverhaul.Features.Options
                         case "showBlastRadius":
                             settings.showBlastRadius = !value.EqualsIgnoreCase("false");
                             break;
+                        case "showTilePreview":
+                            settings.showTilePreview = !value.EqualsIgnoreCase("false");
+                            break;
                         case "pawnDetailsOnOffers":
                             settings.pawnDetailsOnOffers = !value.EqualsIgnoreCase("false");
                             break;
@@ -1833,6 +1849,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("showMineableOverlay",
                         showMineableOverlay ? "true" : "false");
                     writer.WriteElementString("showBlastRadius", showBlastRadius ? "true" : "false");
+                    writer.WriteElementString("showTilePreview", showTilePreview ? "true" : "false");
                     writer.WriteElementString("pawnDetailsOnOffers",
                         pawnDetailsOnOffers ? "true" : "false");
                     writer.WriteElementString("quietIdleAlert", quietIdleAlert ? "true" : "false");

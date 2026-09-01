@@ -2750,6 +2750,17 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "and a tank with fuel in it both blow up bigger than one of them would, and the ring grows to "
                 + "match.");
 
+            WidgetToggle(view, ref y, palette, settings, Indent, "Preview a world tile's map",
+                settings.showTilePreview, value => settings.showTilePreview = value,
+                "Draws the map a world tile would generate, in the top right of the planet view, for "
+                + "whichever tile the cursor is over.\n\nThe tile inspector tells you the biome and one "
+                + "word of hilliness. It cannot tell you how much of the map that leaves buildable, whether "
+                + "the open ground is one piece or nine pockets between rock spurs, or how much of it sits "
+                + "under overhead mountain, and those are what you are actually choosing between.\n\nThe "
+                + "shape is exact, because it is read from the same noise the map will be generated from. "
+                + "What is missing is missing visibly: no rivers, roads, plants or ruins, because placing "
+                + "those needs a map that does not exist yet.");
+
             y += 8f;
 
             GroupLabel(view, ref y, palette, "Offers");
