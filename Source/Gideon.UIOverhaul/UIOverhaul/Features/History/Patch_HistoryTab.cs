@@ -46,16 +46,18 @@ namespace Gideon.UIOverhaul.Features.History
     [HarmonyPatch(typeof(MainTabWindow_History), nameof(MainTabWindow_History.DoWindowContents))]
     internal static class Patch_MainTabWindow_History_DoWindowContents
     {
-        public static bool Prefix(Rect fillRect)
+        // Named to match RimWorld's own parameter. Harmony binds prefix parameters by name, so a
+        // rename here does not fail loudly at the call site: it refuses the whole patch class at load.
+        public static bool Prefix(Rect rect)
         {
             if (!HistoryTabFeature.Enabled)
                 return true;
 
-            UIGuardedPanel.Draw("History.Tab", fillRect, () =>
+            UIGuardedPanel.Draw("History.Tab", rect, () =>
             {
-                Widgets.DrawBoxSolid(fillRect, UIColorPaletteDef.Active.WindowBackground);
+                Widgets.DrawBoxSolid(rect, UIColorPaletteDef.Active.WindowBackground);
 
-                HistoryPanel.Draw(fillRect);
+                HistoryPanel.Draw(rect);
             }, "The history tab shows a failure notice. Nothing about your colony has changed: this screen "
                + "only reads records the game already keeps.");
 

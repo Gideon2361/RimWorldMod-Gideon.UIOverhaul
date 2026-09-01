@@ -33,4 +33,9 @@
     <reason>Declares its size as the full screen width by the full height above the pane, so hosting it grows the pane to cover the map. It is a full-screen rank tree drawn through the tab system rather than a panel.</reason>
   </entry>
 
+  <entry>
+    <tab>VanillaPsycastsExpanded.UI.ITab_Pawn_Psycasts</tab>
+    <reason>Sets its height from the pane inside UpdateSize, as size.y = PaneTopY - 30f. Measuring it to grow the pane therefore reads the pane's own top, and hosting it recurses until the stack runs out. The re-entrancy guard on Patch_InspectPaneTopY stops that being fatal; this entry is because the tab is a full-screen psycast tree either way, and its own window is where it works.</reason>
+  </entry>
+
 </Gideon_InspectTabExclusions>
