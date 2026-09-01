@@ -172,6 +172,25 @@ namespace Gideon.UIFramework.Components.Colors
         TabPawns,
 
         /// <summary>
+        /// The Hospital tab's own color, the eighth of the per-tab identities. A muted orchid, defaulting to
+        /// <c>#CC8BC7</c>.
+        ///
+        /// <b>Not the rose a hospital would have taken.</b> That was the intent, and <see cref="TabPawns"/>
+        /// reached the magenta side first at <c>#C98BA4</c>. Two identities thirty degrees apart, on the two
+        /// tabs that both list the same people, is a distinction nobody could make.
+        ///
+        /// <b>Not red either, which is the other obvious answer.</b> Red is <see cref="Danger"/>, and this is
+        /// the one screen where danger genuinely appears in the rows: a title in the alarm color over a
+        /// condition in the alarm color is the mistake the bills tab made with amber.
+        ///
+        /// <b>What is left is the arc between the violet and the rose,</b> and it is the only arc no state
+        /// occupies. Its neighbours are <see cref="TabTheDead"/>, <see cref="TabPawns"/> and
+        /// <see cref="Mood"/>, each about thirty-five degrees away, which is as much room as an eighth
+        /// identity can be given.
+        /// </summary>
+        TabHospital,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>
