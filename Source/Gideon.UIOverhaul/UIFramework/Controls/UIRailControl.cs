@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using UnityEngine;
 using Verse;
 
@@ -65,8 +66,11 @@ namespace Gideon.UIFramework.Controls
 
             if (frame)
             {
-                Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
-                Widgets.DrawBox(rect);
+                // The same call the header block beside it makes, rather than DrawBoxSolid plus
+                // Widgets.DrawBox: that second call draws vanilla's own near-white outline, which took no
+                // palette at all, so every rail in the mod was framed in a colour no theme had chosen and one
+                // that did not match the title box it sits under.
+                UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
             }
 
             Rect inner = frame ? rect.ContractedBy(1f) : rect;

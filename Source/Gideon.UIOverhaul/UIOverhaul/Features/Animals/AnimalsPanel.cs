@@ -504,24 +504,55 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             RailItems.Add(Head("Standing orders", palette));
 
-            // Both kinds land on the same scope: the bills view already shows the two as their own blocks,
-            // so splitting the rail entry would be a distinction the list below does not make.
-            RailItems.Add(Entry(AnimalScope.Bills, "Hunting", hunting, palette));
-            RailItems.Add(Entry(AnimalScope.Bills, "Taming", taming, palette, "taming"));
+            // One scope, two entries, because they are two lists rather than two blocks of one. Both used to
+            // land on the same view: picking either drew the hunting bills and the taming bills together, and
+            // since both compared themselves against the scope rather than against the pick, Taming could never
+            // light up and Hunting was lit whichever you chose.
+            RailItems.Add(Entry(AnimalScope.Bills, "Hunting", hunting, palette, HuntingKey));
+            RailItems.Add(Entry(AnimalScope.Bills, "Taming", taming, palette, TamingKey));
 
-            string picked = UIRailControl.Draw(rect, RailItems, Key(scope), ref railScroll, ref railDragging,
+            string picked = UIRailControl.Draw(rect, RailItems, RailKey(), ref railScroll, ref railDragging,
                 ref railOffset, palette);
 
             if (picked == null)
                 return;
 
-            AnimalScope wanted = picked == "taming" ? AnimalScope.Bills : Scope(picked);
+            bool kind = picked == TamingKey;
+            bool orders = kind || picked == HuntingKey;
 
-            if (wanted == scope)
+            AnimalScope wanted = orders ? AnimalScope.Bills : Scope(picked);
+
+            // Inside the bills scope the scope alone cannot tell the two entries apart, so switching from
+            // hunting to taming has to count as a change or the second click would do nothing.
+            if (wanted == scope && (!orders || kind == tamingBills))
                 return;
 
             scope = wanted;
+
+            if (orders)
+                tamingBills = kind;
+
             Grid.Scroll = Vector2.zero;
+        }
+
+        private const string HuntingKey = "hunting";
+
+        private const string TamingKey = "taming";
+
+        /// <summary>Which kind of standing order the bills scope is showing.</summary>
+        private static bool tamingBills;
+
+        /// <summary>
+        /// The key of the lit rail entry.
+        ///
+        /// Hunting and taming share a scope but not an entry, so the scope on its own cannot say which of the
+        /// two is chosen.
+        /// </summary>
+        private static string RailKey()
+        {
+            return scope == AnimalScope.Bills
+                ? tamingBills ? TamingKey : HuntingKey
+                : Key(scope);
         }
 
         private static UIRailSectionHeaderControl Head(string label, UIColorPaletteDef palette)
@@ -541,7 +572,7 @@ namespace Gideon.UIOverhaul.Features.Animals
         {
             key = key ?? Key(which);
 
-            bool on = Key(scope) == key;
+            bool on = RailKey() == key;
 
             return new UIRailClickableEntry(key, label)
             {
@@ -926,23 +957,53 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// </summary>
         private static void Bills(Map map, bool ownPlaceHeading)
         {
+            if (ownPlaceHeading)
+            {
+                int shown = ShownBills(map);
+
+                Grid.Rows.Add(new UIDesignatorTabRow
+                {
+                    SectionLabel = MapLabels.NameOf(map),
+                    // The kind the rail asked for, since that is all this heading now has under it. Counting
+                    // both would have a place read four bills over one taming bill and nothing else.
+                    SectionSuffix = shown == 1 ? "1 bill" : shown + " bills"
+                });
+            }
+
+            if (tamingBills)
+            {
+                TamingBills(map);
+
+                return;
+            }
+
+            HuntingBills(map);
+        }
+
+        /// <summary>Bills of the kind the rail is showing, on one map.</summary>
+        private static int ShownBills(Map map)
+        {
+            if (tamingBills)
+            {
+                MapComponent_TamingBills taming = MapComponent_TamingBills.For(map);
+
+                return taming == null ? 0 : taming.Bills.Count;
+            }
+
+            MapComponent_HuntingBills hunting = MapComponent_HuntingBills.For(map);
+
+            return hunting == null ? 0 : hunting.Bills.Count;
+        }
+
+        /// <summary>A map's hunting bills, then the row that adds another.</summary>
+        private static void HuntingBills(Map map)
+        {
             MapComponent_HuntingBills component = MapComponent_HuntingBills.For(map);
 
             if (component == null)
                 return;
 
             List<HuntingBill> bills = component.Bills;
-
-            if (ownPlaceHeading)
-            {
-                Grid.Rows.Add(new UIDesignatorTabRow
-                {
-                    SectionLabel = MapLabels.NameOf(map),
-                    // Both kinds, because both hang under this heading. Counting only the hunting ones would
-                    // have a place read "no bills" with a taming bill visibly sitting inside it.
-                    SectionSuffix = Total(map) == 1 ? "1 bill" : Total(map) + " bills"
-                });
-            }
 
             string key = (map?.uniqueID ?? -1) + "/bills";
             bool folded = Folded.Contains(key) && Search.IsEmpty;
@@ -989,7 +1050,6 @@ namespace Gideon.UIOverhaul.Features.Animals
                 DrawBackground = DrawBillRow
             });
 
-            TamingBills(map);
         }
 
         /// <summary>
