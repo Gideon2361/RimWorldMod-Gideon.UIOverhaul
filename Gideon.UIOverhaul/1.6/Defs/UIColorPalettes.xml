@@ -48,6 +48,11 @@
          resting band in secondary text rather than in this, so the identity never lands beside the green
          that means Ally. -->
     <tabFactions>#65B486</tabFactions>
+
+    <!-- The mods screen, which is a page reached from the main menu rather than a colony tab. Shares the
+         research indigo on purpose: the hue circle is full, and these two are the one pair that can never
+         be on screen together, since reaching this page means no colony is loaded. -->
+    <pageMods>#8F96C9</pageMods>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -137,6 +142,7 @@
     <tabHospital>#99458C</tabHospital>
     <tabResearch>#4A4F94</tabResearch>
     <tabFactions>#2B8752</tabFactions>
+    <pageMods>#4A4F94</pageMods>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>
