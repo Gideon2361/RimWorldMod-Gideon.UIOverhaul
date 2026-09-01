@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
+using Gideon.UIFramework.Helpers;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -93,6 +94,16 @@ namespace Gideon.UIFramework.Controls
 
         /// <summary>Tooltip over the whole column heading.</summary>
         public string Tooltip;
+
+        /// <summary>
+        /// Where this column's heading sits in its cell, or null to take the grid's own default.
+        ///
+        /// A heading points at the column it names, so it wants the alignment that column's cells use: a name
+        /// column's heading belongs at the left edge, a bar's over the middle. Only worth setting once the
+        /// headings are the same size as the data, which is when a heading over the wrong part of a wide
+        /// column stops looking like a heading at all.
+        /// </summary>
+        public TextAnchor? HeaderAnchor;
 
         /// <summary>
         /// Draws this column's heading instead of <see cref="Label"/>, in the heading cell.
@@ -284,6 +295,35 @@ namespace Gideon.UIFramework.Controls
         /// pinned-heading behavior is the control's, but it is not compulsory.
         /// </summary>
         public bool HasHeaderRow = true;
+
+        /// <summary>
+        /// The typeface for level column headings, or <see cref="UIFace.Game"/> to leave them as they were.
+        ///
+        /// Opt-in rather than a new default, because this control draws a dozen tabs and a caption change is
+        /// not the sort of thing to land on eleven of them as a side effect of restyling the twelfth. A tab
+        /// adopting the header convention sets these three; every other tab is drawn exactly as before.
+        /// </summary>
+        internal UIFace HeaderFace = UIFace.Game;
+
+        /// <summary>Point size for <see cref="HeaderFace"/>. Ignored while the face is the game's.</summary>
+        internal float HeaderPoints;
+
+        /// <summary>
+        /// Whether a level heading is upper-cased, and given the letter-spacing that makes small caps read.
+        ///
+        /// Paired with the mono face rather than offered on its own: upper-case at caption size is what
+        /// separates a heading from the data under it once the heading stops being a different size.
+        /// </summary>
+        internal bool HeaderUppercase;
+
+        /// <summary>
+        /// Whether the heading sits on the grid's own sunken surface with a hairline under it, rather than on
+        /// the panel background.
+        ///
+        /// The hairline is the point. A heading row that shares a color with the rows below it needs an edge
+        /// or the first row reads as part of the heading.
+        /// </summary>
+        internal bool HeaderSeated;
 
         /// <summary>
         /// How many leading columns stay put when the grid is scrolled sideways. Zero means none, which is the
@@ -1129,7 +1169,11 @@ namespace Gideon.UIFramework.Controls
         private void DrawHeader(Rect header, UIColorPaletteDef palette, int firstColumn, int lastColumn,
             float startX, int bandableOffset)
         {
-            Widgets.DrawBoxSolid(header, palette.PanelBackground);
+            Widgets.DrawBoxSolid(header, HeaderSeated ? palette.SurfaceSunken : palette.PanelBackground);
+
+            // Outside the group below, so it spans the whole heading rather than stopping where the columns do.
+            if (HeaderSeated)
+                Widgets.DrawBoxSolid(new Rect(header.x, header.yMax - 1f, header.width, 1f), palette.Border);
 
             GameFont previousFont = Text.Font;
             TextAnchor previousAnchor = Text.Anchor;
@@ -1191,7 +1235,7 @@ namespace Gideon.UIFramework.Controls
                         if (leaning)
                             DrawLeaningLabel(cell, column.Label, palette);
                         else
-                            DrawLevelLabel(cell, column.Label, palette);
+                            DrawLevelLabel(cell, column.Label, palette, column.HeaderAnchor);
                     }
 
                     // Registered on the upright cell, never inside the rotation. A tooltip region is taken in
@@ -1211,14 +1255,39 @@ namespace Gideon.UIFramework.Controls
             }
         }
 
-        private static void DrawLevelLabel(Rect cell, string label, UIColorPaletteDef palette)
+        private void DrawLevelLabel(Rect cell, string label, UIColorPaletteDef palette, TextAnchor? anchor)
         {
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.LowerCenter;
-            GUI.color = Mouse.IsOver(cell) ? palette.TextPrimary : palette.TextSecondary;
+            bool styled = HeaderFace != UIFace.Game && HeaderPoints > 0f;
 
-            Widgets.Label(new Rect(cell.x, cell.y, cell.width, cell.height - 4f), label);
+            // Centred over the column unless the column says otherwise, which is what a column whose cells are
+            // left-aligned text wants: a heading centred over a name column points at nothing.
+            Text.Anchor = anchor ?? (styled ? TextAnchor.MiddleLeft : TextAnchor.LowerCenter);
+
+            // A styled heading is the same weight as the data under it, so hover cannot be the only thing
+            // separating them -- it sits at TextDisabled and comes up to TextSecondary, one step below the
+            // rows rather than one step above.
+            GUI.color = styled
+                ? Mouse.IsOver(cell) ? palette.TextSecondary : palette.TextDisabled
+                : Mouse.IsOver(cell) ? palette.TextPrimary : palette.TextSecondary;
+
+            if (!styled)
+            {
+                Text.Font = GameFont.Tiny;
+
+                Widgets.Label(new Rect(cell.x, cell.y, cell.width, cell.height - 4f), label);
+
+                return;
+            }
+
+            Rect box = new Rect(cell.x + HeaderPad, cell.y, Mathf.Max(0f, cell.width - HeaderPad * 2f),
+                cell.height);
+
+            UITextControl.LabelEllipses(box, HeaderUppercase ? label.ToUpperInvariant() : label, HeaderFace,
+                HeaderPoints);
         }
+
+        /// <summary>Breathing room either side of a styled heading, matching a cell's own inset.</summary>
+        private const float HeaderPad = 10f;
 
         /// <summary>
         /// One heading, turned up from the bottom of its own column per <see cref="HeaderLabelOrientation"/>.
