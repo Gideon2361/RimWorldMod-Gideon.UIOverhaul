@@ -76,6 +76,43 @@ namespace Gideon.UIOverhaul.Features.Research
             /// or not anybody meant them to, and a column of figures wants to be quiet.
             /// </summary>
             internal const float Figure = 8.25f;
+
+            /// <summary>The selected project's name at the top of the detail panel.</summary>
+            internal const float Detail = 12.75f;
+
+            /// <summary>
+            /// The two grey lines under it: the tech level and cost, and how far through it the colony is.
+            ///
+            /// Both are mostly figures, which is why they are the mono rather than the condensed face.
+            /// </summary>
+            internal const float Meta = 8.25f;
+
+            /// <summary>
+            /// Sentences: a project's description, the note saying why it was filed where it was, and the
+            /// warning under a queue entry that cannot start.
+            /// </summary>
+            internal const float Prose = 9.75f;
+
+            /// <summary>
+            /// One name in a list in the detail panel: an unlock, a prerequisite, something this leads to.
+            ///
+            /// The same size as a chip, because these are the same kind of thing -- a short label to scan
+            /// rather than a sentence to read.
+            /// </summary>
+            internal const float Row = 9.75f;
+
+            /// <summary>
+            /// A project's name on its node, which is the most-repeated string on the screen.
+            ///
+            /// The same size as a name in the rail, because it is the same kind of thing. It used to be
+            /// whatever <c>GameFont.Small</c> mapped to in this face, which is a size nobody chose: it came
+            /// out of matching RimWorld's line box, so the node was as tall as the game's font wanted rather
+            /// than as tall as the words needed.
+            /// </summary>
+            internal const float Node = 11.25f;
+
+            /// <summary>A dialog's own title, which is a heading rather than a tab name.</summary>
+            internal const float DialogTitle = 13.5f;
         }
     }
 }

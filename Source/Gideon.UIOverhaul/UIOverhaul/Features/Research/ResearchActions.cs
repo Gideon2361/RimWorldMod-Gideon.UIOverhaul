@@ -185,18 +185,15 @@ namespace Gideon.UIOverhaul.Features.Research
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
-            GameFont font = Text.Font;
             Color color = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Medium;
                 GUI.color = palette.TextPrimary;
 
-                Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width, 30f),
-                    ResearchFacts.Name(target) + " needs " + (chain.Count - 1) + " more first");
-
-                Text.Font = GameFont.Small;
+                UITextControl.Label(new Rect(inRect.x, inRect.y, inRect.width, 30f),
+                    ResearchFacts.Name(target) + " needs " + (chain.Count - 1) + " more first",
+                    ResearchFaces.Display, ResearchFaces.Size.DialogTitle);
 
                 float y = inRect.y + 36f;
                 float listHeight = inRect.height - 36f - 44f;
@@ -212,10 +209,12 @@ namespace Gideon.UIOverhaul.Features.Research
 
                     TabParts.RowLabel(new Rect(row.x + 4f, row.y, row.width - 74f, row.height),
                         (i + 1) + ".  " + ResearchFacts.Name(chain[i]),
-                        chain[i] == target ? palette.TextPrimary : palette.TextSecondary);
+                        chain[i] == target ? palette.TextPrimary : palette.TextSecondary,
+                        ResearchFaces.Condensed, ResearchFaces.Size.Row);
 
                     TabParts.RowLabel(new Rect(row.xMax - 70f, row.y, 66f, row.height),
-                        ResearchRate.Days(ResearchRate.DaysFor(chain[i])), palette.TextDisabled, GameFont.Tiny);
+                        ResearchRate.Days(ResearchRate.DaysFor(chain[i])), palette.TextDisabled,
+                        ResearchFaces.Mono, ResearchFaces.Size.Figure);
                 }
 
                 Widgets.EndScrollView();
@@ -223,12 +222,11 @@ namespace Gideon.UIOverhaul.Features.Research
                 float total = ResearchActions.DaysFor(chain);
 
                 GUI.color = palette.TextDisabled;
-                Text.Font = GameFont.Tiny;
 
-                Widgets.Label(new Rect(inRect.x, inRect.yMax - 40f, 200f, 20f),
-                    total < 0f ? "" : "About " + ResearchRate.Days(total) + " altogether");
+                UITextControl.Label(new Rect(inRect.x, inRect.yMax - 40f, 200f, 20f),
+                    total < 0f ? "" : "About " + ResearchRate.Days(total) + " altogether",
+                    ResearchFaces.Mono, ResearchFaces.Size.Figure);
 
-                Text.Font = GameFont.Small;
                 GUI.color = palette.TextPrimary;
 
                 Rect addAll = new Rect(inRect.xMax - 130f, inRect.yMax - 34f, 130f, 30f);
@@ -253,7 +251,6 @@ namespace Gideon.UIOverhaul.Features.Research
             }
             finally
             {
-                Text.Font = font;
                 GUI.color = color;
             }
         }

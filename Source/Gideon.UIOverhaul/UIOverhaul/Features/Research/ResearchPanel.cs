@@ -53,15 +53,19 @@ namespace Gideon.UIOverhaul.Features.Research
         private const float MinCanvasWidth = 420f;
 
         /// <summary>
-        /// The text row itself, measured from the font rather than written down.
+        /// The text row itself, measured from the face rather than written down.
         ///
-        /// The rail labels are Small from 2026-08-23, on Aaron's instruction -- they are names to read, not
-        /// figures to scan. A literal 20 suited Tiny and would clip Small, and it is a setting anyway: a player
-        /// who turns tiny text off gets taller lines than either.
+        /// The rail labels are names to read rather than figures to scan, which is why they take the larger of
+        /// the two rail sizes. Measured through the control that draws them: a row sized against one face and
+        /// filled with another is either clipped or padded, and which of the two depends on the words.
         /// </summary>
         private static float RailRowHeight
         {
-            get { return Mathf.Ceil(UIFonts.LineHeightOf(GameFont.Small) + 2f); }
+            get
+            {
+                return Mathf.Ceil(
+                    UITextControl.LineHeight(ResearchFaces.Condensed, ResearchFaces.Size.RailName) + 2f);
+            }
         }
 
         /// <summary>
@@ -353,11 +357,10 @@ namespace Gideon.UIOverhaul.Features.Research
             float subtitleWidth = Mathf.Max(0f, Mathf.Min(460f, wall - text));
 
             TabParts.RowLabel(new Rect(text, inner.y, titleWidth, 24f), "Research",
-                ResearchFaces.AccentOf(palette), GameFont.Medium, ResearchFaces.Display,
-                ResearchFaces.Size.Title);
+                ResearchFaces.AccentOf(palette), ResearchFaces.Display, ResearchFaces.Size.Title);
 
             TabParts.RowLabel(new Rect(text, inner.y + 23f, subtitleWidth, 18f), Subtitle(),
-                palette.TextSecondary, GameFont.Tiny, ResearchFaces.Condensed, ResearchFaces.Size.Subtitle);
+                palette.TextSecondary, ResearchFaces.Condensed, ResearchFaces.Size.Subtitle);
         }
 
         /// <summary>
@@ -1003,13 +1006,10 @@ namespace Gideon.UIOverhaul.Features.Research
 
             List<ResearchGroup> groups = ResearchGraph.Groups;
 
-            GameFont font = Text.Font;
             Color color = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Small;
-
                 for (int i = 0; i < groups.Count; i++)
                 {
                     ResearchGroup group = groups[i];
@@ -1088,7 +1088,6 @@ namespace Gideon.UIOverhaul.Features.Research
             finally
             {
                 GUI.color = color;
-                Text.Font = font;
             }
         }
 
@@ -1227,7 +1226,6 @@ namespace Gideon.UIOverhaul.Features.Research
 
             Text.Anchor = TextAnchor.UpperLeft;
             GUI.color = palette.TextPrimary;
-            Text.Font = GameFont.Small;
 
             TooltipHandler.TipRegion(fold,
                 (TipSignal) (railFolded ? "Show the contents rail." : "Fold the contents rail."));
@@ -1525,7 +1523,8 @@ namespace Gideon.UIOverhaul.Features.Research
             if (over)
                 Widgets.DrawHighlight(row);
 
-            TabParts.RowLabel(row, text, over ? palette.Accent : color, GameFont.Tiny);
+            TabParts.RowLabel(row, text, over ? palette.Accent : color, ResearchFaces.Condensed,
+                ResearchFaces.Size.Row);
 
             return over && Widgets.ButtonInvisible(row);
         }
@@ -1755,7 +1754,7 @@ namespace Gideon.UIOverhaul.Features.Research
             if (masked)
             {
                 ResearchMask.Draw(new Rect(body.x, y, body.width, 24f), ResearchMask.Key(project, "name"),
-                    palette.Mood, GameFont.Small);
+                    palette.Mood, ResearchFaces.Size.Detail);
 
                 y += 26f;
 
@@ -1767,12 +1766,12 @@ namespace Gideon.UIOverhaul.Features.Research
             else
             {
                 TabParts.RowLabel(new Rect(body.x, y, body.width, 24f), project.LabelCap.ToString(),
-                    palette.TextPrimary);
+                    palette.TextPrimary, ResearchFaces.Condensed, ResearchFaces.Size.Detail);
 
                 y += 26f;
 
                 TabParts.RowLabel(new Rect(body.x, y, body.width, 16f), Meta(project), palette.TextDisabled,
-                    GameFont.Tiny);
+                    ResearchFaces.Mono, ResearchFaces.Size.Meta);
 
                 y += 20f;
 
@@ -1785,7 +1784,7 @@ namespace Gideon.UIOverhaul.Features.Research
                 y += 8f;
 
                 TabParts.RowLabel(new Rect(body.x, y, body.width, 16f), Progress(project), palette.TextDisabled,
-                    GameFont.Tiny);
+                    ResearchFaces.Mono, ResearchFaces.Size.Meta);
 
                 y += 20f;
             }
@@ -1801,7 +1800,7 @@ namespace Gideon.UIOverhaul.Features.Research
             if (!masked && !project.description.NullOrEmpty())
             {
                 y = TabParts.Note(new Rect(body.x, y, body.width, 0f), y, project.description, palette,
-                    GameFont.Tiny, palette.TextSecondary);
+                    ResearchFaces.Body, ResearchFaces.Size.Prose, palette.TextSecondary);
 
                 y += 8f;
             }
@@ -1842,21 +1841,23 @@ namespace Gideon.UIOverhaul.Features.Research
 
             UIElementPainter.Outline(box, palette.Border, palette.SurfaceSunken);
 
-            GameFont font = Text.Font;
             TextAnchor anchor = Text.Anchor;
             Color color = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleLeft;
 
                 Widgets.DrawBoxSolid(new Rect(box.x + 6f, box.center.y - 4f, 8f, 8f), tint);
 
                 GUI.color = tint;
 
-                UIRichText.Label(new Rect(box.x + 19f, box.y, box.width - 24f, box.height),
-                    "<b>" + ResearchBands.LabelOf(band) + "</b>");
+                // The same caps the band's own heading on the canvas takes, rather than a bold tag: markup
+                // cannot be drawn from a baked sheet, so the weight is the face's job now, and this is the
+                // one place in the detail panel naming a band.
+                UITextControl.Label(new Rect(box.x + 19f, box.y, box.width - 24f, box.height),
+                    ResearchBands.LabelOf(band).ToUpperInvariant(), ResearchFaces.Condensed,
+                    ResearchFaces.Size.Row, FontStyle.Bold);
 
                 y += 26f;
 
@@ -1867,11 +1868,10 @@ namespace Gideon.UIOverhaul.Features.Research
             {
                 GUI.color = color;
                 Text.Anchor = anchor;
-                Text.Font = font;
             }
 
             y = TabParts.Note(new Rect(body.x, y, body.width, 0f), y, ResearchTaxonomy.ReasonFor(project),
-                palette, GameFont.Tiny, palette.TextDisabled);
+                palette, ResearchFaces.Body, ResearchFaces.Size.Prose, palette.TextDisabled);
 
             y += 6f;
 
@@ -1883,7 +1883,8 @@ namespace Gideon.UIOverhaul.Features.Research
                 ResearchSourceMarks.ColorFor(project, palette));
 
             TabParts.RowLabel(new Rect(source.x + 11f, source.y, source.width - 11f, source.height),
-                ResearchSourceMarks.NameFor(project), palette.TextSecondary, GameFont.Tiny);
+                ResearchSourceMarks.NameFor(project), palette.TextSecondary, ResearchFaces.Condensed,
+                ResearchFaces.Size.Row);
 
             return y + 20f;
         }
@@ -1912,20 +1913,20 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private static float Section(Rect body, float y, string title, UIColorPaletteDef palette)
         {
-            GameFont font = Text.Font;
             Color color = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Tiny;
                 GUI.color = palette.TextDisabled;
 
-                Widgets.Label(new Rect(body.x, y + 4f, body.width, 16f), title);
+                // Small caps in the mono, the same heading the two rails and the readout captions take. It is
+                // the one device this tab uses to say "a group of things starts here".
+                UITextControl.Label(new Rect(body.x, y + 4f, body.width, 16f), title.ToUpperInvariant(),
+                    ResearchFaces.Mono, ResearchFaces.Size.Caption);
             }
             finally
             {
                 GUI.color = color;
-                Text.Font = font;
             }
 
             return y + 22f;
@@ -1989,7 +1990,8 @@ namespace Gideon.UIOverhaul.Features.Research
             if (unlocked.Count > shown && !masked)
             {
                 TabParts.RowLabel(new Rect(body.x + 4f, y, body.width - 4f, 18f),
-                    "and " + (unlocked.Count - shown) + " more", palette.TextDisabled, GameFont.Tiny);
+                    "and " + (unlocked.Count - shown) + " more", palette.TextDisabled,
+                    ResearchFaces.Condensed, ResearchFaces.Size.Row);
 
                 y += 18f;
             }
@@ -2102,7 +2104,7 @@ namespace Gideon.UIOverhaul.Features.Research
         private static float Empty(Rect body, float y, string text, UIColorPaletteDef palette)
         {
             TabParts.RowLabel(new Rect(body.x + 4f, y, body.width - 4f, 18f), text, palette.TextDisabled,
-                GameFont.Tiny);
+                ResearchFaces.Condensed, ResearchFaces.Size.Row);
 
             return y + 22f;
         }
@@ -2400,23 +2402,21 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private static void DrawNumber(Rect rect, int number, Color color)
         {
-            GameFont font = Text.Font;
             TextAnchor anchor = Text.Anchor;
             Color previous = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleCenter;
                 GUI.color = color;
 
-                Widgets.Label(rect, number.ToString());
+                UITextControl.Label(rect, number.ToString(), ResearchFaces.Mono,
+                    ResearchFaces.Size.RailCount);
             }
             finally
             {
                 GUI.color = previous;
                 Text.Anchor = anchor;
-                Text.Font = font;
             }
         }
 
@@ -2433,7 +2433,8 @@ namespace Gideon.UIOverhaul.Features.Research
 
             if (recent && refusal != null)
             {
-                TabParts.Note(rect, rect.y, refusal, palette, GameFont.Tiny, palette.Warning);
+                TabParts.Note(rect, rect.y, refusal, palette, ResearchFaces.Body, ResearchFaces.Size.Prose,
+                    palette.Warning);
 
                 return;
             }

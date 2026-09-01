@@ -59,20 +59,45 @@ namespace Gideon.UIOverhaul.Features.Research
         /// <summary>The round affordance in the top right: the queue number, or the button that puts one there.</summary>
         private const float BadgeSize = 15f;
 
+        /// <summary>The name's own line box, in the face and at the size it is drawn in.</summary>
+        private static float NameLine
+        {
+            get { return UITextControl.LineHeight(ResearchFaces.Condensed, ResearchFaces.Size.Node); }
+        }
+
+        /// <summary>
+        /// The figures row, which is whichever of its two faces has the taller line.
+        ///
+        /// The cost is always the mono; the caption beside it is the mono when the state is one to act on and
+        /// the condensed face when it is a sentence about a missing prerequisite. Sizing to one of them would
+        /// clip the other on whichever nodes happened to be in the other state.
+        /// </summary>
+        private static float FigureLine
+        {
+            get
+            {
+                return Mathf.Max(
+                    UITextControl.LineHeight(ResearchFaces.Mono, ResearchFaces.Size.Figure),
+                    UITextControl.LineHeight(ResearchFaces.Condensed, ResearchFaces.Size.Chip));
+            }
+        }
+
         /// <summary>
         /// How tall every node is.
         ///
-        /// Measured from the fonts rather than written down, because the font is a setting: a player who turns
-        /// tiny text off gets taller lines, and a literal that suited the default would clip the bottom line off
-        /// every node on the canvas.
+        /// Measured from the faces rather than written down, because the size is a setting: a player who turns
+        /// tiny text off gets taller fallback lines, and a literal that suited the default would clip the bottom
+        /// line off every node on the canvas.
         /// </summary>
         internal static float NodeHeight
         {
             get
             {
-                // The name is Small and the state row is Tiny, from 2026-08-23: Aaron asked for the name not to
-                // be Tiny, and it is the one string on the card somebody actually reads rather than scans.
-                float line = UIFonts.LineHeightOf(GameFont.Small) + UIFonts.LineHeightOf(GameFont.Tiny);
+                // Measured from the faces and point sizes the two rows are actually set in, not from the
+                // GameFont line boxes they used to borrow. The name is the one string on the card somebody
+                // reads rather than scans, so it keeps the larger of the two sizes; the figures row takes
+                // whichever of its two faces is taller, since a blocked caption and a cost share it.
+                float line = NameLine + FigureLine;
 
                 // Two rows, not three, from 2026-08-23: the name on one line and the state beside the cost on
                 // the next. It was three because the name wrapped, and a name allowed two lines takes two
@@ -112,10 +137,10 @@ namespace Gideon.UIOverhaul.Features.Research
             float x = rect.x + PadLeft;
             float width = rect.width - PadLeft - PadRight;
 
-            // Two fonts, two line heights. The name reads at Small and the state row scans at Tiny, so a single
-            // "line" local would have put one of them in the other's space.
-            float nameLine = UIFonts.LineHeightOf(GameFont.Small);
-            float line = UIFonts.LineHeightOf(GameFont.Tiny);
+            // Two faces, two line heights. The name reads at its own size and the figures row scans at a
+            // smaller one, so a single "line" local would have put one of them in the other space.
+            float nameLine = NameLine;
+            float line = FigureLine;
 
             Color ink = Ink(palette, state, dimmed);
 
@@ -125,7 +150,8 @@ namespace Gideon.UIOverhaul.Features.Research
             Rect nameBand = new Rect(x, rect.y + PadTop, width - reserved, nameLine);
 
             if (state == ResearchState.Unknown)
-                ResearchMask.Draw(nameBand, ResearchMask.Key(project, "name"), palette.Mood, GameFont.Small);
+                ResearchMask.Draw(nameBand, ResearchMask.Key(project, "name"), palette.Mood,
+                    ResearchFaces.Size.Node);
             else
                 Name(nameBand, project.LabelCap.ToString(), ink);
 
@@ -188,7 +214,7 @@ namespace Gideon.UIOverhaul.Features.Research
                     ResearchMask.Key(project, "cost"), palette.TextDisabled);
 
                 TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - half - 4f), band.height),
-                    ResearchFacts.ChipFor(node, state), flag, GameFont.Tiny, ResearchFaces.Condensed,
+                    ResearchFacts.ChipFor(node, state), flag, ResearchFaces.Condensed,
                     ResearchFaces.Size.Chip);
 
                 return;
@@ -250,7 +276,7 @@ namespace Gideon.UIOverhaul.Features.Research
                                                        || state == ResearchState.Researching;
 
             TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - costWidth - 6f), band.height),
-                chip, flag, GameFont.Tiny, acting ? ResearchFaces.Mono : ResearchFaces.Condensed,
+                chip, flag, acting ? ResearchFaces.Mono : ResearchFaces.Condensed,
                 acting ? ResearchFaces.Size.Figure : ResearchFaces.Size.Chip);
         }
 
@@ -313,23 +339,21 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private static void Number(Rect badge, int place, Color color)
         {
-            GameFont font = Text.Font;
             TextAnchor anchor = Text.Anchor;
             Color previous = GUI.color;
 
             try
             {
-                Text.Font = GameFont.Tiny;
                 Text.Anchor = TextAnchor.MiddleCenter;
                 GUI.color = color;
 
-                Widgets.Label(badge, place.ToString());
+                UITextControl.Label(badge, place.ToString(), ResearchFaces.Mono,
+                    ResearchFaces.Size.RailCount);
             }
             finally
             {
                 GUI.color = previous;
                 Text.Anchor = anchor;
-                Text.Font = font;
             }
         }
 
@@ -441,14 +465,11 @@ namespace Gideon.UIOverhaul.Features.Research
 
         private static void Name(Rect band, string text, Color color)
         {
-            GameFont font = Text.Font;
             Color previous = GUI.color;
             bool wrap = Text.WordWrap;
 
             try
             {
-                Text.Font = GameFont.Small;
-
                 // Never wrapped, from 2026-08-23. A wrapping name forces every node in the game to be as tall
                 // as the longest name in it, and the second line landed on the row beneath whenever the reserve
                 // was wrong -- which is the truncation family this mod has now hit six times. One line with an
@@ -460,13 +481,12 @@ namespace Gideon.UIOverhaul.Features.Research
                 // fits more of "Multi-analyzer" into a node than the game's own does before the ellipsis. A name
                 // carrying markup or a character the sheet was not baked over falls back to RimWorld's font on
                 // its own, so a modded project with an unusual name still reads.
-                UITextControl.LabelEllipses(band, text, UIFace.BarlowCondensed, GameFont.Small);
+                UITextControl.LabelEllipses(band, text, ResearchFaces.Condensed, ResearchFaces.Size.Node);
             }
             finally
             {
                 Text.WordWrap = wrap;
                 GUI.color = previous;
-                Text.Font = font;
             }
         }
 
