@@ -44,6 +44,7 @@ namespace Gideon.UIOverhaul.Features.Animals
     /// holding one across frames would eventually mean the opened row was a different species than the one the
     /// player clicked. <see cref="GroupKey"/> is the stable name for a species in a place.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class AnimalsPanel
     {
         // ---------------------------------------------------------------------------------------
@@ -66,6 +67,41 @@ namespace Gideon.UIOverhaul.Features.Animals
         private const float PaneGap = 8f;
         private const float ToolbarHeight = 30f;
         private const float ToolbarGap = 6f;
+
+        /// <summary>The header block, sized as every other tab sizes its own.</summary>
+        private const float HeaderHeight = 66f;
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
+
+        /// <summary>Width of the rail, and the gap between it and the list.</summary>
+        private const float RailWidth = 190f;
+
+        private const float RailGap = 10f;
+
+        /// <summary>
+        /// The tab's own mark, the same texture its button on the bar uses.
+        ///
+        /// Held in a static field, which is why the class carries StaticConstructorOnStartup: the game warns
+        /// about any type with a static texture field that lacks it, and the check reads the field's type
+        /// rather than watching when the texture is fetched.
+        /// </summary>
+        private static readonly Texture2D Glyph;
+
+        static AnimalsPanel()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Animals.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Animals", false),
+                "The header has no glyph this session. Everything on the tab still reads.");
+
+            Glyph = glyph;
+        }
 
         /// <summary>How many individuals an opened species lists before it stops and says how many are left.</summary>
         private const int MaxOpenedMembers = 14;
@@ -239,6 +275,18 @@ namespace Gideon.UIOverhaul.Features.Animals
 
             Rect content = inRect.ContractedBy(6f);
 
+            Header(new Rect(content.x, content.y, content.width, HeaderHeight), sections, palette);
+
+            content = new Rect(content.x, content.y + HeaderHeight + ToolbarGap, content.width,
+                Mathf.Max(0f, content.height - HeaderHeight - ToolbarGap));
+
+            // The rail runs the full height beside everything else, so changing scope does not move the
+            // toolbar under the cursor.
+            Rail(new Rect(content.x, content.y, RailWidth, content.height), sections, palette);
+
+            content = new Rect(content.x + RailWidth + RailGap, content.y,
+                Mathf.Max(0f, content.width - RailWidth - RailGap), content.height);
+
             Rect toolbar = new Rect(content.x, content.y, content.width, ToolbarHeight);
 
             DrawToolbar(toolbar, sections, palette);
@@ -341,68 +389,196 @@ namespace Gideon.UIOverhaul.Features.Animals
             AnimalScope.All, AnimalScope.Colony, AnimalScope.Wild, AnimalScope.Bills
         };
 
-        private static void DrawToolbar(Rect bar, List<AnimalSection> sections, UIColorPaletteDef palette)
+        /// <summary>
+        /// The block that names the screen, with its figures seated in it.
+        ///
+        /// The same shape the ideoligion, quest, power and corpse tabs use. The figures were three chips on
+        /// the right of the toolbar; they are the same numbers, drawn the way every other tab draws its own.
+        /// </summary>
+        private static void Header(Rect rect, List<AnimalSection> sections, UIColorPaletteDef palette)
         {
-            GameFont previousFont = Text.Font;
-            TextAnchor previousAnchor = Text.Anchor;
-            Color previousColor = GUI.color;
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
 
-            try
+            Rect inner = rect.ContractedBy(10f);
+
+            float text = inner.x;
+
+            if (Glyph != null)
             {
-                if (Search.Draw(new Rect(bar.x, bar.y + 2f, 190f, 26f), palette))
-                    Grid.Scroll = Vector2.zero;
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize,
+                    GlyphSize);
 
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
+                Color previous = GUI.color;
 
-                float x = bar.x + 198f;
+                GUI.color = AnimalFaces.AccentOf(palette);
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
 
-                for (int i = 0; i < Scopes.Length; i++)
-                {
-                    AnimalScope which = Scopes[i];
-                    string label = Caption(which);
-                    float width = Text.CalcSize(label).x + 22f;
-                    Rect button = new Rect(x, bar.y + 2f, width, 26f);
-
-                    if (button.xMax > bar.xMax)
-                        break;
-
-                    bool on = scope == which;
-
-                    // The mod's button with the chosen one toggled, rather than filled at full accent. A filled
-                    // button is the one thing a window exists to do, and a scope switch is not that -- it decides
-                    // what the list below shows. The control plays the click, so the one that was here is gone
-                    // rather than doubled.
-                    if (UIActionButtonControl.Draw(button, label, palette, false, true, GameFont.Small, null, on)
-                        && !on)
-                    {
-                        scope = which;
-                        Grid.Scroll = Vector2.zero;
-                    }
-
-                    x += width + 4f;
-                }
-
-                DrawReadouts(new Rect(x + 8f, bar.y, Mathf.Max(0f, bar.xMax - x - 8f), bar.height), sections,
-                    palette);
+                text = mark.xMax + GlyphGap;
             }
-            finally
-            {
-                GUI.color = previousColor;
-                Text.Anchor = previousAnchor;
-                Text.Font = previousFont;
-            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Animals",
+                AnimalFaces.AccentOf(palette), GameFont.Medium, AnimalFaces.Display,
+                AnimalFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 400f, 18f), Standing(sections),
+                palette.TextSecondary, GameFont.Tiny, AnimalFaces.Condensed, AnimalFaces.Size.Subtitle);
+
+            DrawReadouts(inner, sections, palette);
         }
 
-        private static string Caption(AnimalScope which)
+        /// <summary>The line under the title: where this is, and what standing orders are running.</summary>
+        private static string Standing(List<AnimalSection> sections)
         {
-            switch (which)
+            Map map = Find.CurrentMap;
+
+            string place = map == null ? "No map" : MapLabels.NameOf(map);
+
+            int hunting = 0;
+            int taming = 0;
+
+            Orders(map, out hunting, out taming);
+
+            // The pasture warning rides here rather than in a readout, because it is a sentence about a
+            // season rather than a figure, and a readout with no number in it is a chip wearing a costume.
+            PastureReading pasture = AnimalPasture.Worst(sections);
+
+            string orders = hunting == 0 && taming == 0
+                ? "no standing orders"
+                : hunting + (hunting == 1 ? " hunting bill" : " hunting bills")
+                  + ", " + (taming == 0
+                      ? "no taming bills"
+                      : taming + (taming == 1 ? " taming bill" : " taming bills"));
+
+            if (pasture.Short)
+                orders += "  -  pasture short in " + pasture.WorstQuadrum.Label();
+
+            return place + "  -  " + orders;
+        }
+
+        /// <summary>How many standing orders of each kind this map carries.</summary>
+        private static void Orders(Map map, out int hunting, out int taming)
+        {
+            hunting = 0;
+            taming = 0;
+
+            if (map == null)
+                return;
+
+            MapComponent_HuntingBills hunt = MapComponent_HuntingBills.For(map);
+            MapComponent_TamingBills tame = MapComponent_TamingBills.For(map);
+
+            hunting = hunt == null || hunt.Bills == null ? 0 : hunt.Bills.Count;
+            taming = tame == null || tame.Bills == null ? 0 : tame.Bills.Count;
+        }
+
+        /// <summary>
+        /// The rail: what the list is of, then the standing orders.
+        ///
+        /// <b>It replaces four buttons.</b> All, Colony, Wild and Bills were a row of toggles that said what
+        /// you could look at but never how much of it there was; as rail entries with counts, both read
+        /// without pressing anything. Bills split into hunting and taming, which the tab already keeps apart
+        /// everywhere except that one button.
+        /// </summary>
+        private static void Rail(Rect rect, List<AnimalSection> sections, UIColorPaletteDef palette)
+        {
+            int tame, wild, predators, ordered;
+            float meat;
+
+            Tally(sections, out tame, out wild, out predators, out ordered, out meat);
+
+            int hunting, taming;
+
+            Orders(Find.CurrentMap, out hunting, out taming);
+
+            RailItems.Clear();
+
+            RailItems.Add(Head("Animals", palette));
+            RailItems.Add(Entry(AnimalScope.All, "Everything", tame + wild, palette));
+            RailItems.Add(Entry(AnimalScope.Colony, "Colony", tame, palette));
+            RailItems.Add(Entry(AnimalScope.Wild, "Wild", wild, palette));
+
+            RailItems.Add(new UIRailDividerControl { Color = palette.Border });
+
+            RailItems.Add(Head("Standing orders", palette));
+
+            // Both kinds land on the same scope: the bills view already shows the two as their own blocks,
+            // so splitting the rail entry would be a distinction the list below does not make.
+            RailItems.Add(Entry(AnimalScope.Bills, "Hunting", hunting, palette));
+            RailItems.Add(Entry(AnimalScope.Bills, "Taming", taming, palette, "taming"));
+
+            string picked = UIRailControl.Draw(rect, RailItems, Key(scope), ref railScroll, ref railDragging,
+                ref railOffset, palette);
+
+            if (picked == null)
+                return;
+
+            AnimalScope wanted = picked == "taming" ? AnimalScope.Bills : Scope(picked);
+
+            if (wanted == scope)
+                return;
+
+            scope = wanted;
+            Grid.Scroll = Vector2.zero;
+        }
+
+        private static UIRailSectionHeaderControl Head(string label, UIColorPaletteDef palette)
+        {
+            return new UIRailSectionHeaderControl
             {
-                case AnimalScope.Colony: return "Colony";
-                case AnimalScope.Wild: return "Wild";
-                case AnimalScope.Bills: return "Bills";
-                default: return "All";
+                Label = label,
+                Uppercase = true,
+                Face = AnimalFaces.Mono,
+                Points = AnimalFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            };
+        }
+
+        private static UIRailClickableEntry Entry(AnimalScope which, string label, int count,
+            UIColorPaletteDef palette, string key = null)
+        {
+            key = key ?? Key(which);
+
+            bool on = Key(scope) == key;
+
+            return new UIRailClickableEntry(key, label)
+            {
+                Count = count,
+                Face = AnimalFaces.Condensed,
+                Points = AnimalFaces.Size.RailName,
+                CountFace = AnimalFaces.Mono,
+                CountPoints = AnimalFaces.Size.RailCount,
+                TextColor = on ? AnimalFaces.AccentOf(palette) : (Color?) null,
+                CountColor = on ? AnimalFaces.AccentOf(palette) : (Color?) null
+            };
+        }
+
+        private static string Key(AnimalScope which)
+        {
+            return which.ToString();
+        }
+
+        private static AnimalScope Scope(string key)
+        {
+            for (int i = 0; i < Scopes.Length; i++)
+            {
+                if (Key(Scopes[i]) == key)
+                    return Scopes[i];
             }
+
+            return AnimalScope.All;
+        }
+
+        private static Vector2 railScroll;
+        private static bool railDragging;
+        private static float railOffset;
+
+        private static readonly List<UIRailElement> RailItems = new List<UIRailElement>();
+
+        private static void DrawToolbar(Rect bar, List<AnimalSection> sections, UIColorPaletteDef palette)
+        {
+            if (Search.Draw(new Rect(bar.x, bar.y + 2f, 220f, 26f), palette))
+                Grid.Scroll = Vector2.zero;
         }
 
         /// <summary>
@@ -412,13 +588,21 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// Drawn right to left, because the rightmost chip is the one that must never be pushed off the bar. On a
         /// narrow window the counts drop before the warnings do.
         /// </summary>
-        private static void DrawReadouts(Rect area, List<AnimalSection> sections, UIColorPaletteDef palette)
+        /// <summary>
+        /// The four figures, counted once and read by both the header and the rail.
+        ///
+        /// Split out of the readouts because the rail needs the same counts for its entries, and two loops
+        /// over the same sections is how a rail and a header end up disagreeing about how many animals a
+        /// colony has.
+        /// </summary>
+        private static void Tally(List<AnimalSection> sections, out int tame, out int wild, out int predators,
+            out int ordered, out float meat)
         {
-            int tame = 0;
-            int wild = 0;
-            int predators = 0;
-            int huntOrdered = 0;
-            float huntMeat = 0f;
+            tame = 0;
+            wild = 0;
+            predators = 0;
+            ordered = 0;
+            meat = 0f;
 
             for (int s = 0; s < sections.Count; s++)
             {
@@ -443,53 +627,47 @@ namespace Gideon.UIOverhaul.Features.Animals
                     if (group.HuntOrdered <= 0)
                         continue;
 
-                    huntOrdered += group.HuntOrdered;
+                    ordered += group.HuntOrdered;
 
                     // Meat per animal from the group total rather than per member, since the designated ones are
                     // whichever the picker chose and the average is the honest figure for a summary.
-                    huntMeat += group.Meat / group.Count * group.HuntOrdered;
+                    meat += group.Meat / group.Count * group.HuntOrdered;
                 }
             }
+        }
 
-            PastureReading pasture = AnimalPasture.Worst(sections);
+        /// <summary>
+        /// The header's figures, right to left.
+        ///
+        /// <b>These were three chips holding five numbers between them.</b> "22 tame, 57 wild" was one chip
+        /// carrying two unrelated counts, which cannot be scanned down and cannot be colored apart; the
+        /// predators had to share a chip shape with a neutral reading. As readouts each figure gets its own
+        /// caption and its own color, which is what the other tabs already do with theirs.
+        /// </summary>
+        private static void DrawReadouts(Rect area, List<AnimalSection> sections, UIColorPaletteDef palette)
+        {
+            int tame, wild, predators, ordered;
+            float meat;
+
+            Tally(sections, out tame, out wild, out predators, out ordered, out meat);
 
             float x = area.xMax;
 
-            if (huntOrdered > 0)
-                x = Chip(area, x, huntOrdered + " hunts, " + Mathf.RoundToInt(huntMeat) + " meat",
-                    palette.Warning, palette);
+            if (ordered > 0)
+                x = TabParts.Readout(area, x, "meat ordered", Mathf.RoundToInt(meat).ToString("N0"), palette,
+                    ordered + (ordered == 1 ? " animal is" : " animals are")
+                            + " marked for hunting, and this is roughly what they would yield.",
+                    palette.Warning);
 
-            if (predators > 0)
-                x = Chip(area, x, predators == 1 ? "1 predator nearby" : predators + " predators nearby",
-                    palette.Danger, palette);
+            x = TabParts.Readout(area, x, "predators nearby", predators.ToString(), palette,
+                "Wild predators and manhunters on this map.",
+                predators > 0 ? palette.Danger : palette.TextPrimary);
 
-            if (pasture.Short)
-                x = Chip(area, x, "Pasture short in " + pasture.WorstQuadrum.Label(), palette.Warning, palette);
+            x = TabParts.Readout(area, x, "wild", wild.ToString(), palette,
+                "Every wild animal on this map, hunted or not.");
 
-            Chip(area, x, tame + " tame, " + wild + " wild", palette.TextSecondary, palette);
-        }
-
-        /// <summary>Draws one readout right aligned at <paramref name="right"/> and returns the next edge.</summary>
-        private static float Chip(Rect area, float right, string text, Color color, UIColorPaletteDef palette)
-        {
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-
-            float width = Text.CalcSize(text).x + 16f;
-            Rect chip = new Rect(right - width, area.y + 3f, width, area.height - 6f);
-
-            if (chip.x < area.x)
-                return right;
-
-            UIElementPainter.OutlineRounded(chip, color, palette.PanelBackground);
-
-            GUI.color = color;
-
-            Widgets.Label(chip, text);
-
-            GUI.color = Color.white;
-
-            return chip.x - 4f;
+            TabParts.Readout(area, x, "tame", tame.ToString(), palette,
+                "Animals the colony owns.");
         }
 
         // ---------------------------------------------------------------------------------------

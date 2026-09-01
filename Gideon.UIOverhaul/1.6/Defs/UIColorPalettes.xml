@@ -30,6 +30,7 @@
          its own; set it to accent to put that tab back in step with the rest. -->
     <tabTheDead>#A98FC8</tabTheDead>
     <tabQuests>#7FA3C9</tabQuests>
+    <tabAnimals>#98AC80</tabAnimals>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
