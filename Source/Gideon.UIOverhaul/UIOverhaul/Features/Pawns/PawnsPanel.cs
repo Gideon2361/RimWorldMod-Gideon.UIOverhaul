@@ -460,9 +460,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
                     string label = PawnCategories.Label(category);
                     string count = showing.ByCategory[i].ToString();
 
-                    float width = FilterBarWidth + UITextControl.Width(label, PawnFaces.Condensed,
-                        PawnFaces.Size.Chip) + UITextControl.Width(count, PawnFaces.Mono,
-                        PawnFaces.Size.RailCount);
+                    float width = FilterChipWidth(label, count);
 
                     // Stops rather than wrapping or clipping. The bar sits above a table that is already the
                     // width it needs, so running out of room here means the window is narrower than anything
@@ -491,53 +489,24 @@ namespace Gideon.UIOverhaul.Features.Pawns
             }
         }
 
-        /// <summary>The chip's fixed parts: lead pad, bar, both gaps, and the trailing pad.</summary>
-        private const float FilterBarWidth = 9f + BarWidth + 7f + 7f + 11f;
-
-        /// <summary>Matched to <c>UICardControl.AccentWidth</c> on a row, because it stands for that stripe.</summary>
-        private const float BarWidth = 3f;
+        /// <summary>
+        /// The chip's fixed parts, plus its two strings.
+        ///
+        /// <b>Both the measure and the draw moved to <see cref="TabParts"/> when the research tab became the
+        /// second caller.</b> Nothing about the treatment changed: same padding, same 3px bar, same two faces,
+        /// so the strip measures and lands exactly where it did.
+        /// </summary>
+        private static float FilterChipWidth(string label, string count)
+        {
+            return TabParts.FilterChipWidth(label, count, PawnFaces.Condensed, PawnFaces.Size.Chip,
+                PawnFaces.Mono, PawnFaces.Size.RailCount);
+        }
 
         private static bool DrawFilterButton(Rect rect, string label, string count, bool on, Color color,
             UIColorPaletteDef palette)
         {
-            bool over = Mouse.IsOver(rect);
-
-            // Selected tints the border and washes the inside; unselected leaves the panel showing through.
-            // Neither state is filled, so the six of them cannot compete with each other or with the table.
-            UIElementPainter.OutlineRounded(rect,
-                on ? UIElementPainter.Composite(palette.Border, Wash(color, 0.55f)) : palette.Border,
-                on ? UIElementPainter.Composite(palette.PanelBackground, Wash(color, 0.10f))
-                    : over ? palette.SurfaceRaised : palette.PanelBackground);
-
-            Rect stripe = new Rect(rect.x + 9f, rect.y + 6f, BarWidth, rect.height - 12f);
-
-            // Square rather than rounded: the 9-slice's corners are wider than a 3px bar, so it would round
-            // itself away to nothing. The row stripe this stands for is square for the same reason.
-            //
-            // Dimmed with its label rather than hidden, so an off chip reads as available rather than absent.
-            Widgets.DrawBoxSolid(stripe, on ? color : Wash(color, 0.4f));
-
-            float x = stripe.xMax + 7f;
-            float labelWidth = UITextControl.Width(label, PawnFaces.Condensed, PawnFaces.Size.Chip);
-
-            Text.Anchor = TextAnchor.MiddleLeft;
-            GUI.color = on ? palette.TextPrimary : palette.TextDisabled;
-
-            UITextControl.Label(new Rect(x, rect.y, labelWidth, rect.height), label, PawnFaces.Condensed,
-                PawnFaces.Size.Chip);
-
-            Text.Anchor = TextAnchor.MiddleRight;
-            GUI.color = on ? palette.TextSecondary : palette.TextDisabled;
-
-            UITextControl.Label(new Rect(x + labelWidth, rect.y, rect.xMax - 11f - x - labelWidth,
-                rect.height), count, PawnFaces.Mono, PawnFaces.Size.RailCount);
-
-            return Widgets.ButtonInvisible(rect);
-        }
-
-        private static Color Wash(Color color, float alpha)
-        {
-            return new Color(color.r, color.g, color.b, alpha);
+            return TabParts.FilterChip(rect, label, count, on, color, palette, PawnFaces.Condensed,
+                PawnFaces.Size.Chip, PawnFaces.Mono, PawnFaces.Size.RailCount);
         }
 
         // ---------------------------------------------------------------------------------------

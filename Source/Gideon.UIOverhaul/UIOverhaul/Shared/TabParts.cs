@@ -607,6 +607,123 @@ namespace Gideon.UIOverhaul.Shared
             return Mathf.Clamp(value, min, max);
         }
 
+        // ---------------------------------------------------------------------------------------
+        // Filter chips
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>Matched to <c>UICardControl.AccentWidth</c> on a row, because it stands for that stripe.</summary>
+        internal const float ChipBarWidth = 3f;
+
+        /// <summary>The chip's fixed parts: lead pad, bar, both gaps, and the trailing pad.</summary>
+        private const float ChipFixed = 9f + ChipBarWidth + 7f + 7f + 11f;
+
+        /// <summary>
+        /// How wide a chip has to be to hold its label and its count without either being cut.
+        ///
+        /// Measured through <c>UITextControl.Width</c> in the faces the chip actually draws in, because a chip
+        /// sized off one face and drawn in another ellipses at every width it is ever given.
+        /// </summary>
+        internal static float FilterChipWidth(string label, string count, UIFace labelFace, float labelPoints,
+            UIFace countFace, float countPoints)
+        {
+            return ChipFixed + UITextControl.Width(label ?? string.Empty, labelFace, labelPoints)
+                             + UITextControl.Width(count ?? string.Empty, countFace, countPoints);
+        }
+
+        /// <summary>
+        /// One filter chip: a color bar, a label, and how many the filter holds. Returns true when pressed.
+        ///
+        /// <b>The color is a bar inside the chip, not a fill behind it.</b> Filling a strip of chips in
+        /// saturated colors puts the loudest thing on the screen above content that is itself trying to be the
+        /// colored thing, and emphasising everything emphasises nothing. The bar is the same width and shape as
+        /// the stripe down a row's or a node's left edge, which is what it stands for.
+        ///
+        /// <b>Neither state is filled.</b> An unselected chip keeps full strength text on the panel rather than
+        /// dropping to <c>ControlBackgroundFaded</c> with dimmed text, because that pair is this palette's
+        /// vocabulary for a control that <i>cannot</i> be used, and it makes the off half of a choice read as
+        /// broken rather than as available.
+        ///
+        /// <b>The count is the real gain.</b> Turning a filter off is worth the click when it hides a hundred
+        /// and eighty-nine things and not worth it when it hides four, and without the figure there is no way
+        /// to tell those apart except by doing it.
+        ///
+        /// <paramref name="color"/> may be left null for a filter that stands for no color anywhere else, which
+        /// is what a tech level is: the chip then keeps its label and its count and simply has no bar.
+        ///
+        /// Written for the pawns tab and pulled out here when the research tab became the second caller.
+        /// </summary>
+        internal static bool FilterChip(Rect rect, string label, string count, bool on, Color? color,
+            UIColorPaletteDef palette, UIFace labelFace, float labelPoints, UIFace countFace, float countPoints,
+            string tip = null)
+        {
+            GameFont previousFont = Text.Font;
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.WordWrap = false;
+
+                bool over = Mouse.IsOver(rect);
+                Color bar = color ?? palette.TextSecondary;
+
+                // Selected tints the border and washes the inside; unselected leaves the panel showing through.
+                UIElementPainter.OutlineRounded(rect,
+                    on ? UIElementPainter.Composite(palette.Border, ChipWash(bar, 0.55f)) : palette.Border,
+                    on ? UIElementPainter.Composite(palette.PanelBackground, ChipWash(bar, 0.10f))
+                        : over ? palette.SurfaceRaised : palette.PanelBackground);
+
+                float x = rect.x + 9f;
+
+                if (color.HasValue)
+                {
+                    // Square rather than rounded: the 9-slice's corners are wider than a 3px bar, so it would
+                    // round itself away to nothing. The stripe this stands for is square for the same reason.
+                    //
+                    // Dimmed with its label rather than hidden, so an off chip reads as available, not absent.
+                    Widgets.DrawBoxSolid(new Rect(x, rect.y + 6f, ChipBarWidth, rect.height - 12f),
+                        on ? bar : ChipWash(bar, 0.4f));
+                }
+
+                x += ChipBarWidth + 7f;
+
+                float labelWidth = UITextControl.Width(label ?? string.Empty, labelFace, labelPoints);
+
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = on ? palette.TextPrimary : palette.TextDisabled;
+
+                UITextControl.Label(new Rect(x, rect.y, labelWidth, rect.height), label, labelFace, labelPoints);
+
+                if (!count.NullOrEmpty())
+                {
+                    Text.Anchor = TextAnchor.MiddleRight;
+                    GUI.color = on ? palette.TextSecondary : palette.TextDisabled;
+
+                    UITextControl.Label(new Rect(x + labelWidth, rect.y,
+                        Mathf.Max(0f, rect.xMax - 11f - x - labelWidth), rect.height), count, countFace,
+                        countPoints);
+                }
+
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(rect, (TipSignal) tip);
+
+                return Widgets.ButtonInvisible(rect);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+                Text.Font = previousFont;
+            }
+        }
+
+        private static Color ChipWash(Color color, float alpha)
+        {
+            return new Color(color.r, color.g, color.b, alpha);
+        }
+
         /// <summary>The caption above a value, at whatever Tiny currently means.</summary>
         internal static float CaptionHeight
         {

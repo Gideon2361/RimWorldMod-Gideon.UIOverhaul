@@ -191,6 +191,32 @@ namespace Gideon.UIFramework.Components.Colors
         TabHospital,
 
         /// <summary>
+        /// The Research tab's own color, the ninth of the per-tab identities. A muted iris, defaulting to
+        /// <c>#8B90CC</c>.
+        ///
+        /// <b>This tab picks last and from the fullest ring.</b> The eight above it sit at 18, 44, 85, 172,
+        /// 209, 268, 305 and 336 degrees, and the canvas underneath spends twelve more on its theme bands. A
+        /// ninth identity has to land in the same 26 to 45 percent saturation band as the rest or it reads as
+        /// a different kind of thing rather than as one of a set.
+        ///
+        /// <b>Not the green the geometry points at.</b> The widest hole left is 85 to 172, and its center is
+        /// a jade around 130. <see cref="Success"/> is at 120, and this is the tab that spends success green
+        /// on the word "Done", on every finished node and on a wash across the whole card. A jade title over a
+        /// green Done column is the mistake <see cref="TabPower"/> avoided with amber, at half the separation.
+        ///
+        /// <b>So the second gap takes it: 235 degrees, between <see cref="TabQuests"/> at 209 and
+        /// <see cref="TabTheDead"/> at 268.</b> Twenty-six and thirty-three degrees of clearance, which is no
+        /// tighter than <see cref="TabBills"/> and <see cref="TabGrowing"/> already live at.
+        ///
+        /// <b>The one collision is a band, not a tab.</b> Flight and Space sits at 224, eleven degrees off,
+        /// and the two are separated the way <see cref="TabGrowing"/> is separated from
+        /// <see cref="Warning"/>: by saturation, 32 percent against 54, and by territory. A band color only
+        /// ever draws on the canvas and this one only ever draws off it, in the header, the segment underline
+        /// and the two rail selections, so the two are never in the same hundred pixels.
+        /// </summary>
+        TabResearch,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

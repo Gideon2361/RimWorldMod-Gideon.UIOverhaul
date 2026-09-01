@@ -69,12 +69,29 @@ namespace Gideon.UIOverhaul.Features.Research
         ///
         /// Ten rather than five from 2026-08-23: at five, twelve rows of coloured text with a coloured bar under
         /// each read as one striped block instead of twelve entries. The gap is what makes a row a row.
+        ///
+        /// Back down to four now that the labels are no longer tinted. The ten was buying separation from the
+        /// striping, and with the colour on the swatch alone there is no striping left to separate from; a rail
+        /// that spent ninety pixels on air was paying for a problem it no longer has.
         /// </summary>
-        private const float RailRowGap = 10f;
+        private const float RailRowGap = 4f;
 
-        private const float ToolbarHeight = 40f;
+        /// <summary>
+        /// The block that names the tab, on <c>SurfaceSunken</c>, the same shape every restyled tab opens with.
+        ///
+        /// Sixty-two rather than the hospital tab's sixty-six: this header carries four figures and no controls,
+        /// and the canvas under it is the thing the screen is for.
+        /// </summary>
+        private const float HeaderHeight = 62f;
 
-        private const float ControlHeight = 24f;
+        private const float GlyphSize = 30f;
+
+        private const float GlyphGap = 10f;
+
+        private const float ControlHeight = 26f;
+
+        /// <summary>Between two chips in the filter strip.</summary>
+        private const float ChipGap = 4f;
 
         private const float Gap = 6f;
 
@@ -207,9 +224,20 @@ namespace Gideon.UIOverhaul.Features.Research
 
             Rect content = inRect.ContractedBy(6f);
 
-            Toolbar(new Rect(content.x, content.y, content.width, ToolbarHeight), palette);
+            // One walk of the graph, at the top of the frame, feeding the header's figures and the strip's
+            // counts. Both used to be uncounted, and counting them twice in one frame would be the obvious way
+            // to make a three hundred node canvas cost twice what it needs to.
+            Count();
 
-            float top = content.y + ToolbarHeight + Gap;
+            Rect header = new Rect(content.x, content.y, content.width, HeaderHeight);
+
+            Header(header, palette);
+
+            Rect strip = new Rect(content.x, header.yMax + Gap, content.width, ControlHeight);
+
+            Toolbar(strip, palette);
+
+            float top = strip.yMax + Gap;
             float height = content.yMax - top;
 
             // Both rails only exist when they have something in them. They held four hundred and eighty-six
@@ -262,17 +290,322 @@ namespace Gideon.UIOverhaul.Features.Research
         }
 
         // ---------------------------------------------------------------------------------------
-        // Toolbar
+        // Header
         // ---------------------------------------------------------------------------------------
 
+        /// <summary>The tab's own mark, the same texture its button on the bar uses.</summary>
+        private static readonly Texture2D Glyph;
+
+        static ResearchPanel()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and the
+            // guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Research.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Research", false),
+                "The header has no glyph this session. Everything on the tab still reads.");
+
+            Glyph = glyph;
+        }
+
+        /// <summary>
+        /// The block that names the screen, with the colony's research figures seated in it.
+        ///
+        /// <b>The same shape every restyled tab uses.</b> What was a framed toolbar of a search box and nine
+        /// filled toggles is now a header saying where you are and how the work is going, and a strip below it
+        /// holding nothing but controls.
+        ///
+        /// <b>The four figures are the ones somebody opens this tab to find out,</b> and every one of them was
+        /// previously only reachable by looking for a single blue node among three hundred: how far through the
+        /// game's projects the colony is, how fast it is going, when the current project lands, and how long
+        /// everything planned will take.
+        /// </summary>
+        private static void Header(Rect rect, UIColorPaletteDef palette)
+        {
+            // SurfaceSunken, the same fill the two rails beside it use: header and rails are both chrome framing
+            // the canvas, so they share a surface and the canvas sits above it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
+
+            Rect inner = rect.ContractedBy(10f);
+
+            float text = inner.x;
+
+            if (Glyph != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize, GlyphSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = ResearchFaces.AccentOf(palette);
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
+            }
+
+            // The figures first, because they are the thing that cannot be shortened: they come out at whatever
+            // width the colony's numbers happen to be, and the two lines of text beside them get what is left.
+            // Sized the other way round, a long subtitle on a small screen runs underneath them.
+            float wall = Readouts(inner, palette) - 12f;
+
+            float titleWidth = Mathf.Max(0f, Mathf.Min(300f, wall - text));
+            float subtitleWidth = Mathf.Max(0f, Mathf.Min(460f, wall - text));
+
+            TabParts.RowLabel(new Rect(text, inner.y, titleWidth, 24f), "Research",
+                ResearchFaces.AccentOf(palette), GameFont.Medium, ResearchFaces.Display,
+                ResearchFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 23f, subtitleWidth, 18f), Subtitle(),
+                palette.TextSecondary, GameFont.Tiny, ResearchFaces.Condensed, ResearchFaces.Size.Subtitle);
+        }
+
+        /// <summary>
+        /// The line under the title: what the canvas is currently cut by, and what the colony is working on.
+        ///
+        /// <b>The current project belongs here and nowhere else.</b> It is one node somewhere on a canvas of
+        /// three hundred, and finding it meant either scrolling for the blue one or knowing where it was.
+        /// </summary>
+        private static string Subtitle()
+        {
+            return UIGuard.Try("Research.Subtitle", () =>
+            {
+                string by = "By " + ResearchGroupings.LabelOf(ResearchGroupings.Current).ToLowerInvariant()
+                            + "  -  " + ResearchGraph.Groups.Count + " blocks";
+
+                ResearchProjectDef current = Find.ResearchManager != null
+                    ? Find.ResearchManager.GetProject()
+                    : null;
+
+                return current == null
+                    ? by + "  -  nothing being researched"
+                    : by + "  -  working on " + current.LabelCap;
+            }, "The whole tech tree, by theme", null);
+        }
+
+        /// <summary>
+        /// The figures, right to left.
+        ///
+        /// <b>Rate reads in the danger color at nought,</b> whatever else is true. A colony with nobody assigned
+        /// to research has a queue that will never move, and that is the whole story of the screen; it was not
+        /// told anywhere at all before.
+        /// </summary>
+        /// <summary>Returns the left edge of the leftmost figure, which is the wall the title must stop at.</summary>
+        private static float Readouts(Rect area, UIColorPaletteDef palette)
+        {
+            float x = area.xMax;
+            float rate = ResearchRate.PointsPerDay;
+
+            x = Readout(area, x, "queued", queuedDays, palette,
+                "How long everything in the queue takes at the colony's current rate.");
+
+            x = Readout(area, x, "current", CurrentDays(), palette,
+                "How long the project being researched has left.");
+
+            x = Readout(area, x, "rate", Mathf.RoundToInt(rate).ToString(), palette,
+                "Research points a day, at the colony's current assignments and benches.",
+                rate <= 0f ? palette.Danger : (Color?) null);
+
+            return Readout(area, x, "projects", doneCount + " / " + totalCount, palette,
+                "Projects finished, out of everything on the canvas.");
+        }
+
+        /// <summary>
+        /// One right-aligned caption over a figure, in the mono, returning the x the next one ends at.
+        ///
+        /// <b>Not <c>TabParts.Readout</c>,</b> which measures and draws in the game font. Four figures side by
+        /// side are a row of numbers to compare, and this is the tab that just moved every other number it draws
+        /// onto the mono; a header that did not follow would be the one place on the screen where digits do not
+        /// line up.
+        /// </summary>
+        private static float Readout(Rect bar, float right, string caption, string value,
+            UIColorPaletteDef palette, string tip = null, Color? valueColor = null)
+        {
+            TextAnchor anchor = Text.Anchor;
+            Color color = GUI.color;
+            bool wrap = Text.WordWrap;
+
+            try
+            {
+                Text.WordWrap = false;
+
+                float width = Mathf.Max(
+                    UITextControl.Width(caption ?? string.Empty, ResearchFaces.Mono, ResearchFaces.Size.Caption),
+                    UITextControl.Width(value ?? string.Empty, ResearchFaces.Mono, ResearchFaces.Size.Readout))
+                    + 20f;
+
+                Rect cell = new Rect(right - width, bar.y, width, bar.height);
+                float valueHeight = UITextControl.LineHeight(ResearchFaces.Mono, ResearchFaces.Size.Readout);
+
+                Text.Anchor = TextAnchor.LowerRight;
+                GUI.color = valueColor ?? palette.TextPrimary;
+
+                UITextControl.Label(new Rect(cell.x, cell.y, cell.width - 6f, valueHeight + 2f), value,
+                    ResearchFaces.Mono, ResearchFaces.Size.Readout);
+
+                Text.Anchor = TextAnchor.UpperRight;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.Label(new Rect(cell.x, cell.y + valueHeight + 3f, cell.width - 6f, 14f),
+                    caption.ToUpperInvariant(), ResearchFaces.Mono, ResearchFaces.Size.Caption);
+
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(cell, (TipSignal) tip);
+
+                return cell.x;
+            }
+            finally
+            {
+                Text.WordWrap = wrap;
+                GUI.color = color;
+                Text.Anchor = anchor;
+            }
+        }
+
+        /// <summary>How long the project being researched has left, or a dash when there is none.</summary>
+        private static string CurrentDays()
+        {
+            ResearchProjectDef current = Find.ResearchManager != null
+                ? Find.ResearchManager.GetProject()
+                : null;
+
+            if (current == null)
+                return "-";
+
+            float days = ResearchRate.DaysFor(current);
+
+            return days < 0f ? "-" : ResearchRate.Days(days);
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Counts
+        //
+        // Every figure the header and the strip show, from one walk of the graph at the top of the frame.
+        // Nothing here is cached across frames: finishing a project changes six of these at once, and a cache
+        // keyed on the node count -- which is what LevelsPresent can safely use -- would not notice.
+        // ---------------------------------------------------------------------------------------
+
+        private static int doneCount;
+
+        private static int totalCount;
+
+        private static int availableCount;
+
+        private static int lockedCount;
+
+        private static int anomalyCount;
+
+        private static string queuedDays = "-";
+
+        private static readonly Dictionary<TechLevel, int> levelCounts = new Dictionary<TechLevel, int>();
+
+        private static void Count()
+        {
+            List<ResearchNode> nodes = ResearchGraph.Nodes;
+
+            doneCount = 0;
+            totalCount = nodes.Count;
+            availableCount = 0;
+            lockedCount = 0;
+            anomalyCount = 0;
+
+            levelCounts.Clear();
+
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                ResearchNode node = nodes[i];
+                ResearchProjectDef project = node.Project;
+
+                if (project == null)
+                    continue;
+
+                // Counted alongside its state rather than instead of it, because the Anomaly chip is a category
+                // and the other three are states: a knowledge project is both anomalous and available, and a
+                // count that pretended otherwise would not add up to the canvas.
+                if (project.knowledgeCategory != null)
+                {
+                    anomalyCount++;
+                }
+                else if (project.techLevel != TechLevel.Undefined)
+                {
+                    int already;
+
+                    levelCounts.TryGetValue(project.techLevel, out already);
+                    levelCounts[project.techLevel] = already + 1;
+                }
+
+                if (project.IsFinished)
+                {
+                    doneCount++;
+
+                    continue;
+                }
+
+                ResearchState state = ResearchFacts.StateOf(node);
+
+                if (state == ResearchState.Ready || state == ResearchState.Researching)
+                    availableCount++;
+                else
+                    lockedCount++;
+            }
+
+            GameComponent_ResearchQueue queue = GameComponent_ResearchQueue.Current;
+
+            queuedDays = "-";
+
+            if (queue == null || queue.Count == 0)
+                return;
+
+            List<ResearchProjectDef> planned = mainLane;
+
+            planned.Clear();
+
+            for (int i = 0; i < queue.Entries.Count; i++)
+            {
+                ResearchProjectDef project = queue.Entries[i];
+
+                if (project != null && project.knowledgeCategory == null)
+                    planned.Add(project);
+            }
+
+            queuedDays = TotalDays(planned);
+
+            planned.Clear();
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Filter strip
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The controls, on the window rather than in a frame of their own.
+        ///
+        /// <b>Unfilled chips, from the pawns tab.</b> Nine toggles inverting to a solid accent put the nine
+        /// brightest rectangles on the screen directly above a canvas that is itself twelve colors, and
+        /// emphasising everything emphasises nothing. Each chip now carries a bar in the color the thing it
+        /// filters is drawn in, and its count.
+        ///
+        /// <b>The states take the colors the nodes already use.</b> Available is accent, Done is success,
+        /// Locked is disabled, Anomaly is mood, and none of those are new values: they are
+        /// <c>ResearchFacts.ColorFor</c>, which paints every stripe on the canvas. So the bar on a chip and the
+        /// stripe on the nodes it governs are the same color for the same reason, which is the argument for a
+        /// legend rather than a row of buttons.
+        ///
+        /// <b>"All" is gone.</b> It was a fourth control that only ever meant "turn the other three on", and
+        /// with counts present, three chips all reading as on say that more directly than a button that looks
+        /// pressed whether or not it did anything.
+        ///
+        /// <b>Anomaly moved left, into the states.</b> It sat in the tech level run and is not a tech level: it
+        /// is a category of project, exactly like the three it now stands beside.
+        ///
+        /// <b>Group by and the view switch became segments.</b> Both are one-of choices about what the canvas
+        /// <i>is</i>, and a chip's contract is that you can hold several down at once.
+        /// </summary>
         private static void Toolbar(Rect bar, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(bar, palette.Border, palette.PanelBackground);
+            float x = bar.x;
 
-            float y = bar.y + (bar.height - ControlHeight) * 0.5f;
-            float x = bar.x + 8f;
-
-            Search.Draw(new Rect(x, y, 210f, ControlHeight), palette);
+            Search.Draw(new Rect(x, bar.y, 178f, bar.height), palette);
 
             if (Search.Text != query)
             {
@@ -280,84 +613,48 @@ namespace Gideon.UIOverhaul.Features.Research
                 matches.Clear();
             }
 
-            x += 210f + 10f;
+            x += 178f + 8f;
 
-            x = StateToggle(x, y, "All", showAvailable && showLocked && showDone, palette, () =>
+            x = StateChip(x, bar, "Available", availableCount, showAvailable, palette.Accent, palette,
+                () => showAvailable = !showAvailable, "Projects that can be started now.");
+
+            x = StateChip(x, bar, "Locked", lockedCount, showLocked, palette.TextDisabled, palette,
+                () => showLocked = !showLocked, "Projects still waiting on something.");
+
+            x = StateChip(x, bar, "Done", doneCount, showDone, palette.Success, palette,
+                () => showDone = !showDone, "Projects already finished.");
+
+            if (ModsConfig.AnomalyActive)
             {
-                showAvailable = true;
-                showLocked = true;
-                showDone = true;
-            });
+                x = StateChip(x, bar, "Anomaly", anomalyCount, showAnomaly, palette.Mood, palette,
+                    () => showAnomaly = !showAnomaly, "Anomaly's knowledge projects.");
+            }
 
-            x = StateToggle(x, y, "Available", showAvailable, palette, () => showAvailable = !showAvailable);
-            x = StateToggle(x, y, "Locked", showLocked, palette, () => showLocked = !showLocked);
-            x = StateToggle(x, y, "Done", showDone, palette, () => showDone = !showDone);
-
-            // Group by sits next to the state filters rather than out on the right, because it decides what the
-            // canvas *is* and the tech levels only decide what is dimmed on it. A segmented control and not
-            // toggles: the three are mutually exclusive, which is the one case a segment is right for.
-            x += 12f;
-
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextDisabled;
-
-            float captionWidth = UIRichText.WidthOf("Group by") + 4f;
-
-            Widgets.Label(new Rect(x, y + 3f, captionWidth, ControlHeight), "Group by");
-
-            GUI.color = palette.TextPrimary;
-            Text.Font = GameFont.Small;
-
-            x += captionWidth + 4f;
+            x += 8f;
+            x = Caption(x, bar, "Group by", palette);
 
             ResearchGrouping grouping = ResearchGroupings.Current;
 
             for (int i = 0; i < ResearchGroupings.All.Length; i++)
             {
                 ResearchGrouping which = ResearchGroupings.All[i];
-                string label = ResearchGroupings.LabelOf(which);
-                float width = TabParts.ButtonWidth(label, 12f);
-                Rect segment = new Rect(x, y, width, ControlHeight);
+                ResearchGrouping chosen = which;
 
-                bool on = grouping == which;
-
-                TabParts.IconToggle(segment, null, on, palette, () =>
-                {
-                    if (!on)
-                        ResearchGroupings.Set(which);
-                }, ResearchGroupings.TooltipOf(which));
-
-                Overlay(segment, label, on, palette);
-
-                x += width + TabParts.SegmentGap;
+                x = SegmentTab(x, bar, ResearchGroupings.LabelOf(which), grouping == which, palette,
+                    () => ResearchGroupings.Set(chosen), ResearchGroupings.TooltipOf(which));
             }
 
-            // From the right: the overview switch, then the tech levels, so the levels grow leftwards into
-            // whatever room is left rather than colliding with the state segments.
-            float right = bar.xMax - 8f;
-            float overviewWidth = TabParts.ButtonWidth("Overview");
+            // From the right: the view switch, then the tech levels, so the levels grow leftwards into whatever
+            // room is left rather than colliding with the states.
+            float right = bar.xMax;
 
-            TabParts.IconToggle(new Rect(right - overviewWidth, y, overviewWidth, ControlHeight), null, overview,
-                palette, () => overview = !overview, null);
+            right = SegmentTab(right, bar, "Overview", overview, palette, () => overview = true,
+                "Blocks instead of nodes, for the shape of the whole tree.", true);
 
-            Overlay(new Rect(right - overviewWidth, y, overviewWidth, ControlHeight), "Overview", overview,
-                palette);
+            right = SegmentTab(right, bar, "Tree", !overview, palette, () => overview = false,
+                "The full canvas, with every project named.", true);
 
-            right -= overviewWidth + 12f;
-
-            if (ModsConfig.AnomalyActive)
-            {
-                float width = TabParts.ButtonWidth("Anomaly", 12f);
-
-                right -= width;
-
-                TabParts.IconToggle(new Rect(right, y, width, ControlHeight), null, showAnomaly, palette,
-                    () => showAnomaly = !showAnomaly, "Anomaly's knowledge projects.");
-
-                Overlay(new Rect(right, y, width, ControlHeight), "Anomaly", showAnomaly, palette);
-
-                right -= TabParts.SegmentGap;
-            }
+            right -= 10f;
 
             List<TechLevel> levels = LevelsPresent();
             bool anyLevel = false;
@@ -365,97 +662,148 @@ namespace Gideon.UIOverhaul.Features.Research
             for (int i = levels.Count - 1; i >= 0; i--)
             {
                 TechLevel level = levels[i];
+                TechLevel chosen = level;
                 string label = level.ToStringHuman().CapitalizeFirst();
-                float width = TabParts.ButtonWidth(label, 12f);
+                int count;
 
-                // The levels grow leftwards and now have something to run into: Group by ends at x, and the
-                // "Tech level" caption still needs its 66 pixels to the left of whatever is drawn last. Stopping
-                // is right and clipping is not -- a toggle drawn under another control is a control that silently
-                // does the wrong thing when clicked, which is the fault the pawns tab hit test taught.
-                if (right - width - TabParts.SegmentGap < x + 70f)
+                levelCounts.TryGetValue(level, out count);
+
+                string figure = count.ToString();
+                float width = TabParts.FilterChipWidth(label, figure, ResearchFaces.Condensed,
+                    ResearchFaces.Size.Chip, ResearchFaces.Mono, ResearchFaces.Size.RailCount);
+
+                // Stops rather than clipping. A chip drawn under another chip is a control that silently does
+                // the wrong thing when clicked, which is the fault the pawns tab hit test taught.
+                if (right - width - ChipGap < x + 60f)
                     break;
 
                 right -= width;
 
-                bool on = !hiddenLevels.Contains(level);
-
-                TabParts.IconToggle(new Rect(right, y, width, ControlHeight), null, on, palette, () =>
+                if (TabParts.FilterChip(new Rect(right, bar.y, width, bar.height), label, figure,
+                        !hiddenLevels.Contains(level), null, palette, ResearchFaces.Condensed,
+                        ResearchFaces.Size.Chip, ResearchFaces.Mono, ResearchFaces.Size.RailCount))
                 {
-                    if (!hiddenLevels.Remove(level))
-                        hiddenLevels.Add(level);
-                }, null);
+                    if (!hiddenLevels.Remove(chosen))
+                        hiddenLevels.Add(chosen);
 
-                Overlay(new Rect(right, y, width, ControlHeight), label, on, palette);
+                    SoundDefOf.Click.PlayOneShotOnCamera();
+                }
 
-                right -= TabParts.SegmentGap;
+                right -= ChipGap;
                 anyLevel = true;
             }
 
             // Only when there is something for it to name. On a narrow window the loop above stops early, and a
-            // caption reading "Tech level" with no toggles beside it is worse than no caption: it says a control
-            // is there and it is not.
+            // caption reading "Tech" with no chips beside it is worse than no caption: it says a control is
+            // there and it is not.
             if (anyLevel)
+                Caption(right - CaptionWidth("Tech"), bar, "Tech", palette);
+        }
+
+        /// <summary>One state chip, and the x the next one starts at.</summary>
+        private static float StateChip(float x, Rect bar, string label, int count, bool on, Color color,
+            UIColorPaletteDef palette, System.Action toggled, string tip)
+        {
+            string figure = count.ToString();
+            float width = TabParts.FilterChipWidth(label, figure, ResearchFaces.Condensed,
+                ResearchFaces.Size.Chip, ResearchFaces.Mono, ResearchFaces.Size.RailCount);
+
+            if (TabParts.FilterChip(new Rect(x, bar.y, width, bar.height), label, figure, on, color, palette,
+                    ResearchFaces.Condensed, ResearchFaces.Size.Chip, ResearchFaces.Mono,
+                    ResearchFaces.Size.RailCount, tip))
             {
-                Text.Font = GameFont.Tiny;
-                GUI.color = palette.TextDisabled;
+                toggled();
 
-                Widgets.Label(new Rect(right - 66f, y, 62f, ControlHeight), "Tech level");
-
-                GUI.color = palette.TextPrimary;
-                Text.Font = GameFont.Small;
+                SoundDefOf.Click.PlayOneShotOnCamera();
             }
+
+            return x + width + ChipGap;
         }
 
         /// <summary>
-        /// One state toggle, and the x the next one starts at.
+        /// One segment of a one-of choice: a word, underlined in the tab's color while it is the chosen one.
         ///
-        /// A toggle rather than a segment: these are multi-select, and a segment's contract is that clicking the
-        /// one already chosen does nothing -- which would make every filter here one-way. That fault shipped once
-        /// already, on the music player's shuffle.
-        /// </summary>
-        private static float StateToggle(float x, float y, string label, bool on, UIColorPaletteDef palette,
-            System.Action toggled)
-        {
-            float width = TabParts.ButtonWidth(label, 12f);
-            Rect rect = new Rect(x, y, width, ControlHeight);
-
-            TabParts.IconToggle(rect, null, on, palette, toggled, null);
-            Overlay(rect, label, on, palette);
-
-            return x + width + TabParts.SegmentGap;
-        }
-
-        /// <summary>
-        /// The word inside a toggle.
+        /// <b>An underline rather than a fill or a frame.</b> These sit in the same strip as the chips, and a
+        /// filled segment beside an unfilled chip reads as the more important control rather than as a
+        /// different kind of one. The underline is also where the tab's identity color gets a second job.
         ///
-        /// <b>Drawn over the control rather than through it,</b> because <c>TabParts.IconToggle</c> takes a
-        /// picture and these are words. Giving that control a label parameter was the alternative and would have
-        /// left one control with two mutually exclusive arguments; the frame and the click behaviour are what was
-        /// worth sharing, and they are shared.
+        /// <b>Clicking the chosen one does nothing,</b> which is a segment's contract and the reason the state
+        /// filters are not segments.
         /// </summary>
-        private static void Overlay(Rect rect, string label, bool on, UIColorPaletteDef palette)
+        private static float SegmentTab(float x, Rect bar, string label, bool on, UIColorPaletteDef palette,
+            System.Action chosen, string tip, bool rightToLeft = false)
         {
-            GameFont font = Text.Font;
+            float width = UITextControl.Width(label, ResearchFaces.Condensed, ResearchFaces.Size.Chip) + 18f;
+            Rect rect = new Rect(rightToLeft ? x - width : x, bar.y, width, bar.height);
+
             TextAnchor anchor = Text.Anchor;
             Color color = GUI.color;
             bool wrap = Text.WordWrap;
 
             try
             {
-                Text.Font = GameFont.Tiny;
-                Text.Anchor = TextAnchor.MiddleCenter;
-                Text.WordWrap = false;
-                GUI.color = on ? palette.WindowBackground : palette.TextSecondary;
+                bool over = Mouse.IsOver(rect);
 
-                UIRichText.Label(rect, label);
+                Text.WordWrap = false;
+                Text.Anchor = TextAnchor.MiddleCenter;
+                GUI.color = on ? palette.TextPrimary : over ? palette.TextSecondary : palette.TextDisabled;
+
+                UITextControl.Label(new Rect(rect.x, rect.y - 2f, rect.width, rect.height), label,
+                    ResearchFaces.Condensed, ResearchFaces.Size.Chip);
+
+                if (on)
+                {
+                    Widgets.DrawBoxSolid(new Rect(rect.x + 3f, rect.yMax - 2f, rect.width - 6f, 2f),
+                        ResearchFaces.AccentOf(palette));
+                }
             }
             finally
             {
                 Text.WordWrap = wrap;
                 GUI.color = color;
                 Text.Anchor = anchor;
-                Text.Font = font;
             }
+
+            if (!tip.NullOrEmpty())
+                TooltipHandler.TipRegion(rect, (TipSignal) tip);
+
+            if (Widgets.ButtonInvisible(rect) && !on)
+            {
+                chosen();
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
+
+            return rightToLeft ? rect.x : rect.xMax;
+        }
+
+        /// <summary>A small caps caption naming the run of controls beside it.</summary>
+        private static float Caption(float x, Rect bar, string label, UIColorPaletteDef palette)
+        {
+            TextAnchor anchor = Text.Anchor;
+            Color color = GUI.color;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleLeft;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.Label(new Rect(x, bar.y, CaptionWidth(label), bar.height),
+                    label.ToUpperInvariant(), ResearchFaces.Mono, ResearchFaces.Size.Caption);
+            }
+            finally
+            {
+                GUI.color = color;
+                Text.Anchor = anchor;
+            }
+
+            return x + CaptionWidth(label);
+        }
+
+        private static float CaptionWidth(string label)
+        {
+            return UITextControl.Width(label.ToUpperInvariant(), ResearchFaces.Mono,
+                ResearchFaces.Size.Caption) + 10f;
         }
 
         private static readonly List<TechLevel> levelsPresent = new List<TechLevel>();
@@ -701,11 +1049,11 @@ namespace Gideon.UIOverhaul.Features.Research
                     // letters actually end. Measuring one face and drawing another is how a heading gets a rule
                     // through its last letter.
                     string caption = group.Label.ToUpperInvariant();
-                    float width = UITextControl.Width(caption, UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold)
-                                  + 6f;
+                    float width = UITextControl.Width(caption, ResearchFaces.Condensed, ResearchFaces.Size.Band,
+                                      FontStyle.Bold) + 6f;
 
                     UITextControl.Label(new Rect(x, band.y, width, band.height), caption,
-                        UIFace.BarlowCondensed, GameFont.Small, FontStyle.Bold);
+                        ResearchFaces.Condensed, ResearchFaces.Size.Band, FontStyle.Bold);
 
                     x += width;
 
@@ -715,18 +1063,18 @@ namespace Gideon.UIOverhaul.Features.Research
 
                     if (!tally.NullOrEmpty())
                     {
-                        Text.Font = GameFont.Tiny;
                         GUI.color = palette.TextDisabled;
 
-                        float tallyWidth = UIRichText.WidthOf(tally) + 6f;
+                        // In the mono, like every other figure on this tab. Eleven headings down a canvas put
+                        // their tallies in a ragged column when they were set in the game's proportional font,
+                        // and "3 of 68" beside "18 of 68" could not be compared at a glance.
+                        float tallyWidth = UITextControl.Width(tally, ResearchFaces.Mono,
+                            ResearchFaces.Size.Figure) + 8f;
 
-                        Widgets.Label(new Rect(x, band.y + 3f, tallyWidth, band.height), tally);
+                        UITextControl.Label(new Rect(x, band.y + 2f, tallyWidth, band.height), tally,
+                            ResearchFaces.Mono, ResearchFaces.Size.Figure);
 
                         x += tallyWidth;
-
-                        // Back to the caption's font, not to the caller's: the outer finally restores that, and
-                        // the next block's caption is drawn by the next turn of this loop.
-                        Text.Font = GameFont.Small;
                     }
 
                     GUI.color = group.Band.HasValue
@@ -795,37 +1143,28 @@ namespace Gideon.UIOverhaul.Features.Research
             railMeasuredFor = groups.Count;
             railMeasuredKey = key;
 
-            GameFont font = Text.Font;
+            float widest = 0f;
 
-            try
+            for (int i = 0; i < groups.Count; i++)
             {
-                float widest = 0f;
+                ResearchGroup group = groups[i];
 
-                for (int i = 0; i < groups.Count; i++)
-                {
-                    ResearchGroup group = groups[i];
+                // Each half measured in the face it is drawn in: the label in the condensed face at its own
+                // point size, the tally in the mono at its. One measurement taken in the wrong font is exactly
+                // what truncated the node captions, and both halves changed face when the rows did -- the
+                // label is no longer bold and the tally is no longer the game's own font.
+                float tally = UITextControl.Width(Finished(group) + "/" + group.Nodes.Count,
+                    ResearchFaces.Mono, ResearchFaces.Size.RailCount);
 
-                    // Each half measured at the font it is drawn in -- the tally at Tiny, the label at Small.
-                    // One measurement taken in the wrong font is exactly what truncated the node captions.
-                    Text.Font = GameFont.Tiny;
+                float label = UITextControl.Width(group.Label ?? string.Empty, ResearchFaces.Condensed,
+                    ResearchFaces.Size.RailName);
 
-                    float tally = UIRichText.WidthOf(Finished(group) + "/" + group.Nodes.Count);
-
-                    // Measured bolded, because that is how it is drawn: bold is wider, and measuring the plain
-                    // string would size the rail to text it never renders.
-                    Text.Font = GameFont.Small;
-
-                    widest = Mathf.Max(widest, UIRichText.WidthOf("<b>" + group.Label + "</b>") + tally);
-                }
-
-                // 10 for the tick and its gap, 6 between label and tally, 4 for the tally's own right margin,
-                // 18 for the scrollbar, 2 for the rail's border.
-                railMeasured = Mathf.Clamp(widest + 40f, MinRailWidth, MaxRailWidth);
+                widest = Mathf.Max(widest, label + tally);
             }
-            finally
-            {
-                Text.Font = font;
-            }
+
+            // 6 for the selection bar's reserved lane, 10 for the swatch and its gap, 6 between label and
+            // tally, 4 for the tally's own right margin, 18 for the scrollbar, 2 for the rail's border.
+            railMeasured = Mathf.Clamp(widest + 46f, MinRailWidth, MaxRailWidth);
 
             return railMeasured;
         }
@@ -853,27 +1192,38 @@ namespace Gideon.UIOverhaul.Features.Research
         /// rail rather than a row inside it. Folded, the rows keep only their colour tick, which is why the
         /// entries are built differently rather than the control being asked to render two ways.
         ///
-        /// The label takes the band's own colour. A four pixel tick is not enough of a hue to read as "this is
-        /// the medicine band" at a glance, and the canvas heading it jumps to is coloured, so a grey rail was
-        /// the one place a band had no colour.
+        /// The colour is on the swatch alone. It was on the label as well, which said the same fact twice and
+        /// left the selection with nowhere to go on a rail whose rows are all already coloured; the tab's own
+        /// colour marks that now, as a bar down the leading edge. See <c>UIRailClickableEntry.SelectionBar</c>.
         /// </summary>
         private static void ContentsRail(Rect rail, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rail, palette.Border, palette.PanelBackground);
+            UIElementPainter.OutlineRounded(rail, palette.Border, palette.SurfaceSunken);
 
             List<ResearchGroup> groups = ResearchGraph.Groups;
 
-            Rect fold = new Rect(rail.x + 1f, rail.y + 1f, rail.width - 2f, 16f);
+            Rect fold = new Rect(rail.x + 1f, rail.y + 1f, rail.width - 2f, 18f);
 
             if (Mouse.IsOver(fold))
                 Widgets.DrawHighlight(fold);
 
-            Text.Font = GameFont.Tiny;
             Text.Anchor = railFolded ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft;
             GUI.color = palette.TextDisabled;
 
-            UITextControl.Label(railFolded ? fold : new Rect(fold.x + 5f, fold.y, fold.width - 5f, fold.height),
-                railFolded ? ">>" : RailHeading(), UIFace.BarlowCondensed, GameFont.Tiny, FontStyle.Bold);
+            // Small caps in the mono, matching the queue's heading below it and the readout captions above.
+            UITextControl.Label(railFolded ? fold : new Rect(fold.x + 6f, fold.y, fold.width - 30f, fold.height),
+                railFolded ? ">>" : RailHeading().ToUpperInvariant(), ResearchFaces.Mono,
+                ResearchFaces.Size.Caption);
+
+            // How many blocks there are, on the right, the way the queue puts its total there. The rail could
+            // always be counted by eye and never said the figure.
+            if (!railFolded)
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+
+                UITextControl.Label(new Rect(fold.xMax - 26f, fold.y, 22f, fold.height),
+                    groups.Count.ToString(), ResearchFaces.Mono, ResearchFaces.Size.Caption);
+            }
 
             Text.Anchor = TextAnchor.UpperLeft;
             GUI.color = palette.TextPrimary;
@@ -924,12 +1274,25 @@ namespace Gideon.UIOverhaul.Features.Research
                     Rise = RailRowHeight + RailRowGap,
                     Swatch = tint,
                     SwatchWidth = 4f,
-                    Face = UIFace.BarlowCondensed,
-                    Font = GameFont.Small,
-                    Style = FontStyle.Bold,
-                    TextColor = here && !group.Band.HasValue ? palette.TextPrimary : tint,
+
+                    // The bar the selection is marked with, in the tab's colour, which no band can be. Set on
+                    // every row so the swatch beside it does not shift as the selection moves.
+                    SelectionBar = ResearchFaces.AccentOf(palette),
+
+                    Face = ResearchFaces.Condensed,
+                    Points = ResearchFaces.Size.RailName,
+
+                    // <b>The label is no longer tinted, and the weight is no longer bold.</b> The swatch already
+                    // carries the band's colour; saying it twice made twelve rows of coloured bold text with a
+                    // coloured bar under each read as one striped block rather than as twelve entries, and left
+                    // the selection nowhere to go -- being on Dark Knowledge and being on Mechanoids looked the
+                    // same. Colour on the swatch, weight nowhere, and the tab's own colour free to mean
+                    // "you are here".
+                    TextColor = here ? palette.TextPrimary : palette.TextSecondary,
+
                     Trailing = done + "/" + group.Nodes.Count,
-                    CountFace = UIFace.BarlowCondensed,
+                    CountFace = ResearchFaces.Mono,
+                    CountPoints = ResearchFaces.Size.RailCount,
                     CountColor = here ? palette.TextSecondary : palette.TextDisabled,
                     Progress = group.Nodes.Count == 0 ? 0f : done / (float) group.Nodes.Count,
                     ProgressColor = tint,
@@ -1789,7 +2152,9 @@ namespace Gideon.UIOverhaul.Features.Research
         /// </summary>
         private static void QueueRail(Rect rect, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
+            // SurfaceSunken, matching the header and the contents rail: all three are chrome around the canvas,
+            // and the canvas is the one thing on the screen that sits above its ground.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
             GameComponent_ResearchQueue queue = GameComponent_ResearchQueue.Current;
 
@@ -1830,7 +2195,10 @@ namespace Gideon.UIOverhaul.Features.Research
             elements.Add(new UIRailSectionHeaderControl("Queue")
             {
                 Trailing = TotalDays(main),
-                Color = palette.TextDisabled
+                Color = palette.TextDisabled,
+                Uppercase = true,
+                Face = ResearchFaces.Mono,
+                Points = ResearchFaces.Size.Caption
             });
 
             if (main.Count == 0)
@@ -1850,7 +2218,10 @@ namespace Gideon.UIOverhaul.Features.Research
                 elements.Add(new UIRailSectionHeaderControl("Anomaly")
                 {
                     Trailing = "parallel",
-                    Color = palette.TextDisabled
+                    Color = palette.TextDisabled,
+                    Uppercase = true,
+                    Face = ResearchFaces.Mono,
+                    Points = ResearchFaces.Size.Caption
                 });
 
                 for (int i = 0; i < anomaly.Count; i++)
@@ -1876,10 +2247,19 @@ namespace Gideon.UIOverhaul.Features.Research
             elements.Add(new UIRailClickableEntry(key, project.LabelCap)
             {
                 Rise = RowHeight,
+                Face = ResearchFaces.Condensed,
+                Points = ResearchFaces.Size.RailName,
                 Trailing = project.knowledgeCategory != null
                     ? "parallel"
                     : ResearchRate.Days(ResearchRate.DaysFor(project)),
+                CountFace = ResearchFaces.Mono,
+                CountPoints = ResearchFaces.Size.RailCount,
                 CountColor = palette.TextDisabled,
+
+                // The row the colony is actually working on, marked the way the contents rail marks its block.
+                // The control was already being told which row that is and had nothing to draw it with.
+                SelectionBar = ResearchFaces.AccentOf(palette),
+
                 Silent = true,
 
                 // The grip alone, tight against the edge. The badge that used to sit beside it said the same
