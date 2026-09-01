@@ -111,6 +111,16 @@ namespace Gideon.UIFramework.Components.Colors
         TabQuests,
 
         /// <summary>
+        /// The Animals tab's own color, the third of the per-tab identities.
+        ///
+        /// <b>A muted sage, and deliberately not <see cref="Success"/>.</b> Green is the obvious association
+        /// for animals and the obvious hazard is that this tab is full of real health and state readings,
+        /// which are already green when they are good. Success is saturated and bright; this is neither, so
+        /// the two do not compete even sitting on the same row.
+        /// </summary>
+        TabAnimals,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>
