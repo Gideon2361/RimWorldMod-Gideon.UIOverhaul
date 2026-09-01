@@ -390,6 +390,61 @@ namespace Gideon.UIOverhaul.Features.Pawns
         }
 
         /// <summary>
+        /// Whether somebody has to do something about this pawn.
+        ///
+        /// The question the map rail's dot asks, and it is deliberately wider than "is this an emergency":
+        /// a tendable wound nobody has got to is the case a player most wants told about on a map they are
+        /// not currently looking at. <see cref="PawnHealthState.Recovering"/> is excluded because it is the
+        /// state that means somebody already did -- the pawn is in a bed, getting better.
+        /// </summary>
+        public bool NeedsCare
+        {
+            get
+            {
+                switch (State)
+                {
+                    case PawnHealthState.NeedsTending:
+                    case PawnHealthState.UrgentTending:
+                    case PawnHealthState.LifeThreatening:
+                    case PawnHealthState.BleedingOut:
+                    case PawnHealthState.Downed:
+                    case PawnHealthState.Vacuum:
+                    case PawnHealthState.SevereTemperature:
+                        return true;
+
+                    default:
+                        return false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether the care is on a clock, which is what turns the rail's dot from amber to red.
+        ///
+        /// The same split the column's own colors make: an untended wound waits, and everything here does
+        /// not. A mental break is left out on purpose -- it is urgent, but it is not care, and colouring
+        /// it as an injury on a rail with no room to explain would send somebody looking for a doctor.
+        /// </summary>
+        public bool Urgent
+        {
+            get
+            {
+                switch (State)
+                {
+                    case PawnHealthState.LifeThreatening:
+                    case PawnHealthState.BleedingOut:
+                    case PawnHealthState.Downed:
+                    case PawnHealthState.Vacuum:
+                    case PawnHealthState.SevereTemperature:
+                        return true;
+
+                    default:
+                        return false;
+                }
+            }
+        }
+
+        /// <summary>
         /// The color for the winning state, from the palette's meaning roles rather than from literals, so a
         /// theme can restate what "danger" looks like and this follows.
         /// </summary>

@@ -72,11 +72,46 @@ namespace Gideon.UIOverhaul.Features.Pawns
         ///
         /// Right-aligned because every caller puts it at the end of a band whose contents grow leftwards from it.
         /// </summary>
+        /// <summary>
+        /// How much of a resting toolbar is drawn, when a caller asks for one.
+        ///
+        /// Zero is not an option and that is the point: the buttons stay visible, stay where they are and stay
+        /// clickable, so a click aimed from memory still lands on one. See <see cref="Strength"/>.
+        /// </summary>
+        private static float strength = 1f;
+
+        /// <summary>
+        /// The toolbar's drawing strength for the current call, between 0 and 1.
+        ///
+        /// A caller with many rows on screen at once can rest the toolbars it is not pointing at, which is
+        /// what stops five buttons a row from becoming fifty glyphs competing with the data. Below full
+        /// strength the button chrome is dropped and the icon is faded, so what is left is a hint of the tool
+        /// rather than a shrunken copy of it.
+        /// </summary>
+        private static bool Resting
+        {
+            get { return strength < 1f; }
+        }
+
         internal static void Row(Rect rect, Pawn pawn, PawnTemplateScope scope, UIColorPaletteDef palette)
+        {
+            Row(rect, pawn, scope, palette, 1f);
+        }
+
+        /// <inheritdoc cref="Row(Rect, Pawn, PawnTemplateScope, UIColorPaletteDef)"/>
+        /// <param name="drawStrength">See <see cref="Resting"/>. One draws the toolbar as it always was.</param>
+        internal static void Row(Rect rect, Pawn pawn, PawnTemplateScope scope, UIColorPaletteDef palette,
+            float drawStrength)
         {
             if (pawn == null || rect.width <= 0f)
                 return;
 
+            float previousStrength = strength;
+
+            strength = Mathf.Clamp01(drawStrength);
+
+            try
+            {
             UIGuard.Try("Pawns.Tools", () =>
             {
                 float step = ButtonSize + ButtonGap;
@@ -120,6 +155,11 @@ namespace Gideon.UIOverhaul.Features.Pawns
                         "Apply a saved " + Noun(scope) + " template to " + pawn.LabelShortCap + "."))
                     Find.WindowStack.Add(new Dialog_PawnTemplates(pawn, scope));
             }, "The copy and template buttons are missing from one of the pawn's bands.");
+            }
+            finally
+            {
+                strength = previousStrength;
+            }
         }
 
         /// <summary>What this scope is called in a sentence.</summary>
@@ -274,11 +314,15 @@ namespace Gideon.UIOverhaul.Features.Pawns
 
             bool over = !disabled && Mouse.IsOver(r);
 
-            UIElementPainter.PaintButton(r, palette, over, over && Input.GetMouseButton(0));
+            // A resting toolbar keeps its icons and drops its chrome. Painting the boxes too would put the
+            // faded copy of a button beside the real ones, which reads as broken rather than as quiet.
+            if (!Resting)
+                UIElementPainter.PaintButton(r, palette, over, over && Input.GetMouseButton(0));
 
             Color previous = GUI.color;
 
-            GUI.color = disabled ? palette.TextDisabled : over ? palette.TextPrimary : palette.TextSecondary;
+            GUI.color = Rest(disabled ? palette.TextDisabled
+                : over ? palette.TextPrimary : palette.TextSecondary);
 
             if (icon != null)
             {
@@ -298,6 +342,12 @@ namespace Gideon.UIOverhaul.Features.Pawns
             GUI.color = previous;
 
             return !disabled && Widgets.ButtonInvisible(r);
+        }
+
+        /// <summary>The colour a resting toolbar draws in: the same colour, with the alpha taken down.</summary>
+        private static Color Rest(Color color)
+        {
+            return Resting ? new Color(color.r, color.g, color.b, color.a * strength) : color;
         }
     }
 }
