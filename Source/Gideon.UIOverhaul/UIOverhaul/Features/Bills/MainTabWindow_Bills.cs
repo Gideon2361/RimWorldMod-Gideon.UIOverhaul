@@ -861,6 +861,10 @@ namespace Gideon.UIOverhaul.Features.Bills
             Text.Font = GameFont.Small;
             GUI.color = entry.Suspended ? palette.TextDisabled : palette.TextPrimary;
 
+            // Counted once and handed to both the detail line and the bar. It walks the map's resource
+            // counter, so asking twice per row is a map wide count per row per frame for one number.
+            int held = Held(entry.Bill);
+
             float textWidth = rect.width - 306f;
 
             Widgets.Label(new Rect(rect.x + 72f, rect.y + 6f, textWidth, 20f), entry.Label);
@@ -868,7 +872,7 @@ namespace Gideon.UIOverhaul.Features.Bills
             Text.Font = GameFont.Tiny;
             GUI.color = palette.TextDisabled;
 
-            Widgets.Label(new Rect(rect.x + 72f, rect.y + 26f, textWidth, 18f), Detail(entry));
+            Widgets.Label(new Rect(rect.x + 72f, rect.y + 26f, textWidth, 18f), Detail(entry, held));
 
             Text.Anchor = TextAnchor.MiddleRight;
             GUI.color = entry.Trouble != BillTrouble.None ? palette.Danger : palette.TextSecondary;
@@ -877,7 +881,7 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             Text.Anchor = TextAnchor.UpperLeft;
 
-            Progress(rect, entry, palette);
+            Progress(rect, entry, held, palette);
 
             bool acted = Actions(rect, entry, palette);
 
@@ -905,14 +909,14 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// <b>Amber once the target is met,</b> matching the stripe and the badge, so a satisfied bill reads the
         /// same in all three places.
         /// </summary>
-        private static void Progress(Rect rect, BillEntry entry, UIColorPaletteDef palette)
+        private static void Progress(Rect rect, BillEntry entry, int held, UIColorPaletteDef palette)
         {
             Bill_Production bill = entry.Bill;
 
             if (bill == null || bill.repeatMode != BillRepeatModeDefOf.TargetCount || bill.targetCount <= 0)
                 return;
 
-            int held = Held(bill);
+            // held is passed in: the row already counted it for the line above the bar.
             float fill = Mathf.Clamp01(held / (float) bill.targetCount);
 
             Rect bar = new Rect(rect.x + 72f, rect.yMax - 9f, rect.width - 300f, 4f);
@@ -924,8 +928,12 @@ namespace Gideon.UIOverhaul.Features.Bills
 
             if (fill > 0f)
             {
+                // <b>Green at the target rather than amber.</b> A bill that has made what it was asked for is
+                // finished, and finished is the one thing amber does not mean anywhere else in the mod: it is
+                // the color this very tab uses for a bill that cannot run. Reading "done" and "in trouble" in
+                // the same color on the same screen is what the bar was doing until Aaron caught it.
                 UIElementPainter.FillRounded(new Rect(bar.x, bar.y, Mathf.Max(2f, bar.width * fill), bar.height),
-                    fill >= 1f ? palette.Warning : palette.Accent);
+                    fill >= 1f ? palette.Success : palette.Accent);
             }
 
             if (Mouse.IsOver(rect))
@@ -1137,12 +1145,16 @@ namespace Gideon.UIOverhaul.Features.Bills
             Reread();
         }
 
-        private static string Detail(BillEntry entry)
+        private static string Detail(BillEntry entry, int held)
         {
             Bill_Production bill = entry.Bill;
 
+            // <b>The count against the target, not just the target.</b> "Until you have 500" says a target
+            // exists and nothing else; the bar underneath then carries the only part worth reading, and it
+            // carried it as a tooltip nobody hovers. With both numbers on the line the bar is confirming what
+            // the row already says rather than being the only place it is said.
             if (bill.repeatMode == BillRepeatModeDefOf.TargetCount)
-                return "Until you have " + bill.targetCount;
+                return "Until you have " + held.ToString("N0") + " / " + bill.targetCount.ToString("N0");
 
             if (bill.repeatMode == BillRepeatModeDefOf.Forever)
                 return "Forever";
