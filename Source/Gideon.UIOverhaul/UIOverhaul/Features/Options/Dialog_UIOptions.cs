@@ -2967,6 +2967,20 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += 8f;
 
+            GroupLabel(view, ref y, palette, "History");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Rebuild the history tab",
+                settings.historyTab, value => settings.historyTab = value,
+                "One screen in place of the Graph, Messages and Statistics pages. The graph, the archive and "
+                + "the battle log share a time axis, so a wealth cliff sits above the letters that caused it, "
+                + "and a rail replaces the Select graph menu.\n\nIt also adds a view the tab never had: the "
+                + "game keeps a record of the last twenty battles, and today that is only reachable one "
+                + "colonist at a time through their character card.\n\nThe archive says out loud that it keeps "
+                + "only 200 entries and drops the oldest, which is what the pin has always been for.\n\nWith "
+                + "this off the vanilla screen is untouched.");
+
+            y += 8f;
+
             GroupLabel(view, ref y, palette, "World map");
 
             DrawSiteFade(view, ref y, palette);

@@ -217,6 +217,32 @@ namespace Gideon.UIFramework.Components.Colors
         TabResearch,
 
         /// <summary>
+        /// The History tab's own color: a muted emerald, defaulting to <c>#72C093</c>.
+        ///
+        /// <b>This is the hue <see cref="TabResearch"/> passed on, taken by the one tab that can hold it.</b>
+        /// Research worked out that the widest hole in the ring is 85 to 172 and then refused it, because that
+        /// tab spends <see cref="Success"/> on the word "Done", on every finished node and on a wash across a
+        /// whole card: a jade title over a green Done column is two greens meaning different things. History
+        /// draws no <see cref="Success"/> at all. Its letters are tinted by
+        /// <c>IArchivable.ArchivedIconColor</c>, which is the letter def's own color and not one of ours, and
+        /// its statistics figures are <see cref="TextPrimary"/>. So the objection does not transfer, and the
+        /// gap is free.
+        ///
+        /// <b>145 degrees rather than the gap's center.</b> The middle of 85 to 172 is about 128, which is
+        /// eight degrees off <see cref="Success"/> at 120 and ten points of saturation away from it. Two colors
+        /// that close are the same color to anyone not holding a swatch, and the one rule this set has never
+        /// bent is that an identity must never be mistaken for a state. Moving to 145 buys 25 degrees from the
+        /// green and pays 27 to <see cref="TabPower"/>'s teal at 172, which is a trade of a state collision for
+        /// an identity one -- and identities are the safe side, since no two of them are ever on screen at once.
+        ///
+        /// <b>It never draws on the plot.</b> The chart series own everything inside the axes; this draws only
+        /// on the chrome around them, in the header mark and title, the range segments and the rail selection.
+        /// That is the same separation <see cref="TabResearch"/> keeps from its band colors, and it is what lets
+        /// a chart curve be green without arguing with the title above it.
+        /// </summary>
+        TabHistory,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

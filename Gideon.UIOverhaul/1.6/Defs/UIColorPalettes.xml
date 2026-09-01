@@ -42,6 +42,7 @@
          wrong, because success is at 120 and this is the tab that spends success green on the word Done.
          So the next gap takes it, an iris at 235 between the quests blue and the violet of the dead. -->
     <tabResearch>#8B90CC</tabResearch>
+    <tabHistory>#72C093</tabHistory>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -130,6 +131,7 @@
     <tabPawns>#9A4568</tabPawns>
     <tabHospital>#99458C</tabHospital>
     <tabResearch>#4A4F94</tabResearch>
+    <tabHistory>#2C7D4E</tabHistory>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>
