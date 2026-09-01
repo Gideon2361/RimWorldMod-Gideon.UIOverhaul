@@ -11,6 +11,10 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
     [StaticConstructorOnStartup]
     public static class GzpTex
     {
+        /// <summary>The tab own mark, shared with the button that opens it.</summary>
+        public static readonly Texture2D Mark =
+            ContentFinder<Texture2D>.Get("UI/MainButtonIcons/GrowZones", false);
+
         public static readonly Texture2D Close = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/Close");
         public static readonly Texture2D Beauty = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/Beauty_128");
         public static readonly Texture2D Skill = ContentFinder<Texture2D>.Get("UIOverhaul/GrowZones/Skill_128");
