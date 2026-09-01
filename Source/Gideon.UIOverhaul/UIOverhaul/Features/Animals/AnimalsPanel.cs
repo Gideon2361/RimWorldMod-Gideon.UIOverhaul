@@ -397,7 +397,9 @@ namespace Gideon.UIOverhaul.Features.Animals
         /// </summary>
         private static void Header(Rect rect, List<AnimalSection> sections, UIColorPaletteDef palette)
         {
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
+            // SurfaceSunken, the same fill the rail beside it uses: header and rail are both chrome framing
+            // the content, so they share a surface and the blocks between them sit above it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
             Rect inner = rect.ContractedBy(10f);
 
