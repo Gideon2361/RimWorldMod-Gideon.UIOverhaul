@@ -1,5 +1,7 @@
 ﻿using Gideon.UIFramework.Controls;
+using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using System.Collections.Generic;
 using UnityEngine;
@@ -16,18 +18,19 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
     public class MainTabWindow_GrowZones : MainTabWindow
     {
         private const float HeaderHeight = 42f;
-        private const float ColumnHeaderHeight = 24f;
-        private const float RowHeight = 52f;
-        private const float RowGap = 3f;
+        private const float RailWidth = 190f;
+        private const float MarkSize = 28f;
+        private const float BlockGap = 10f;
         private const float Pad = 12f;
         private const float IconSize = 24f;
 
-        private Vector2 scroll;
+        private Vector2 railScroll;
+        private bool railDragging;
+        private float railDragOffset;
 
-        /// <summary>Card chrome for the zone rows, reconfigured per row as the list is drawn.</summary>
-        private readonly UICardControl rowCard = new UICardControl();
-        private bool draggingScrollbar;
-        private float scrollDragOffset;
+        /// <summary>Which zone the pane is showing. The rail keeps it; nothing else needs it.</summary>
+        private int selected;
+
 
         private readonly List<Zone_Growing> zones = new List<Zone_Growing>();
 
@@ -49,7 +52,8 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                 // Fresh figures the moment the tab appears, and it releases zones deleted since the
                 // last time it was open.
                 GrowZoneStatusCache.Clear();
-                scroll = Vector2.zero;
+                railScroll = Vector2.zero;
+                selected = 0;
             }, "The growing zones tab may show figures cached from the last time it was open.");
         }
 
@@ -66,94 +70,214 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             GatherZones();
 
-            Rect header = new Rect(inRect.x + Pad, inRect.y, inRect.width - Pad * 2f, HeaderHeight);
-            DrawHeader(header);
-
-            Rect columns = new Rect(header.x, header.yMax, header.width, ColumnHeaderHeight);
-            DrawColumnHeaders(columns);
-
-            Rect list = new Rect(header.x, columns.yMax + 4f, header.width,
-                inRect.yMax - columns.yMax - 4f - Pad);
+            UIColorPaletteDef palette = UIColorPaletteDef.Active;
+            Rect body = inRect.ContractedBy(Pad);
 
             if (zones.Count == 0)
             {
-                DrawEmptyState(list);
+                DrawEmptyState(body);
+
                 return;
             }
 
-            DrawList(list);
+            if (selected >= zones.Count)
+                selected = zones.Count - 1;
+
+            Rect head = new Rect(body.x, body.y, body.width, HeaderHeight);
+
+            DrawHeader(head, palette);
+
+            Rect rest = new Rect(body.x, head.yMax + 10f, body.width, body.yMax - head.yMax - 10f);
+            Rect rail = new Rect(rest.x, rest.y, RailWidth, rest.height);
+
+            DrawRail(rail, palette);
+            DrawBlocks(new Rect(rail.xMax + 10f, rest.y, rest.xMax - rail.xMax - 10f, rest.height),
+                palette);
         }
 
         /// <summary>
-        /// Rebuilt each frame rather than cached: zones are created, deleted and renamed freely
-        /// while the tab is open, and the list is at most a few dozen entries.
+        /// Rebuilt each frame rather than cached: zones are created, deleted and renamed freely while the
+        /// tab is open, and the list is at most a few dozen entries.
         /// </summary>
         private void GatherZones()
         {
             zones.Clear();
 
             Map map = Find.CurrentMap;
+
             if (map == null)
                 return;
 
             foreach (Zone zone in map.zoneManager.AllZones)
             {
-                // Zone_Growing rather than Zone_GrowingPlus: an unconverted vanilla zone still
-                // belongs in this list, and it reads perfectly well without a bill stack.
+                // Zone_Growing rather than Zone_GrowingPlus: an unconverted vanilla zone still belongs in
+                // this list, and it reads perfectly well without a bill stack.
                 if (zone is Zone_Growing growing)
                     zones.Add(growing);
             }
-
-            zones.SortBy(z => z.label);
         }
 
-        private void DrawHeader(Rect r)
+        /// <summary>
+        /// The tab's own colour, or the accent when the palette has never heard of this tab.
+        ///
+        /// <b>Muted where the state colours are saturated.</b> This tab spends green on a healthy
+        /// temperature, so its identity cannot be that same green -- and a growing tab in anything other
+        /// than green would be perverse. The separation is weight rather than hue: a state colour shouts
+        /// and an identity does not, which lets the two greens sit in one row without merging.
+        /// </summary>
+        private static Color Identity(UIColorPaletteDef palette)
         {
-            Text.Font = GameFont.Medium;
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.Stat;
-            Widgets.Label(new Rect(r.x, r.y + 4f, r.width * 0.6f, 32f), "Growing Zones");
+            return palette.Custom("tabGrowing", palette.Accent);
+        }
 
-            Text.Font = GameFont.Small;
-            GUI.color = GzpPalette.TextDim;
+        /// <summary>
+        /// The mark, the tab's name, which zone is being read, and the three figures worth having
+        /// without opening anything.
+        /// </summary>
+        private void DrawHeader(Rect rect, UIColorPaletteDef palette)
+        {
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
+
+            Color hue = Identity(palette);
+            Rect inner = rect.ContractedBy(10f);
+            float text = inner.x;
+
+            if (GzpTex.Mark != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - MarkSize) * 0.5f, MarkSize,
+                    MarkSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = hue;
+
+                GUI.DrawTexture(mark, GzpTex.Mark, ScaleMode.ScaleToFit);
+
+                GUI.color = previous;
+
+                text = mark.xMax + 10f;
+            }
+
+            Zone_Growing zone = zones[selected];
+
+            TabParts.RowLabel(new Rect(text, inner.y + 1f, 340f, 24f), "Growing Zones", hue,
+                GameFont.Medium, GrowFaces.Display, GrowFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 25f, 340f, 18f),
+                zone.label + "  -  " + zone.Cells.Count + " cells", palette.TextSecondary,
+                GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Subtitle);
+
+            int planted = 0;
+            int wanting = 0;
+
+            for (int i = 0; i < zones.Count; i++)
+            {
+                GrowZoneStatus each = GrowZoneStatusCache.For(zones[i]);
+
+                planted += each.PlantCount;
+
+                if (each.PlantCount < zones[i].Cells.Count)
+                    wanting++;
+            }
+
+            float right = inner.xMax;
+
+            right = Readout(inner, right, wanting.ToString(), "unplanted",
+                wanting > 0 ? palette.Warning : palette.TextSecondary, palette);
+
+            right = Readout(inner, right, planted.ToString("N0"), "planted", palette.TextPrimary, palette);
+
+            Readout(inner, right, zones.Count.ToString(), "zones", palette.TextPrimary, palette);
+        }
+
+        /// <summary>
+        /// One figure and its caption, laid out from the right edge inward.
+        ///
+        /// Right aligned by setting the anchor around the call rather than through it: TabParts.RowLabel
+        /// takes a face and a size but not an alignment, and every other caller wants the left edge.
+        /// </summary>
+        private static float Readout(Rect inner, float right, string value, string caption, Color tint,
+            UIColorPaletteDef palette)
+        {
+            float width = Mathf.Max(UITextControl.Width(value, GrowFaces.Mono, GrowFaces.Size.Readout),
+                UITextControl.Width(caption.ToUpperInvariant(), GrowFaces.Mono, GrowFaces.Size.Caption))
+                          + 4f;
+
+            Rect box = new Rect(right - width, inner.y, width, inner.height);
+            TextAnchor previousAnchor = Text.Anchor;
+
             Text.Anchor = TextAnchor.MiddleRight;
-            Widgets.Label(new Rect(r.x + r.width * 0.6f, r.y, r.width * 0.4f, HeaderHeight),
-                zones.Count == 1 ? "1 zone" : $"{zones.Count} zones");
-            Text.Anchor = TextAnchor.UpperLeft;
-            GUI.color = previous;
+
+            TabParts.RowLabel(new Rect(box.x, box.y + 2f, box.width, 20f), value, tint, GameFont.Small,
+                GrowFaces.Mono, GrowFaces.Size.Readout);
+
+            TabParts.RowLabel(new Rect(box.x, box.y + 24f, box.width, 14f), caption.ToUpperInvariant(),
+                palette.TextDisabled, GameFont.Tiny, GrowFaces.Mono, GrowFaces.Size.Caption);
+
+            Text.Anchor = previousAnchor;
+
+            return box.x - 22f;
+        }
+
+        /// <summary>
+        /// Every zone, with how far along it is.
+        ///
+        /// <b>The rail carries the answer, not just the name.</b> A zone's row shows its crop and its
+        /// growth, so the list is the at-a-glance version of the table this replaced, and the pane never
+        /// repeats what the rail already said.
+        /// </summary>
+        private void DrawRail(Rect rect, UIColorPaletteDef palette)
+        {
+            Color hue = Identity(palette);
+            List<UIRailElement> elements = new List<UIRailElement>();
+
+            elements.Add(new UIRailSectionHeaderControl("Zones")
+            {
+                Uppercase = true,
+                Face = GrowFaces.Mono,
+                Points = GrowFaces.Size.Caption,
+                Color = palette.TextDisabled
+            });
+
+            for (int i = 0; i < zones.Count; i++)
+            {
+                Zone_Growing zone = zones[i];
+                GrowZoneStatus status = GrowZoneStatusCache.For(zone);
+                bool bare = status.Plant == null;
+
+                elements.Add(new UIRailClickableEntry(i.ToString(),
+                    bare ? zone.label : status.Plant.LabelCap)
+                {
+                    Rise = 30f,
+                    Face = GrowFaces.Condensed,
+                    Points = GrowFaces.Size.RailName,
+                    TextColor = i == selected ? hue : (Color?) null,
+                    Trailing = bare ? "--" : status.AverageGrowth.ToStringPercent(),
+                    CountFace = GrowFaces.Mono,
+                    CountPoints = GrowFaces.Size.RailCount,
+                    Progress = bare ? 0f : Mathf.Clamp01(status.AverageGrowth),
+                    ProgressColor = hue,
+                    Tooltip = zone.label + " -- " + zone.Cells.Count + " cells"
+                });
+            }
+
+            string picked = UIRailControl.Draw(rect, elements, selected.ToString(), ref railScroll,
+                ref railDragging, ref railDragOffset, palette);
+
+            int index;
+
+            if (picked == null || !int.TryParse(picked, out index))
+                return;
+
+            // Clicking the row already open jumps the camera to it, which is the only reason this tab
+            // ever needed a row to answer a second click.
+            if (index == selected)
+                JumpTo(zones[index]);
+
+            selected = index;
         }
 
         // Column widths as fractions of the list width. They sum to 1.
-        private const float ColName = 0.22f;
-        private const float ColGrowing = 0.23f;
-        private const float ColProgress = 0.22f;
-        private const float ColTemp = 0.16f;
-        private const float ColYield = 0.17f;
-
-        private void DrawColumnHeaders(Rect r)
-        {
-            // The scrollbar sits inside the list, so the headers stop short of it to stay aligned.
-            // Same measure the rows use, so the two cannot drift apart.
-            float width = GzpPalette.ContentWidth(r);
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-
-            float x = r.x + Pad;
-            Label(ref x, width * ColName, r.y, "Zone");
-            Label(ref x, width * ColGrowing, r.y, "Growing");
-            Label(ref x, width * ColProgress, r.y, "Progress");
-            Label(ref x, width * ColTemp, r.y, "Temperature");
-            Label(ref x, width * ColYield, r.y, "Yield");
-
-            GUI.color = previous;
-            Widgets.DrawLineHorizontal(r.x, r.yMax - 1f, r.width, GzpPalette.BGL);
-        }
-
-        private static void Label(ref float x, float width, float y, string text)
-        {
-            Widgets.Label(new Rect(x, y, width, ColumnHeaderHeight), text);
-            x += width;
-        }
 
         private void DrawEmptyState(Rect r)
         {
@@ -163,71 +287,6 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             Widgets.Label(r, "No growing zones on this map.");
             Text.Anchor = TextAnchor.UpperLeft;
             GUI.color = previous;
-        }
-
-        private void DrawList(Rect outRect)
-        {
-            float viewHeight = zones.Count * (RowHeight + RowGap);
-            Rect view = new Rect(0f, 0f, GzpPalette.ContentWidth(outRect), viewHeight);
-
-            Widgets.BeginScrollView(outRect, ref scroll, view, false);
-
-            float y = 0f;
-            foreach (Zone_Growing zone in zones)
-            {
-                Rect row = new Rect(0f, y, view.width, RowHeight);
-
-                // Skip rows scrolled out of sight. Each one costs a cached-status read and several
-                // string builds, which is wasted work for a zone nobody can see.
-                if (row.yMax >= scroll.y && row.y <= scroll.y + outRect.height)
-                    DrawRow(row, zone);
-
-                y += RowHeight + RowGap;
-            }
-
-            Widgets.EndScrollView();
-
-            GzpPalette.FlatScrollbar(outRect, viewHeight, ref scroll, ref draggingScrollbar,
-                ref scrollDragOffset);
-        }
-
-        private void DrawRow(Rect r, Zone_Growing zone)
-        {
-            // Chrome from the shared card control. The stripe is the zone's own color, which is what ties
-            // a row to the zone as drawn on the map.
-            //
-            // The interior stays hand-laid: the cells are proportional columns of the row's width, and a
-            // column layout is clearer as arithmetic than as elements with fixed bounds.
-            //
-            // DrawChrome, not Draw: Draw would claim the click with its own ButtonInvisible, and the row's
-            // click is taken at the bottom of this method, after the cells have had their turn.
-            rowCard.Padding = 0f;
-            rowCard.AccentColor = zone.color;
-            rowCard.BackgroundColor = GzpPalette.PanelBG;
-            rowCard.DrawChrome(r);
-
-            GrowZoneStatus status = GrowZoneStatusCache.For(zone);
-            float width = r.width;
-            float x = r.x + Pad;
-
-            DrawNameCell(new Rect(x, r.y, width * ColName, r.height), zone, status);
-            x += width * ColName;
-
-            DrawGrowingCell(new Rect(x, r.y, width * ColGrowing, r.height), zone, status);
-            x += width * ColGrowing;
-
-            DrawProgressCell(new Rect(x, r.y, width * ColProgress, r.height), zone, status);
-            x += width * ColProgress;
-
-            DrawTemperatureCell(new Rect(x, r.y, width * ColTemp, r.height), status);
-            x += width * ColTemp;
-
-            DrawYieldCell(new Rect(x, r.y, width * ColYield, r.height), status);
-
-            if (!Widgets.ButtonInvisible(r))
-                return;
-
-            JumpTo(zone);
         }
 
         /// <summary>
@@ -248,194 +307,187 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             Find.Selector.Select(zone, false, false);
         }
 
-        private static void DrawNameCell(Rect r, Zone_Growing zone, GrowZoneStatus status)
+        /// <summary>
+        /// The chosen zone, in four small panels rather than five table columns.
+        ///
+        /// <b>The table gave a zone name and a temperature the same width.</b> Blocks size themselves to
+        /// what they hold, so the crop gets room for its name and the temperature gets room for three
+        /// digits, which is all it ever needed.
+        /// </summary>
+        private void DrawBlocks(Rect rect, UIColorPaletteDef palette)
         {
-            GzpPalette.CardLabel(new Rect(r.x, r.y + 7f, r.width - 6f, 22f), zone.label,
-                GzpPalette.Stat);
+            Zone_Growing zone = zones[selected];
+            GrowZoneStatus status = GrowZoneStatusCache.For(zone);
 
-            string subtitle = status.Plant == null
-                ? $"{zone.CellCount} cells"
-                : $"{zone.CellCount} cells · {status.PlantCount} planted";
-            SubLabel(new Rect(r.x, r.y + 28f, r.width - 6f, 20f), subtitle);
+            float half = (rect.width - BlockGap) * 0.5f;
+            float tall = 92f;
+
+            Crop(new Rect(rect.x, rect.y, half, tall), zone, status, palette);
+            Growth(new Rect(rect.x + half + BlockGap, rect.y, half, tall), zone, status, palette);
+
+            float second = rect.y + tall + BlockGap;
+
+            Yield(new Rect(rect.x, second, half, tall), status, palette);
+            Conditions(new Rect(rect.x + half + BlockGap, second, half, tall), status, palette);
         }
 
-        private static void DrawGrowingCell(Rect r, Zone_Growing zone, GrowZoneStatus status)
+        /// <summary>A block's chrome: a sunken caption strip over a raised body.</summary>
+        private static Rect Block(Rect rect, string caption, string trailing, UIColorPaletteDef palette)
         {
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceRaised);
+
+            Rect strip = new Rect(rect.x, rect.y, rect.width, 22f);
+
+            Widgets.DrawBoxSolid(new Rect(strip.x + 1f, strip.yMax, strip.width - 2f, 1f), palette.Border);
+
+            TabParts.RowLabel(new Rect(strip.x + 10f, strip.y, strip.width - 20f, strip.height),
+                caption.ToUpperInvariant(), palette.TextDisabled, GameFont.Tiny, GrowFaces.Mono,
+                GrowFaces.Size.Caption);
+
+            if (!trailing.NullOrEmpty())
+            {
+                // Right aligned around the call, since RowLabel takes a face and a size but not an
+                // alignment. Drawn left it would sit on top of the caption rather than opposite it.
+                TextAnchor previousAnchor = Text.Anchor;
+
+                Text.Anchor = TextAnchor.MiddleRight;
+
+                TabParts.RowLabel(new Rect(strip.x + 10f, strip.y, strip.width - 20f, strip.height),
+                    trailing, palette.TextDisabled, GameFont.Tiny, GrowFaces.Mono, GrowFaces.Size.Small);
+
+                Text.Anchor = previousAnchor;
+            }
+
+            return new Rect(rect.x + 10f, strip.yMax + 8f, rect.width - 20f, rect.yMax - strip.yMax - 16f);
+        }
+
+        /// <summary>What is planted, and under which bill.</summary>
+        private static void Crop(Rect rect, Zone_Growing zone, GrowZoneStatus status,
+            UIColorPaletteDef palette)
+        {
+            Bill_Growing bill = ActiveBill(zone);
+
+            Rect body = Block(rect, "Crop", bill == null ? null : bill.RepeatModeLabel, palette);
+
             if (status.Plant == null)
             {
-                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "Nothing");
+                TabParts.RowLabel(body, "Nothing planted", palette.TextDisabled, GameFont.Small,
+                    GrowFaces.Condensed, GrowFaces.Size.Body);
+
                 return;
             }
 
-            Rect icon = new Rect(r.x, r.y + 7f, IconSize, IconSize);
+            Rect icon = new Rect(body.x, body.y + (body.height - IconSize) * 0.5f, IconSize, IconSize);
+
             Widgets.ThingIcon(icon, status.Plant);
 
-            float textX = icon.xMax + 6f;
-            GzpPalette.CardLabel(new Rect(textX, r.y + 7f, r.xMax - textX - 6f, 22f),
-                status.Plant.LabelCap, GzpPalette.Stat);
+            float text = icon.xMax + 8f;
 
-            Bill_Growing bill = ActiveBill(zone);
-            string mode = bill == null ? "No active bill" : bill.RepeatModeLabel;
-            SubLabel(new Rect(textX, r.y + 28f, r.xMax - textX - 6f, 20f), mode);
+            TabParts.RowLabel(new Rect(text, body.y + 2f, body.xMax - text, 20f), status.Plant.LabelCap,
+                palette.TextPrimary, GameFont.Small, GrowFaces.Condensed, GrowFaces.Size.Body);
+
+            TabParts.RowLabel(new Rect(text, body.y + 22f, body.xMax - text, 16f),
+                status.PlantCount + " of " + zone.Cells.Count + " cells planted", palette.TextSecondary,
+                GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Small);
         }
 
-        private static void DrawProgressCell(Rect r, Zone_Growing zone, GrowZoneStatus status)
+        /// <summary>
+        /// How far along, as a figure and a bar.
+        ///
+        /// <b>A Grow Forever bill has no target to count towards,</b> so the honest figure there is how
+        /// far the planting has grown; a bill with a target counts towards it instead. The table said the
+        /// same thing, and this keeps saying it.
+        /// </summary>
+        private static void Growth(Rect rect, Zone_Growing zone, GrowZoneStatus status,
+            UIColorPaletteDef palette)
         {
             Bill_Growing bill = ActiveBill(zone);
-            Rect bar = new Rect(r.x, r.y + 18f, r.width - 12f, 16f);
+            bool counting = bill != null && bill.repeatMode != BillRepeatModeDefOf.Forever
+                                         && bill.targetCount > 0;
 
-            if (bill == null)
+            float share = counting
+                ? Mathf.Clamp01(status.HarvestablePlants / (float) bill.targetCount)
+                : Mathf.Clamp01(status.AverageGrowth);
+
+            Rect body = Block(rect, "Growth",
+                counting ? null : status.AverageGrowth.ToStringPercent(), palette);
+
+            string figure = counting
+                ? status.HarvestablePlants + " / " + bill.targetCount
+                : status.AverageGrowth.ToStringPercent();
+
+            TabParts.RowLabel(new Rect(body.x, body.y, body.width, 20f), figure, palette.TextPrimary,
+                GameFont.Small, GrowFaces.Mono, GrowFaces.Size.Figure);
+
+            Rect bar = new Rect(body.x, body.y + 26f, body.width, 10f);
+
+            UIElementPainter.OutlineRounded(bar, palette.Border, palette.SurfaceSunken);
+
+            if (share > 0f)
             {
-                GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
-                return;
+                Widgets.DrawBoxSolid(new Rect(bar.x + 1f, bar.y + 1f,
+                    Mathf.Max(1f, (bar.width - 2f) * share), bar.height - 2f), Identity(palette));
             }
-
-            // Grow Forever has no target to count towards, so the honest progress figure is how
-            // far the crop itself has come. Both are drawn as the same bar, distinguished by the
-            // label and color.
-            if (bill.repeatMode == BillRepeatModeDefOf.Forever)
-            {
-                float growth = status.AverageGrowth;
-                GzpPalette.Bar(bar, growth, GzpPalette.Accent);
-                CenteredBarLabel(bar, $"{growth.ToStringPercent()} grown", GzpPalette.Stat);
-                TooltipHandler.TipRegion(bar, (TipSignal)
-                    "Average growth of this zone's crop. A Grow Forever bill has no target to "
-                    + "count towards, so this shows how far along the planting is.");
-                return;
-            }
-
-            Zone_GrowingPlus plus = zone as Zone_GrowingPlus;
-            if (plus == null)
-            {
-                GzpPalette.Bar(bar, 0f, GzpPalette.BGL);
-                CenteredBarLabel(bar, "—", GzpPalette.TextDim);
-                return;
-            }
-
-            int current = bill.CurrentCountCached(plus);
-            int target = Mathf.Max(1, bill.targetCount);
-            float fill = Mathf.Clamp01((float) current / target);
-            bool met = current >= bill.targetCount;
-
-            GzpPalette.Bar(bar, fill, met ? GzpPalette.Good : GzpPalette.Accent);
-            CenteredBarLabel(bar, $"{current} / {bill.targetCount}",
-                met ? GzpPalette.Good : GzpPalette.Stat);
-            TooltipHandler.TipRegion(bar, (TipSignal)
-                $"{bill.RepeatModeLabel}: {current} of {bill.targetCount}."
-                + (met ? "\nTarget met -- this bill is paused." : string.Empty));
         }
 
-        private static void DrawTemperatureCell(Rect r, GrowZoneStatus status)
+        /// <summary>What the zone is worth now, and what it will be worth left alone.</summary>
+        private static void Yield(Rect rect, GrowZoneStatus status, UIColorPaletteDef palette)
         {
+            Rect body = Block(rect, "Yield", null, palette);
+
+            if (status.Plant == null)
+            {
+                TabParts.RowLabel(body, "--", palette.TextDisabled, GameFont.Small, GrowFaces.Mono,
+                    GrowFaces.Size.Figure);
+
+                return;
+            }
+
+            TabParts.RowLabel(new Rect(body.x, body.y, body.width, 20f),
+                status.YieldNow.ToString("N0"),
+                status.YieldNow > 0 ? Identity(palette) : palette.TextDisabled, GameFont.Small,
+                GrowFaces.Mono, GrowFaces.Size.Figure);
+
+            TabParts.RowLabel(new Rect(body.x, body.y + 24f, body.width, 16f),
+                "now  -  " + status.YieldAtMaturity.ToString("N0") + " at maturity",
+                palette.TextSecondary, GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Small);
+        }
+
+        /// <summary>
+        /// Temperature against the range this crop will actually grow in.
+        ///
+        /// The reading is coloured by whether it is growing, which is the question -- a number on its own
+        /// makes the reader remember two thresholds per crop.
+        /// </summary>
+        private static void Conditions(Rect rect, GrowZoneStatus status, UIColorPaletteDef palette)
+        {
+            Rect body = Block(rect, "Conditions", null, palette);
+
             if (!status.HasTemperature || status.Plant == null)
             {
-                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f), "—");
+                TabParts.RowLabel(body, "--", palette.TextDisabled, GameFont.Small, GrowFaces.Mono,
+                    GrowFaces.Size.Figure);
+
                 return;
             }
 
             PlantProperties props = status.Plant.plant;
             float temp = status.Temperature;
 
-            Texture icon;
-            Color color;
-            string tip;
+            bool cold = temp < props.minGrowthTemperature;
+            bool hot = temp > props.maxGrowthTemperature;
 
-            if (temp < props.minGrowthTemperature)
-            {
-                icon = GzpTex.MinTemp;
-                color = GzpPalette.Cold;
-                tip = $"Too cold. {status.Plant.LabelCap} stops growing below "
-                      + $"{props.minGrowthTemperature.ToStringTemperature("F0")}.";
-            }
-            else if (temp > props.maxGrowthTemperature)
-            {
-                icon = GzpTex.MaxTemp;
-                color = GzpPalette.Bad;
-                tip = $"Too hot. {status.Plant.LabelCap} stops growing above "
-                      + $"{props.maxGrowthTemperature.ToStringTemperature("F0")}.";
-            }
-            else if (temp >= props.minOptimalGrowthTemperature && temp <= props.maxOptimalGrowthTemperature)
-            {
-                icon = GzpTex.IdealTemp;
-                color = GzpPalette.Good;
-                tip = "Ideal growing temperature.";
-            }
-            else
-            {
-                // Growing, but off its optimum, so the rate is reduced rather than stopped.
-                icon = temp < props.minOptimalGrowthTemperature ? GzpTex.MinTemp : GzpTex.MaxTemp;
-                color = GzpPalette.Warn;
-                tip = "Growing, but outside the ideal range, so more slowly than it could.";
-            }
+            Color tint = cold || hot ? palette.Danger : palette.Success;
+            string state = cold ? "too cold to grow" : hot ? "too hot to grow" : "growing";
 
-            Rect iconRect = new Rect(r.x, r.y + 7f, IconSize, IconSize);
-            Color previous = GUI.color;
-            GUI.color = Color.white;
-            GUI.DrawTexture(iconRect, icon);
-            GUI.color = previous;
+            TabParts.RowLabel(new Rect(body.x, body.y, body.width, 20f),
+                temp.ToStringTemperature("F0"), tint, GameFont.Small, GrowFaces.Mono,
+                GrowFaces.Size.Figure);
 
-            float textX = iconRect.xMax + 6f;
-            GzpPalette.CardLabel(new Rect(textX, r.y + 7f, r.xMax - textX - 6f, 22f),
-                temp.ToStringTemperature("F0"), color);
-
-            SubLabel(new Rect(textX, r.y + 28f, r.xMax - textX - 6f, 20f),
-                $"{props.minGrowthTemperature.ToStringTemperature("F0")} – "
-                + props.maxGrowthTemperature.ToStringTemperature("F0"));
-
-            TooltipHandler.TipRegion(r, (TipSignal) tip);
-        }
-
-        private static void DrawYieldCell(Rect r, GrowZoneStatus status)
-        {
-            ThingDef product = status.Plant?.plant?.harvestedThingDef;
-            if (product == null)
-            {
-                SubLabel(new Rect(r.x, r.y + 16f, r.width - 6f, 22f),
-                    status.Plant == null ? "—" : "No harvest");
-                return;
-            }
-
-            Rect icon = new Rect(r.x, r.y + 7f, IconSize, IconSize);
-            Widgets.ThingIcon(icon, product);
-
-            float textX = icon.xMax + 6f;
-            bool ready = status.YieldNow > 0;
-            GzpPalette.CardLabel(new Rect(textX, r.y + 7f, r.xMax - textX - 6f, 22f),
-                $"{status.YieldNow} {product.label}",
-                ready ? GzpPalette.Good : GzpPalette.TextDim);
-
-            SubLabel(new Rect(textX, r.y + 28f, r.xMax - textX - 6f, 20f),
-                $"{status.YieldAtMaturity} at maturity");
-
-            TooltipHandler.TipRegion(r, (TipSignal)
-                $"Harvesting now yields about {status.YieldNow} {product.label} from "
-                + $"{status.HarvestablePlants} ready {(status.HarvestablePlants == 1 ? "plant" : "plants")}.\n"
-                + $"Once the {status.PlantCount} planted have fully grown, about "
-                + $"{status.YieldAtMaturity}.\n\nBoth figures include the difficulty's crop yield "
-                + "factor but not the harvesting colonist's skill.");
-        }
-
-        private static void SubLabel(Rect r, string text)
-        {
-            Color previous = GUI.color;
-            GUI.color = GzpPalette.TextDim;
-            Text.Font = GameFont.Tiny;
-            Widgets.Label(r, text);
-            Text.Font = GameFont.Small;
-            GUI.color = previous;
-        }
-
-        private static void CenteredBarLabel(Rect bar, string text, Color color)
-        {
-            Color previous = GUI.color;
-            GUI.color = color;
-            Text.Font = GameFont.Tiny;
-            Text.Anchor = TextAnchor.MiddleCenter;
-            Widgets.Label(bar, text);
-            Text.Anchor = TextAnchor.UpperLeft;
-            Text.Font = GameFont.Small;
-            GUI.color = previous;
+            TabParts.RowLabel(new Rect(body.x, body.y + 24f, body.width, 16f),
+                state + "  -  " + props.minGrowthTemperature.ToStringTemperature("F0") + " to "
+                + props.maxGrowthTemperature.ToStringTemperature("F0"), palette.TextSecondary,
+                GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Small);
         }
 
         /// <summary>

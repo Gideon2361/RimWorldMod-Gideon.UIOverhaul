@@ -73,6 +73,14 @@
     <hoverOverlay>#FFFFFF0C</hoverOverlay>
     <pressedOverlay>#FFFFFF1F</pressedOverlay>
     <selectionOverlay>#73BFFF24</selectionOverlay>
+
+    <!-- Tab identities. A tab that wants its own colour asks for one of these by name and passes the
+         accent as its fallback, so a palette that omits them loses nothing. Muted on purpose: the state
+         colours above are saturated, and an identity that shouted as loudly as success or danger would
+         read as a status rather than as the tab's name. -->
+    <custom>
+      <li><name>tabGrowing</name><value>#A9C46C</value></li>
+    </custom>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -108,6 +116,12 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
+
+    <!-- Tab identities. See the note on the dark palette; these are darkened to hold their own against
+         a pale surface rather than being the same hex twice. -->
+    <custom>
+      <li><name>tabGrowing</name><value>#6F8F32</value></li>
+    </custom>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>
