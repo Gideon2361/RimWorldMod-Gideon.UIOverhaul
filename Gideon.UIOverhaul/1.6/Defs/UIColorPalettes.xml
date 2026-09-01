@@ -116,6 +116,14 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
+    <!-- The four role based tab identities, deepened for this theme. They live on the shared template as
+         their dark values, and a violet picked to read on near black is washed out on near white, so each
+         one is restated here rather than inherited. The same reasoning as the custom entry below. -->
+    <tabTheDead>#7A56A8</tabTheDead>
+    <tabQuests>#3C6E9E</tabQuests>
+    <tabAnimals>#5F7F3D</tabAnimals>
+    <tabPower>#2E8076</tabPower>
+
 
     <!-- Tab identities. See the note on the dark palette; these are darkened to hold their own against
          a pale surface rather than being the same hex twice. -->
