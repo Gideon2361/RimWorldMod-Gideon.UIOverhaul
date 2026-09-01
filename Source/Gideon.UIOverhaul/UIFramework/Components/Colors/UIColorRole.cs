@@ -131,6 +131,16 @@ namespace Gideon.UIFramework.Components.Colors
         TabPower,
 
         /// <summary>
+        /// The Bills tab's own color, the fifth of the per-tab identities.
+        ///
+        /// <b>A warm clay, and the first identity that is not a cool hue.</b> The others are violet, steel
+        /// blue, sage and teal, with the growing tab on a yellow green, so a sixth cold color would have had
+        /// nowhere to stand. It is kept clear of <see cref="Warning"/>, which matters more on this screen
+        /// than most: amber is a state bills show often.
+        /// </summary>
+        TabBills,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

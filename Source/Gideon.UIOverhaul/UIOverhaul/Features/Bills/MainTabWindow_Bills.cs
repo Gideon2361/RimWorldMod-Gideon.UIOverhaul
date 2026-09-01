@@ -4,6 +4,7 @@ using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.GrowZones.UI;
+using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
 using Verse;
@@ -33,9 +34,19 @@ namespace Gideon.UIOverhaul.Features.Bills
     /// them, so a drag that would cross a bench heading is refused rather than being quietly read as a move.
     /// Moving a bill elsewhere is the explicit Copy to bench action, decided with Aaron on 2026-08-18.
     /// </summary>
+    [StaticConstructorOnStartup]
     public class MainTabWindow_Bills : MainTabWindow
     {
         private const float TitleHeight = 30f;
+
+        /// <summary>The header block, sized as every other tab sizes its own.</summary>
+        private const float HeaderHeight = 66f;
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
+
         private const float ToolbarHeight = 34f;
         private const float FooterHeight = 44f;
         private const float BenchHeight = 30f;
@@ -67,6 +78,25 @@ namespace Gideon.UIOverhaul.Features.Bills
         /// large screen gives it.
         /// </summary>
         private const float FilterMinimumHeight = 140f;
+
+        /// <summary>Width of the rail, and the gap between it and the rest.</summary>
+        private const float RailWidth = 200f;
+
+        /// <summary>The tab's own mark, the same texture its button on the bar uses.</summary>
+        private static readonly Texture2D Glyph;
+
+        static MainTabWindow_Bills()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and
+            // the guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Bills.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Bills", false),
+                "The header has no glyph this session. Everything on the tab still reads.");
+
+            Glyph = glyph;
+        }
 
         private static readonly UITextBoxControl Search = new UITextBoxControl
         {
@@ -210,23 +240,38 @@ namespace Gideon.UIOverhaul.Features.Bills
             {
                 Text.Anchor = TextAnchor.UpperLeft;
 
-                float y = Title(inRect, palette);
+                float y = Header(inRect, palette);
 
                 y = Toolbar(inRect, y, palette);
 
                 Rect body = new Rect(inRect.x, y + 6f, inRect.width, inRect.yMax - FooterHeight - y - 12f);
 
-                // The list takes what the two fixed columns leave, floored so a very narrow screen produces a
-                // cramped list rather than a rectangle with a negative width.
-                float listWidth = Mathf.Max(240f, body.width - EditorWidth - FilterWidth - Pad * 2f);
+                Rail(new Rect(body.x, body.y, RailWidth, body.height), palette);
 
-                Rect list = new Rect(body.x, body.y, listWidth, body.height);
-                Rect editor = new Rect(list.xMax + Pad, body.y, EditorWidth, body.height);
-                Rect filter = new Rect(editor.xMax + Pad, body.y, FilterWidth, body.height);
+                Rect rest = new Rect(body.x + RailWidth + Pad, body.y,
+                    Mathf.Max(0f, body.width - RailWidth - Pad), body.height);
 
-                DrawList(list, palette);
-                DrawEditor(editor, palette);
-                DrawFilter(filter, palette);
+                // <b>The editor and the ingredient tree are only reserved when a bill is open.</b> They used
+                // to hold their width whatever was selected, so a tab with nothing chosen spent seven hundred
+                // pixels on one sentence and one empty rectangle. Now the list has the room until it is
+                // actually needed, and gets it back the moment the bill is closed.
+                if (selected == null)
+                {
+                    DrawList(rest, palette);
+                }
+                else
+                {
+                    // Floored so a narrow screen produces a cramped list rather than a negative width.
+                    float listWidth = Mathf.Max(240f, rest.width - EditorWidth - FilterWidth - Pad * 2f);
+
+                    Rect list = new Rect(rest.x, rest.y, listWidth, rest.height);
+                    Rect editor = new Rect(list.xMax + Pad, rest.y, EditorWidth, rest.height);
+                    Rect filter = new Rect(editor.xMax + Pad, rest.y, FilterWidth, rest.height);
+
+                    DrawList(list, palette);
+                    DrawEditor(editor, palette);
+                    DrawFilter(filter, palette);
+                }
 
                 Footer(inRect, palette);
             }
@@ -238,29 +283,235 @@ namespace Gideon.UIOverhaul.Features.Bills
             }
         }
 
-        private float Title(Rect inRect, UIColorPaletteDef palette)
+        /// <summary>
+        /// The block that names the screen, with its figures seated in it.
+        ///
+        /// <b>The same shape every restyled tab uses.</b> The title and the line under it were a pair of bare
+        /// <c>Widgets.Label</c> calls in the game's own font; the counts they carried are now readouts, which
+        /// is where the rest of the mod puts a figure.
+        /// </summary>
+        private float Header(Rect inRect, UIColorPaletteDef palette)
         {
-            Text.Font = GameFont.Medium;
-            GUI.color = palette.TextPrimary;
+            Rect rect = new Rect(inRect.x, inRect.y, inRect.width, HeaderHeight);
 
-            Widgets.Label(new Rect(inRect.x, inRect.y, inRect.width - 30f, TitleHeight),
-                "Bills");
+            // SurfaceSunken, the same fill the rail beside it uses: header and rail are both chrome framing
+            // the content, so they share a surface and the blocks between them sit above it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
+            Rect inner = rect.ContractedBy(10f);
+
+            float text = inner.x;
+
+            if (Glyph != null)
+            {
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize,
+                    GlyphSize);
+
+                Color previous = GUI.color;
+
+                GUI.color = BillFaces.AccentOf(palette);
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
+            }
+
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Bills",
+                BillFaces.AccentOf(palette), GameFont.Medium, BillFaces.Display, BillFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 380f, 18f),
+                "Every standing order in the colony, by bench", palette.TextSecondary, GameFont.Tiny,
+                BillFaces.Condensed, BillFaces.Size.Subtitle);
+
+            Readouts(inner, palette);
+
+            return rect.yMax + 6f;
+        }
+
+        /// <summary>
+        /// The four figures, right to left.
+        ///
+        /// Suspended and needing attention are drawn whatever their count, because a zero there is worth
+        /// reading: it is the difference between "nothing is wrong" and "I have not looked".
+        /// </summary>
+        private void Readouts(Rect area, UIColorPaletteDef palette)
+        {
             int total = BillCatalog.Total(groups);
             int troubled = BillCatalog.Troubled(groups);
+            int suspended = Suspended();
 
-            Text.Font = GameFont.Tiny;
-            GUI.color = palette.TextSecondary;
+            float x = area.xMax;
 
-            string line = total + (total == 1 ? " bill" : " bills") + " across " + groups.Count
-                          + (groups.Count == 1 ? " bench" : " benches");
+            x = TabParts.Readout(area, x, "suspended", suspended.ToString(), palette,
+                "Bills switched off by hand. They keep their settings and their place in the order.");
 
-            if (troubled > 0)
-                line += "   " + troubled + " need attention";
+            x = TabParts.Readout(area, x, "need attention", troubled.ToString(), palette,
+                "Bills that cannot run: no ingredients, nobody able to work them, or no bench to work at.",
+                troubled > 0 ? palette.Warning : palette.TextPrimary);
 
-            Widgets.Label(new Rect(inRect.x, inRect.y + TitleHeight, inRect.width - 30f, 18f), line);
+            x = TabParts.Readout(area, x, "benches", groups.Count.ToString(), palette,
+                "Benches with at least one bill on them.");
 
-            return inRect.y + TitleHeight + 22f;
+            TabParts.Readout(area, x, "bills", total.ToString(), palette,
+                "Every bill in the colony, on every bench.");
+        }
+
+        /// <summary>
+        /// The rail: the benches, then the two filters that cut across all of them.
+        ///
+        /// <b>It replaces the bench headings as the way to get somewhere.</b> Eight benches with forty-four
+        /// bills between them is a lot of scrolling to reach the one you came for; as entries with counts,
+        /// and a warning-colored count on any bench holding a bill in trouble, the trip is one click. The
+        /// headings stay in the list, because they are still what a bill belongs to.
+        ///
+        /// Needs attention and suspended sit under the divider and stay toggles rather than selections: they
+        /// narrow whatever is showing instead of choosing what is shown.
+        /// </summary>
+        private void Rail(Rect rect, UIColorPaletteDef palette)
+        {
+            RailItems.Clear();
+
+            RailItems.Add(Head("Benches", palette));
+            RailItems.Add(Entry(0, "All benches", BillCatalog.Total(groups), 0, palette));
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                BillGroup group = groups[i];
+
+                RailItems.Add(Entry(BenchId(group), group.Label, group.Bills.Count, Troubled(group), palette));
+            }
+
+            RailItems.Add(new UIRailDividerControl { Color = palette.Border });
+            RailItems.Add(Head("Across all benches", palette));
+
+            RailItems.Add(new UIRailClickableEntry(TroubleKey, "Needs attention")
+            {
+                Count = BillCatalog.Troubled(groups),
+                Face = BillFaces.Condensed,
+                Points = BillFaces.Size.RailName,
+                CountFace = BillFaces.Mono,
+                CountPoints = BillFaces.Size.RailCount,
+                TextColor = troubledOnly ? BillFaces.AccentOf(palette) : (Color?) null,
+                CountColor = troubledOnly ? BillFaces.AccentOf(palette) : (Color?) null
+            });
+
+            RailItems.Add(new UIRailClickableEntry(SuspendKey, "Suspended")
+            {
+                Count = Suspended(),
+                Face = BillFaces.Condensed,
+                Points = BillFaces.Size.RailName,
+                CountFace = BillFaces.Mono,
+                CountPoints = BillFaces.Size.RailCount,
+                TextColor = suspendedOnly ? BillFaces.AccentOf(palette) : (Color?) null,
+                CountColor = suspendedOnly ? BillFaces.AccentOf(palette) : (Color?) null
+            });
+
+            string picked = UIRailControl.Draw(rect, RailItems, railBench.ToString(), ref railScroll,
+                ref railDragging, ref railOffset, palette);
+
+            if (picked == null)
+                return;
+
+            // The two filters toggle rather than select, so pressing the one that is already on turns it off.
+            if (picked == TroubleKey)
+            {
+                troubledOnly = !troubledOnly;
+
+                return;
+            }
+
+            if (picked == SuspendKey)
+            {
+                suspendedOnly = !suspendedOnly;
+
+                return;
+            }
+
+            int bench;
+
+            if (!int.TryParse(picked, out bench))
+                return;
+
+            railBench = bench;
+            scroll = Vector2.zero;
+        }
+
+        private const string TroubleKey = "*trouble";
+        private const string SuspendKey = "*suspended";
+
+        private UIRailSectionHeaderControl Head(string label, UIColorPaletteDef palette)
+        {
+            return new UIRailSectionHeaderControl
+            {
+                Label = label,
+                Uppercase = true,
+                Face = BillFaces.Mono,
+                Points = BillFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            };
+        }
+
+        /// <summary>
+        /// One bench in the rail. <paramref name="trouble"/> colors the count, which is the whole reason a
+        /// bench in difficulty can be spotted without opening it.
+        /// </summary>
+        private UIRailClickableEntry Entry(int id, string label, int count, int trouble,
+            UIColorPaletteDef palette)
+        {
+            bool on = railBench == id;
+
+            return new UIRailClickableEntry(id.ToString(), label)
+            {
+                Count = count,
+                Face = BillFaces.Condensed,
+                Points = BillFaces.Size.RailName,
+                CountFace = BillFaces.Mono,
+                CountPoints = BillFaces.Size.RailCount,
+                TextColor = on ? BillFaces.AccentOf(palette) : (Color?) null,
+                CountColor = trouble > 0
+                    ? palette.Warning
+                    : on ? BillFaces.AccentOf(palette) : (Color?) null
+            };
+        }
+
+        /// <summary>How many bills on one bench cannot run.</summary>
+        private static int Troubled(BillGroup group)
+        {
+            int count = 0;
+
+            for (int i = 0; group.Bills != null && i < group.Bills.Count; i++)
+            {
+                if (group.Bills[i].Trouble != BillTrouble.None)
+                    count++;
+            }
+
+            return count;
+        }
+
+        private int railBench;
+        private Vector2 railScroll;
+        private bool railDragging;
+        private float railOffset;
+
+        private readonly List<UIRailElement> RailItems = new List<UIRailElement>();
+
+        /// <summary>How many bills are switched off by hand.</summary>
+        private int Suspended()
+        {
+            int count = 0;
+
+            for (int g = 0; g < groups.Count; g++)
+            {
+                List<BillEntry> entries = groups[g].Bills;
+
+                for (int i = 0; entries != null && i < entries.Count; i++)
+                {
+                    if (entries[i].Suspended)
+                        count++;
+                }
+            }
+
+            return count;
         }
 
         private float Toolbar(Rect inRect, float y, UIColorPaletteDef palette)
@@ -441,6 +692,11 @@ namespace Gideon.UIOverhaul.Features.Bills
 
         private int Shown(BillGroup group)
         {
+            // The rail's choice, unless a search is running: typing is a request to look everywhere, and a
+            // search that silently skipped seven of the eight benches would read as a broken search.
+            if (railBench != 0 && Search.Text.NullOrEmpty() && BenchId(group) != railBench)
+                return 0;
+
             int count = 0;
 
             foreach (BillEntry entry in group.Bills)
@@ -450,6 +706,18 @@ namespace Gideon.UIOverhaul.Features.Bills
             }
 
             return count;
+        }
+
+        /// <summary>
+        /// A bench's identity for the rail, by thing id.
+        ///
+        /// <b>An id rather than the group's index or its label.</b> The list is rebuilt whenever the colony
+        /// changes, so an index would move the selection onto a different bench the moment one was built, and
+        /// two stoves in two rooms share a label. Zero means every bench, which is how the tab opens.
+        /// </summary>
+        private static int BenchId(BillGroup group)
+        {
+            return group == null || group.Bench == null ? 0 : group.Bench.thingIDNumber;
         }
 
         /// <summary>Whether a bill survives the search box and the filter chips.</summary>

@@ -32,6 +32,7 @@
     <tabQuests>#7FA3C9</tabQuests>
     <tabAnimals>#98AC80</tabAnimals>
     <tabPower>#74AFA6</tabPower>
+    <tabBills>#C4907A</tabBills>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -123,6 +124,7 @@
     <tabQuests>#3C6E9E</tabQuests>
     <tabAnimals>#5F7F3D</tabAnimals>
     <tabPower>#2E8076</tabPower>
+    <tabBills>#9A5A41</tabBills>
 
 
     <!-- Tab identities. See the note on the dark palette; these are darkened to hold their own against
