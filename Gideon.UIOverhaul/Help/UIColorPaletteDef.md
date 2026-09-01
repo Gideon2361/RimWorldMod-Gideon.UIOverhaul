@@ -101,6 +101,9 @@ the same value as `accent` puts that screen back in step with the rest.
 | `tabGrowing` | `TabGrowing` | Growing Zones | `#C0AE6A` |
 | `tabBills` | `TabBills` | Bills | `#C4907A` |
 | `tabPawns` | `TabPawns` | Pawns | `#C98BA4` |
+| `tabHospital` | `TabHospital` | Hospital | `#CC8BC7` |
+| `tabResearch` | `TabResearch` | Research | `#8B90CC` |
+| `tabFactions` | `TabFactions` | Factions | `#65B486` |
 
 **The prefix says which kind of screen the color belongs to.** `tab` is a colony main tab, reached
 from the row of buttons along the bottom during play. `page` is a screen reached from the main menu,
@@ -108,7 +111,7 @@ which has no colony behind it and is entered and left rather than toggled open. 
 itself draws no distinction between the two; the prefix is there so that a theme author can tell from
 the field name alone which part of the game they are about to recolor. No `page` role ships yet.
 
-These seven are spread around the hue circle rather than picked one at a time, and kept to a similar
+These are spread around the hue circle rather than picked one at a time, and kept to a similar
 lightness so that no one screen shouts louder than its neighbours. A theme retuning them will get a
 better result rotating the whole set than replacing a single member of it.
 

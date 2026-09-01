@@ -172,6 +172,76 @@ namespace Gideon.UIFramework.Components.Colors
         TabPawns,
 
         /// <summary>
+        /// The Hospital tab's own color, the eighth of the per-tab identities. A muted orchid, defaulting to
+        /// <c>#CC8BC7</c>.
+        ///
+        /// <b>Not the rose a hospital would have taken.</b> That was the intent, and <see cref="TabPawns"/>
+        /// reached the magenta side first at <c>#C98BA4</c>. Two identities thirty degrees apart, on the two
+        /// tabs that both list the same people, is a distinction nobody could make.
+        ///
+        /// <b>Not red either, which is the other obvious answer.</b> Red is <see cref="Danger"/>, and this is
+        /// the one screen where danger genuinely appears in the rows: a title in the alarm color over a
+        /// condition in the alarm color is the mistake the bills tab made with amber.
+        ///
+        /// <b>What is left is the arc between the violet and the rose,</b> and it is the only arc no state
+        /// occupies. Its neighbours are <see cref="TabTheDead"/>, <see cref="TabPawns"/> and
+        /// <see cref="Mood"/>, each about thirty-five degrees away, which is as much room as an eighth
+        /// identity can be given.
+        /// </summary>
+        TabHospital,
+
+        /// <summary>
+        /// The Research tab's own color, the ninth of the per-tab identities. A muted iris, defaulting to
+        /// <c>#8B90CC</c>.
+        ///
+        /// <b>This tab picks last and from the fullest ring.</b> The eight above it sit at 18, 44, 85, 172,
+        /// 209, 268, 305 and 336 degrees, and the canvas underneath spends twelve more on its theme bands. A
+        /// ninth identity has to land in the same 26 to 45 percent saturation band as the rest or it reads as
+        /// a different kind of thing rather than as one of a set.
+        ///
+        /// <b>Not the green the geometry points at.</b> The widest hole left is 85 to 172, and its center is
+        /// a jade around 130. <see cref="Success"/> is at 120, and this is the tab that spends success green
+        /// on the word "Done", on every finished node and on a wash across the whole card. A jade title over a
+        /// green Done column is the mistake <see cref="TabPower"/> avoided with amber, at half the separation.
+        ///
+        /// <b>So the second gap takes it: 235 degrees, between <see cref="TabQuests"/> at 209 and
+        /// <see cref="TabTheDead"/> at 268.</b> Twenty-six and thirty-three degrees of clearance, which is no
+        /// tighter than <see cref="TabBills"/> and <see cref="TabGrowing"/> already live at.
+        ///
+        /// <b>The one collision is a band, not a tab.</b> Flight and Space sits at 224, eleven degrees off,
+        /// and the two are separated the way <see cref="TabGrowing"/> is separated from
+        /// <see cref="Warning"/>: by saturation, 32 percent against 54, and by territory. A band color only
+        /// ever draws on the canvas and this one only ever draws off it, in the header, the segment underline
+        /// and the two rail selections, so the two are never in the same hundred pixels.
+        /// </summary>
+        TabResearch,
+
+        /// <summary>
+        /// The Factions tab's own color, the tenth of the per-tab identities. A sea green, defaulting to
+        /// <c>#65B486</c>.
+        ///
+        /// <b>This one takes the hole <see cref="TabResearch"/> turned down, and it can because it moved the
+        /// band out of the way first.</b> The nine identities above sit at 18, 44, 85, 172, 209, 235, 268,
+        /// 305 and 336 degrees. The only stretch left wider than 37 is 85 to 172, and the reason two tabs in
+        /// a row refused it is <see cref="Success"/> at 120: research spends success green on the word
+        /// "Done", and this tab spends it on the word "Ally".
+        ///
+        /// <b>The refusal was about adjacency, not about hue.</b> An identity is separated from a state by
+        /// saturation in this palette -- <see cref="TabGrowing"/> is two degrees from <see cref="Warning"/>
+        /// and reads as a different thing entirely -- so green was never disqualified on its own. What
+        /// disqualified it was that the factions scale drew its resting band in the identity, which would
+        /// have put a green band under a green pin inside a green zone on an allied faction's row. The band
+        /// is grey now, the identity never touches a row, and the objection goes with it.
+        ///
+        /// <b>So 145 degrees, at the far side of success from the teal.</b> Twenty five degrees from
+        /// <see cref="Success"/> with fifteen points less saturation, and twenty seven from
+        /// <see cref="TabPower"/>, which is wider clearance than <see cref="TabBills"/> and
+        /// <see cref="TabGrowing"/> have from each other. Every other opening left is under twenty degrees
+        /// from two identities at once, and the purple arc already holds three.
+        /// </summary>
+        TabFactions,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

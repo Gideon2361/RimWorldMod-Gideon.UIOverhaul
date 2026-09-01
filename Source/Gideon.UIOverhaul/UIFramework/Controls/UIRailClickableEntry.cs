@@ -51,6 +51,22 @@ namespace Gideon.UIFramework.Controls
 
         internal float SwatchWidth = 4f;
 
+        /// <summary>
+        /// A bar down the leading edge of this row while it is the selected one, in the tab's own color.
+        ///
+        /// <b>For a rail whose rows already carry colors of their own.</b> <c>SelectionOverlay</c> alone is
+        /// enough on a rail of plain names, and it is what every row still gets; but the research contents rail
+        /// is twelve colored blocks, and a faint wash over one of twelve tinted rows is not a mark anybody can
+        /// find. The bar is a second channel, in a color no row can be, which is the whole reason a tab has an
+        /// identity color at all.
+        ///
+        /// Null on every rail that does not need it, which is all of them but two, so no existing row moves.
+        /// </summary>
+        internal Color? SelectionBar;
+
+        /// <summary>Matched to the accent width every other selected thing in the mod is marked with.</summary>
+        internal const float SelectionBarWidth = 3f;
+
         /// <summary>Drawn between the swatch and the label. Ignored when <see cref="Glyph"/> is set.</summary>
         internal Texture2D Icon;
 
@@ -179,15 +195,27 @@ namespace Gideon.UIFramework.Controls
                 Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
             }
 
+            // The bar's lane is reserved on every row of a rail that uses one, selected or not, so a swatch
+            // beside it does not jump sideways as the selection moves. Inset top and bottom for the same
+            // reason the swatch is: a bar running the full height would join up with its neighbours into one
+            // continuous stripe.
+            float lead = SelectionBar.HasValue ? SelectionBarWidth + 3f : 0f;
+
+            if (selected && SelectionBar.HasValue)
+            {
+                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y + 2f, SelectionBarWidth, rect.height - 4f),
+                    SelectionBar.Value);
+            }
+
             Color content = TextColor ?? (Disabled ? palette.TextDisabled : palette.TextPrimary);
-            float x = rect.x + LeadPad;
+            float x = rect.x + lead + LeadPad;
 
             if (Swatch.HasValue)
             {
-                Widgets.DrawBoxSolid(new Rect(rect.x, rect.y + 2f, SwatchWidth, rect.height - 4f),
+                Widgets.DrawBoxSolid(new Rect(rect.x + lead, rect.y + 2f, SwatchWidth, rect.height - 4f),
                     Swatch.Value);
 
-                x = rect.x + SwatchWidth + 6f;
+                x = rect.x + lead + SwatchWidth + 6f;
             }
 
             if (Glyph != null || Icon != null)

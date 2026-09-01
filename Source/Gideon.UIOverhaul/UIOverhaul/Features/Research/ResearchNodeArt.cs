@@ -188,7 +188,8 @@ namespace Gideon.UIOverhaul.Features.Research
                     ResearchMask.Key(project, "cost"), palette.TextDisabled);
 
                 TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - half - 4f), band.height),
-                    ResearchFacts.ChipFor(node, state), flag, GameFont.Tiny);
+                    ResearchFacts.ChipFor(node, state), flag, GameFont.Tiny, ResearchFaces.Condensed,
+                    ResearchFaces.Size.Chip);
 
                 return;
             }
@@ -203,23 +204,25 @@ namespace Gideon.UIOverhaul.Features.Research
 
             if (costWidth > 0f)
             {
-                GameFont font = Text.Font;
                 TextAnchor anchor = Text.Anchor;
                 Color previous = GUI.color;
 
                 try
                 {
-                    Text.Font = GameFont.Tiny;
                     Text.Anchor = TextAnchor.MiddleRight;
                     GUI.color = palette.TextDisabled;
 
-                    Widgets.Label(new Rect(band.xMax - costWidth, band.y, costWidth, band.height), cost);
+                    // In the mono. The cost is right-aligned on every node, which makes it a column down the
+                    // whole canvas whether or not anybody meant it to be, and in a proportional face that column
+                    // is ragged: 1000 and 250 in adjacent nodes cannot be compared, which is the one thing a
+                    // reader wants from two numbers stacked on top of each other.
+                    UITextControl.Label(new Rect(band.xMax - costWidth, band.y, costWidth, band.height), cost,
+                        ResearchFaces.Mono, ResearchFaces.Size.Figure);
                 }
                 finally
                 {
                     GUI.color = previous;
                     Text.Anchor = anchor;
-                    Text.Font = font;
                 }
             }
 
@@ -240,8 +243,15 @@ namespace Gideon.UIOverhaul.Features.Research
             if (state == ResearchState.Ready || state == ResearchState.Finished
                                              || state == ResearchState.Researching)
                 chip = chip.ToUpperInvariant();
+            // The three acting states in the mono, which is what carries the small caps; the blocked ones stay
+            // condensed, because they are a sentence about somewhere else on the canvas rather than a status,
+            // and the condensed face fits more of one before the ellipsis.
+            bool acting = state == ResearchState.Ready || state == ResearchState.Finished
+                                                       || state == ResearchState.Researching;
+
             TabParts.RowLabel(new Rect(band.x, band.y, Mathf.Max(0f, band.width - costWidth - 6f), band.height),
-                chip, flag, GameFont.Tiny, UIFace.IBMPlexMono);
+                chip, flag, GameFont.Tiny, acting ? ResearchFaces.Mono : ResearchFaces.Condensed,
+                acting ? ResearchFaces.Size.Figure : ResearchFaces.Size.Chip);
         }
 
         /// <summary>
@@ -417,20 +427,16 @@ namespace Gideon.UIOverhaul.Features.Research
         /// For text that is right-aligned and never shortened, where <c>UIRichText.WidthOf</c>'s thirteen pixel
         /// reserve would be room taken from whatever sits beside it.
         /// </summary>
+        /// <summary>
+        /// How wide the cost comes out, in the face that draws it.
+        ///
+        /// <b>It has to be the same face,</b> or the reserve and the drawing disagree: the cost is placed by
+        /// subtracting this from the right edge, so measuring one face and drawing another puts the figure
+        /// either off the card or into the middle of the state caption beside it.
+        /// </summary>
         private static float Measure(string text)
         {
-            GameFont font = Text.Font;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-
-                return Text.CalcSize(text).x;
-            }
-            finally
-            {
-                Text.Font = font;
-            }
+            return UITextControl.Width(text, ResearchFaces.Mono, ResearchFaces.Size.Figure) + 3f;
         }
 
         private static void Name(Rect band, string text, Color color)

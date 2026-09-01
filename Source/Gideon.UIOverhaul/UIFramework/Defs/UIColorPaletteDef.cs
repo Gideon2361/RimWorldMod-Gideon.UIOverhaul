@@ -62,6 +62,9 @@ namespace Gideon.UIFramework.Defs
         public string tabGrowing;
         public string tabBills;
         public string tabPawns;
+        public string tabHospital;
+        public string tabResearch;
+        public string tabFactions;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -264,6 +267,16 @@ namespace Gideon.UIFramework.Defs
 
         /// <summary>The Pawns tab's own color. See <see cref="UIColorRole.TabPawns"/>.</summary>
         public Color TabPawns => Get(UIColorRole.TabPawns);
+
+        /// <summary>The Hospital tab's own color. See <see cref="UIColorRole.TabHospital"/>.</summary>
+        public Color TabHospital => Get(UIColorRole.TabHospital);
+
+        /// <summary>The Research tab's own color. See <see cref="UIColorRole.TabResearch"/>.</summary>
+        public Color TabResearch => Get(UIColorRole.TabResearch);
+
+        /// <summary>The Factions tab's own color. See <see cref="UIColorRole.TabFactions"/>.</summary>
+        public Color TabFactions => Get(UIColorRole.TabFactions);
+
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -432,6 +445,9 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabGrowing => tabGrowing,
                 UIColorRole.TabBills => tabBills,
                 UIColorRole.TabPawns => tabPawns,
+                UIColorRole.TabHospital => tabHospital,
+                UIColorRole.TabResearch => tabResearch,
+                UIColorRole.TabFactions => tabFactions,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -485,6 +501,9 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabGrowing => 0xC0AE6AFF,
                 UIColorRole.TabBills => 0xC4907AFF,
                 UIColorRole.TabPawns => 0xC98BA4FF,
+                UIColorRole.TabHospital => 0xCC8BC7FF,
+                UIColorRole.TabResearch => 0x8B90CCFF,
+                UIColorRole.TabFactions => 0x65B486FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,

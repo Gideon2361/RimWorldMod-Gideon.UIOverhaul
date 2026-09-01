@@ -35,6 +35,19 @@
     <tabGrowing>#C0AE6A</tabGrowing>
     <tabBills>#C4907A</tabBills>
     <tabPawns>#C98BA4</tabPawns>
+    <tabHospital>#CC8BC7</tabHospital>
+
+    <!-- The ninth identity, and the one that picked from the fullest ring: eight tabs already placed and
+         twelve theme bands on the canvas underneath it. The widest gap left is a jade around 130, and it is
+         wrong, because success is at 120 and this is the tab that spends success green on the word Done.
+         So the next gap takes it, an iris at 235 between the quests blue and the violet of the dead. -->
+    <tabResearch>#8B90CC</tabResearch>
+
+    <!-- The tenth, and it takes the arc research turned down above, at 145 rather than 130: twenty five
+         degrees off success and twenty seven off the power teal. It can, because its own scale draws the
+         resting band in secondary text rather than in this, so the identity never lands beside the green
+         that means Ally. -->
+    <tabFactions>#65B486</tabFactions>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -111,7 +124,7 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
-    <!-- The seven role based tab identities, deepened for this theme. They live on the shared template as
+    <!-- The ten role based tab identities, deepened for this theme. They live on the shared template as
          their dark values, and a violet picked to read on near black is washed out on near white, so each
          one is restated here rather than inherited. -->
     <tabTheDead>#7A56A8</tabTheDead>
@@ -121,6 +134,9 @@
     <tabGrowing>#8A6F2C</tabGrowing>
     <tabBills>#9A5A41</tabBills>
     <tabPawns>#9A4568</tabPawns>
+    <tabHospital>#99458C</tabHospital>
+    <tabResearch>#4A4F94</tabResearch>
+    <tabFactions>#2B8752</tabFactions>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>
