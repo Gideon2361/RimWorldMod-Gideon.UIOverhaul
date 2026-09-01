@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Verse;
 using Verse.Sound;
+using Gideon.UIOverhaul.Shared;
 
 namespace Gideon.UIOverhaul.Features.GrowZones.UI
 {
@@ -303,10 +304,10 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             float wLight = textWidth - wMin - wIdeal - wMax;
 
             PlantProperties props = plant.plant;
-            string coldest = props.minGrowthTemperature.ToStringTemperature("F0");
-            string hottest = props.maxGrowthTemperature.ToStringTemperature("F0");
-            string idealLow = props.minOptimalGrowthTemperature.ToStringTemperature("F0");
-            string idealHigh = props.maxOptimalGrowthTemperature.ToStringTemperature("F0");
+            string coldest = TemperatureText.Of(props.minGrowthTemperature);
+            string hottest = TemperatureText.Of(props.maxGrowthTemperature);
+            string idealLow = TemperatureText.Of(props.minOptimalGrowthTemperature);
+            string idealHigh = TemperatureText.Of(props.maxOptimalGrowthTemperature);
 
             float x = textX;
             StatPair(x, wideRowY, wMin, GzpTex.MinTemp, coldest,
