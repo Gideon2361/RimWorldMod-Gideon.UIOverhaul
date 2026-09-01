@@ -101,6 +101,16 @@ namespace Gideon.UIFramework.Components.Colors
         TabTheDead,
 
         /// <summary>
+        /// The Quests tab's own color, the second of the per-tab identities.
+        ///
+        /// <b>A steel blue: the same family as the accent, deliberately softer.</b> Quests were already the
+        /// blue screen and re-hueing them would have cost more than it bought, so this darkens rather than
+        /// moves. It sits at the same weight as <see cref="TabTheDead"/>, which is what keeps the two tabs
+        /// reading as a pair of identities rather than as one styled screen and one unstyled one.
+        /// </summary>
+        TabQuests,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>
