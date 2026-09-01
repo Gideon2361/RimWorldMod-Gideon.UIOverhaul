@@ -122,6 +122,8 @@ namespace Gideon.UIOverhaul.Features.Research
         private static Rect lastCanvas;
         private static Vector2 detailScroll;
         private static Vector2 queueScroll;
+        private static bool queueDragging;
+        private static float queueDragOffset;
 
         private static bool showAvailable = true;
         private static bool showLocked = true;
@@ -1773,6 +1775,18 @@ namespace Gideon.UIOverhaul.Features.Research
         // Queue rail
         // ---------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// The queue: what is planned, in the order it will happen.
+        ///
+        /// <b>This is a list you edit, not one you pick from,</b> which is why it took the rail control longer
+        /// to fit than the others. Each row carries a grip that starts a reorder and a cross that removes it,
+        /// and both are drawn through the entry's glyph delegates -- those hit test and consume the click
+        /// themselves, so removing a row does not also select it.
+        ///
+        /// A project that cannot start yet gets a note under it saying why, which is a
+        /// <see cref="QueueBlockedNote"/> rather than part of the row: it is a second line of a different shape,
+        /// and the element list is exactly the thing that lets a feature add one.
+        /// </summary>
         private static void QueueRail(Rect rect, UIColorPaletteDef palette)
         {
             UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
@@ -1803,54 +1817,160 @@ namespace Gideon.UIOverhaul.Features.Research
                     main.Add(project);
             }
 
-            float footer = 46f;
+            const float footer = 46f;
+
             Rect view = new Rect(inner.x, inner.y, inner.width, inner.height - footer);
-            float height = 22f + main.Count * RowHeight + BlockedRows(main) * 16f
-                           + (anomaly.Count > 0 ? 24f + anomaly.Count * RowHeight : 0f)
-                           + (main.Count == 0 ? 20f : 0f);
 
-            Rect body = new Rect(0f, 0f, view.width - 18f, Mathf.Max(height, view.height));
+            List<UIRailElement> elements = new List<UIRailElement>();
 
-            Widgets.BeginScrollView(view, ref queueScroll, body);
-
-            try
+            elements.Add(new UIRailSectionHeaderControl("Queue")
             {
-                float y = Header(body, 0f, "Queue", TotalDays(main), palette);
+                Trailing = TotalDays(main),
+                Color = palette.TextDisabled
+            });
 
-                if (main.Count == 0)
-                    y = Empty(body, y, "Nothing planned", palette);
-
-                for (int i = 0; i < main.Count; i++)
-                    y = Row(body, y, main[i], i, queue, palette);
-
-                if (anomaly.Count > 0)
+            if (main.Count == 0)
+            {
+                elements.Add(new UIRailClickableEntry(null, "Nothing planned")
                 {
-                    y = Header(body, y + 6f, "Anomaly", "parallel", palette);
-
-                    for (int i = 0; i < anomaly.Count; i++)
-                        y = Row(body, y, anomaly[i], -1, queue, palette);
-                }
+                    TextColor = palette.TextDisabled,
+                    Rise = 20f
+                });
             }
-            finally
-            {
-                Widgets.EndScrollView();
-            }
-
-            Footer(new Rect(inner.x, inner.yMax - footer + 6f, inner.width, footer - 6f), palette, anomaly.Count);
-        }
-
-        private static int BlockedRows(List<ResearchProjectDef> main)
-        {
-            int blocked = 0;
 
             for (int i = 0; i < main.Count; i++)
+                AddQueueRow(elements, main[i], i, queue, palette);
+
+            if (anomaly.Count > 0)
             {
-                if (!main[i].CanStartNow)
-                    blocked++;
+                elements.Add(new UIRailSectionHeaderControl("Anomaly")
+                {
+                    Trailing = "parallel",
+                    Color = palette.TextDisabled
+                });
+
+                for (int i = 0; i < anomaly.Count; i++)
+                    AddQueueRow(elements, anomaly[i], -1, queue, palette);
             }
 
-            return blocked;
+            UIRailControl.Draw(view, elements, null, ref queueScroll, ref queueDragging, ref queueDragOffset,
+                palette, false);
         }
+
+        /// <summary>
+        /// One queued project, plus the note under it when it cannot start yet.
+        ///
+        /// <paramref name="index"/> is the position in the reorderable lane, or -1 for the anomaly lane, which
+        /// runs in parallel and therefore has no order to change.
+        /// </summary>
+        private static void AddQueueRow(List<UIRailElement> elements, ResearchProjectDef project, int index,
+            GameComponent_ResearchQueue queue, UIColorPaletteDef palette)
+        {
+            bool current = Find.ResearchManager != null && Find.ResearchManager.IsCurrentProject(project);
+
+            elements.Add(new UIRailClickableEntry(null, project.LabelCap)
+            {
+                Rise = RowHeight,
+                TextColor = current ? palette.TextPrimary : (Color?) null,
+                Trailing = project.knowledgeCategory != null
+                    ? "parallel"
+                    : ResearchRate.Days(ResearchRate.DaysFor(project)),
+                CountColor = palette.TextDisabled,
+                Silent = true,
+
+                // Grip and badge share the leading slot, so the delegate is given room for both.
+                IconSize = 34f,
+                Glyph = (slot, color) => QueueLead(slot, index, current, palette),
+
+                TrailingGlyphSize = 16f,
+                TrailingGlyph = (slot, color) => QueueCross(slot, project, queue, palette),
+                Decorate = row => QueueDrop(row, index, queue)
+            });
+
+            if (project.CanStartNow || project.IsFinished)
+                return;
+
+            ResearchNode node = ResearchGraph.NodeFor(project);
+            string why = ResearchFacts.ChipFor(node, ResearchFacts.StateOf(node));
+
+            if (why != null)
+                elements.Add(new QueueBlockedNote { Text = why });
+        }
+
+        /// <summary>The drag grip and the state badge, in the row's leading slot.</summary>
+        private static void QueueLead(Rect slot, int index, bool current, UIColorPaletteDef palette)
+        {
+            if (index >= 0 && ResearchGlyphs.Grip != null)
+            {
+                Rect grip = new Rect(slot.x, slot.y + 2f, 12f, 16f);
+
+                Color previous = GUI.color;
+
+                GUI.color = palette.TextDisabled;
+
+                GUI.DrawTexture(grip, ResearchGlyphs.Grip);
+
+                GUI.color = previous;
+
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 0
+                                                              && Mouse.IsOver(grip))
+                {
+                    dragFrom = index;
+
+                    Event.current.Use();
+                }
+            }
+
+            Rect badge = new Rect(slot.x + 16f, slot.y + 2f, 16f, 16f);
+
+            UIElementPainter.FillRounded(badge, current ? palette.Accent : palette.SurfaceSunken);
+        }
+
+        /// <summary>The remove cross. Consumes its own click so the row is not selected as well.</summary>
+        private static void QueueCross(Rect slot, ResearchProjectDef project,
+            GameComponent_ResearchQueue queue, UIColorPaletteDef palette)
+        {
+            if (ResearchGlyphs.Cross == null)
+                return;
+
+            Color previous = GUI.color;
+
+            GUI.color = Mouse.IsOver(slot) ? palette.Danger : palette.TextDisabled;
+
+            GUI.DrawTexture(slot.ContractedBy(3f), ResearchGlyphs.Cross);
+
+            GUI.color = previous;
+
+            if (!Widgets.ButtonInvisible(slot))
+                return;
+
+            queue.Remove(project);
+
+            SoundDefOf.Click.PlayOneShotOnCamera();
+        }
+
+        /// <summary>
+        /// Finishes a reorder when the mouse is released over this row.
+        ///
+        /// The drag is started by the grip and landed here, so the two halves sit a row apart rather than
+        /// inside one method. Anything the queue refuses to move says why rather than failing silently.
+        /// </summary>
+        private static void QueueDrop(Rect row, int index, GameComponent_ResearchQueue queue)
+        {
+            if (index < 0 || dragFrom < 0 || dragFrom == index)
+                return;
+
+            if (!Mouse.IsOver(row) || Event.current.type != EventType.MouseUp)
+                return;
+
+            string why;
+
+            if (!queue.Move(dragFrom, index, out why) && why != null)
+                Messages.Message(why, MessageTypeDefOf.RejectInput, false);
+
+            dragFrom = -1;
+        }
+
 
         private static string TotalDays(List<ResearchProjectDef> main)
         {
@@ -1869,33 +1989,6 @@ namespace Gideon.UIOverhaul.Features.Research
             return ResearchRate.Days(total);
         }
 
-        private static float Header(Rect body, float y, string title, string trailing,
-            UIColorPaletteDef palette)
-        {
-            GameFont font = Text.Font;
-            Color color = GUI.color;
-            TextAnchor anchor = Text.Anchor;
-
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                GUI.color = palette.TextDisabled;
-
-                Widgets.Label(new Rect(body.x, y, body.width * 0.6f, 18f), title);
-
-                Text.Anchor = TextAnchor.UpperRight;
-
-                Widgets.Label(new Rect(body.x + body.width * 0.6f, y, body.width * 0.4f, 18f), trailing);
-            }
-            finally
-            {
-                Text.Anchor = anchor;
-                GUI.color = color;
-                Text.Font = font;
-            }
-
-            return y + 20f;
-        }
 
         /// <summary>
         /// One queue row, and the drag that reorders it.
@@ -1904,105 +1997,6 @@ namespace Gideon.UIOverhaul.Features.Research
         /// would silently do nothing whenever somebody let go a few pixels wide of it, which reads as the list
         /// refusing to be reordered.
         /// </summary>
-        private static float Row(Rect body, float y, ResearchProjectDef project, int index,
-            GameComponent_ResearchQueue queue, UIColorPaletteDef palette)
-        {
-            Rect row = new Rect(body.x, y, body.width, RowHeight);
-            bool current = Find.ResearchManager != null && Find.ResearchManager.IsCurrentProject(project);
-            bool anomaly = project.knowledgeCategory != null;
-
-            if (current)
-                Widgets.DrawBoxSolid(row, palette.SelectionOverlay);
-            else if (Mouse.IsOver(row))
-                Widgets.DrawBoxSolid(row, palette.HoverOverlay);
-
-            if (index >= 0 && ResearchGlyphs.Grip != null)
-            {
-                Rect grip = new Rect(row.x + 2f, row.y + 5f, 12f, 16f);
-                Color previous = GUI.color;
-
-                GUI.color = palette.TextDisabled;
-                GUI.DrawTexture(grip, ResearchGlyphs.Grip);
-                GUI.color = previous;
-
-                if (Event.current.type == EventType.MouseDown && Event.current.button == 0
-                                                              && Mouse.IsOver(grip))
-                {
-                    dragFrom = index;
-
-                    Event.current.Use();
-                }
-            }
-
-            Rect badge = new Rect(row.x + 16f, row.y + 5f, 16f, 16f);
-
-            UIElementPainter.FillRounded(badge, current
-                ? anomaly ? palette.Mood : palette.Accent
-                : palette.ControlBackgroundFaded);
-
-            DrawNumber(badge, index >= 0 ? index + 1 : 1,
-                current ? palette.WindowBackground : palette.TextSecondary);
-
-            Rect close = new Rect(row.xMax - 18f, row.y + 5f, 16f, 16f);
-            Rect eta = new Rect(close.x - 48f, row.y, 46f, row.height);
-
-            TabParts.RowLabel(new Rect(badge.xMax + 6f, row.y, eta.x - badge.xMax - 10f, row.height),
-                ResearchFacts.Name(project), current ? palette.TextPrimary : palette.TextSecondary,
-                GameFont.Tiny);
-
-            TabParts.RowLabel(eta, anomaly
-                ? project.knowledgeCost.ToString("F0") + " kn"
-                : ResearchRate.Days(ResearchRate.DaysFor(project)), palette.TextDisabled, GameFont.Tiny);
-
-            if (ResearchGlyphs.Cross != null)
-            {
-                Color previous = GUI.color;
-
-                GUI.color = Mouse.IsOver(close) ? palette.Danger : palette.TextDisabled;
-                GUI.DrawTexture(close.ContractedBy(3f), ResearchGlyphs.Cross);
-                GUI.color = previous;
-            }
-
-            if (Widgets.ButtonInvisible(close))
-            {
-                queue.Remove(project);
-                SoundDefOf.Click.PlayOneShotOnCamera();
-
-                return y + RowHeight;
-            }
-
-            if (index >= 0 && dragFrom >= 0 && dragFrom != index && Mouse.IsOver(row)
-                && Event.current.type == EventType.MouseUp)
-            {
-                string why;
-
-                if (!queue.Move(dragFrom, index, out why) && why != null)
-                {
-                    refusal = why;
-                    refusedAt = Time.frameCount;
-                }
-
-                dragFrom = -1;
-            }
-
-            y += RowHeight;
-
-            if (!project.CanStartNow && !project.IsFinished)
-            {
-                ResearchNode node = ResearchGraph.NodeFor(project);
-                string why = ResearchFacts.ChipFor(node, ResearchFacts.StateOf(node));
-
-                if (why != null)
-                {
-                    TabParts.RowLabel(new Rect(body.x + 34f, y - 2f, body.width - 38f, 16f), why,
-                        palette.Warning, GameFont.Tiny);
-
-                    y += 16f;
-                }
-            }
-
-            return y;
-        }
 
         private static void DrawNumber(Rect rect, int number, Color color)
         {
