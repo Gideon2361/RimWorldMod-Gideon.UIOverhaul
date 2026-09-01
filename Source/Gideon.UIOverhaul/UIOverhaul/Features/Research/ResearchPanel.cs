@@ -1966,7 +1966,12 @@ namespace Gideon.UIOverhaul.Features.Research
             string why;
 
             if (!queue.Move(dragFrom, index, out why) && why != null)
-                Messages.Message(why, MessageTypeDefOf.RejectInput, false);
+            {
+                // Recorded rather than thrown as a game message: the panel shows it in its own footer for a
+                // few seconds, which keeps the answer beside the thing that was refused.
+                refusal = why;
+                refusedAt = Time.frameCount;
+            }
 
             dragFrom = -1;
         }
