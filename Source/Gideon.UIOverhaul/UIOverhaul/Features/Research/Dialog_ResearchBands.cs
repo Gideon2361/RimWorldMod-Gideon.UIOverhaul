@@ -177,16 +177,13 @@ namespace Gideon.UIOverhaul.Features.Research
         {
             UIColorPaletteDef palette = UIColorPaletteDef.Active;
 
-            Text.Font = GameFont.Medium;
             GUI.color = palette.TextPrimary;
 
-            // Oswald for the title. It draws smaller than the other faces at the same GameFont -- its line box is
-            // 1.48 ems against Barlow's 1.20, and every face is scaled to fit RimWorld's line height -- so this is
-            // a title that reads as tall and narrow rather than as large.
+            // Oswald for the title. It draws smaller than the other faces at the same point size, its line box
+            // being 1.48 ems against Barlow 1.20, so this is a title that reads as tall and narrow rather than
+            // as large.
             UITextControl.Label(new Rect(inRect.x, inRect.y, inRect.width - 40f, TitleHeight), "Research bands",
-                UIFace.Oswald, GameFont.Medium);
-
-            Text.Font = GameFont.Small;
+                ResearchFaces.Display, ResearchFaces.Size.DialogTitle);
 
             float y = inRect.y + TitleHeight + Gap;
 
@@ -261,14 +258,12 @@ namespace Gideon.UIOverhaul.Features.Research
             else if (Mouse.IsOver(rect))
                 Widgets.DrawHighlight(rect);
 
-            Text.Font = GameFont.Tiny;
             Text.Anchor = TextAnchor.MiddleCenter;
             GUI.color = on ? palette.TextPrimary : tint;
 
-            Widgets.Label(rect, text);
+            UITextControl.Label(rect, text, ResearchFaces.Condensed, ResearchFaces.Size.Chip);
 
             Text.Anchor = TextAnchor.UpperLeft;
-            Text.Font = GameFont.Small;
             GUI.color = palette.TextPrimary;
 
             if (Widgets.ButtonInvisible(rect))
@@ -331,40 +326,41 @@ namespace Gideon.UIOverhaul.Features.Research
             float x = row.x + SwatchWidth + 8f;
 
             Text.Anchor = TextAnchor.MiddleLeft;
-            Text.Font = GameFont.Tiny;
 
             GUI.color = tint;
-            UIRichText.Label(new Rect(x, row.y, BandColumn - 8f, row.height),
-                ResearchBands.LabelOf(entry.Band));
+
+            UITextControl.LabelEllipses(new Rect(x, row.y, BandColumn - 8f, row.height),
+                ResearchBands.LabelOf(entry.Band), ResearchFaces.Condensed, ResearchFaces.Size.Row);
 
             x += BandColumn;
 
             GUI.color = palette.TextPrimary;
-            Text.Font = GameFont.Small;
 
             float names = 210f;
 
-            UIRichText.Label(new Rect(x, row.y, names - 8f, row.height), entry.Label);
+            UITextControl.LabelEllipses(new Rect(x, row.y, names - 8f, row.height), entry.Label,
+                ResearchFaces.Condensed, ResearchFaces.Size.Row);
 
             x += names;
 
-            Text.Font = GameFont.Tiny;
             GUI.color = palette.TextSecondary;
 
-            UIRichText.Label(new Rect(x, row.y, SourceColumn - 8f, row.height), entry.Source);
+            UITextControl.LabelEllipses(new Rect(x, row.y, SourceColumn - 8f, row.height), entry.Source,
+                ResearchFaces.Condensed, ResearchFaces.Size.Chip);
 
             x += SourceColumn;
 
             GUI.color = palette.TextDisabled;
 
-            UIRichText.Label(new Rect(x, row.y, TabColumn - 8f, row.height), entry.Tab);
+            UITextControl.LabelEllipses(new Rect(x, row.y, TabColumn - 8f, row.height), entry.Tab,
+                ResearchFaces.Condensed, ResearchFaces.Size.Chip);
 
             x += TabColumn;
 
-            UIRichText.Label(new Rect(x, row.y, Mathf.Max(0f, row.xMax - x), row.height), entry.Reason);
+            UITextControl.LabelEllipses(new Rect(x, row.y, Mathf.Max(0f, row.xMax - x), row.height),
+                entry.Reason, ResearchFaces.Condensed, ResearchFaces.Size.Chip);
 
             Text.Anchor = TextAnchor.UpperLeft;
-            Text.Font = GameFont.Small;
             GUI.color = palette.TextPrimary;
 
             // The reason is the column most likely to be cut off, so it is the tooltip as well.

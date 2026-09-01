@@ -34,7 +34,7 @@ namespace Gideon.UIOverhaul.Features.Research
                 return false;
 
             TabParts.RowLabel(new Rect(rect.x + Indent, rect.y - 2f,
-                Mathf.Max(0f, rect.width - Indent - 4f), Height), Text, palette.Warning, GameFont.Tiny,
+                Mathf.Max(0f, rect.width - Indent - 4f), Height), Text, palette.Warning,
                 ResearchFaces.Condensed, ResearchFaces.Size.Chip);
 
             return false;

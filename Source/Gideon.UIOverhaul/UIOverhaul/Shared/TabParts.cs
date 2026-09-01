@@ -160,6 +160,72 @@ namespace Gideon.UIOverhaul.Shared
         }
 
         /// <summary>
+        /// A paragraph at a named point size, in a real typeface.
+        ///
+        /// <b>Measured through the style that draws it,</b> not through <c>Text.CalcHeight</c>: that asks
+        /// RimWorld's own font how tall the words are, and a block sized against one face and drawn in another
+        /// is either clipped at the bottom or trailed by a band of empty space.
+        /// </summary>
+        internal static float Note(Rect rect, float y, string text, UIColorPaletteDef palette, UIFace face,
+            float points, Color? color = null)
+        {
+            if (text.NullOrEmpty())
+                return y;
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+
+            try
+            {
+                // The ambient font is the fallback the control drops to when a face cannot render a string, so
+                // it is set to whichever of the three sits nearest the size actually asked for.
+                Text.Font = UIFonts.Nearest(points);
+                GUI.color = color ?? palette.TextDisabled;
+
+                float height = UITextControl.Height(text, face, points, rect.width);
+
+                UITextControl.Paragraph(new Rect(rect.x, y, rect.width, height), text, face, points);
+
+                return y + height;
+            }
+            finally
+            {
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+        }
+
+        /// <summary>One ellipsed line at a named point size, in a real typeface.</summary>
+        internal static float Line(Rect rect, float y, string text, Color color, UIFace face, float points)
+        {
+            if (text == null)
+                text = string.Empty;
+
+            float height = UITextControl.LineHeight(face, points);
+
+            GameFont previousFont = Text.Font;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Font = UIFonts.Nearest(points);
+                Text.WordWrap = false;
+                GUI.color = color;
+
+                UITextControl.LabelEllipses(new Rect(rect.x, y, rect.width, height), text, face, points);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Font = previousFont;
+            }
+
+            return y + height;
+        }
+
+        /// <summary>
         /// One line of text at a given weight, ellipsed rather than wrapped.
         /// </summary>
         /// <param name="face">
@@ -444,6 +510,20 @@ namespace Gideon.UIOverhaul.Shared
         /// It is ignored on the game font, which comes in three sizes and cannot honour a fourth; the row still
         /// sets in the GameFont beside it, so a screen half converted looks off rather than breaking.
         /// </param>
+        /// <summary>
+        /// One ellipsed row label at a named point size, with no <c>GameFont</c> for the caller to get wrong.
+        ///
+        /// <b>The size and the fallback are one decision, so only one of them is a parameter.</b> The overload
+        /// below takes both, which was right while screens were half converted and is a trap now: a caller that
+        /// names 8.25pt and leaves the GameFont at its default is saying two different sizes, and the one that
+        /// wins depends on whether the sheet can render the string. Here the fallback is derived from the
+        /// points, so the two can never disagree.
+        /// </summary>
+        internal static void RowLabel(Rect band, string text, Color color, UIFace face, float points)
+        {
+            RowLabel(band, text, color, UIFonts.Nearest(points), face, points);
+        }
+
         internal static void RowLabel(Rect band, string text, Color color, GameFont font = GameFont.Small,
             UIFace face = UIFace.Game, float points = 0f)
         {

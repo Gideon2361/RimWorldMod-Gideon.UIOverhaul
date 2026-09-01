@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gideon.UIFramework.Controls;
 using Gideon.UIFramework.Helpers;
 using Gideon.UIOverhaul.Features.Options;
 using UnityEngine;
@@ -117,9 +118,10 @@ namespace Gideon.UIOverhaul.Features.Research
         /// of the field, so the same field on the same project is the same marks for the whole session and no two
         /// fields anywhere share a run.
         /// </summary>
-        internal static void Draw(Rect band, string key, Color color, GameFont font = GameFont.Tiny)
+        internal static void Draw(Rect band, string key, Color color,
+            float points = ResearchFaces.Size.Meta)
         {
-            Run(band, key, Script, color, font);
+            Run(band, key, Script, color, points);
         }
 
         /// <summary>
@@ -130,10 +132,10 @@ namespace Gideon.UIOverhaul.Features.Research
         /// </summary>
         internal static void Sample(Rect band, ResearchScript script, Color color)
         {
-            Run(band, "sample/" + script, script, color, GameFont.Tiny);
+            Run(band, "sample/" + script, script, color, ResearchFaces.Size.Meta);
         }
 
-        private static void Run(Rect band, string key, ResearchScript script, Color color, GameFont font)
+        private static void Run(Rect band, string key, ResearchScript script, Color color, float points)
         {
             if (band.width <= 4f || band.height <= 2f || script == ResearchScript.Off)
                 return;
@@ -146,7 +148,8 @@ namespace Gideon.UIOverhaul.Features.Research
 
             // Sized from the line rather than from the band, so a mark in a tall row sits on the text's own
             // centre line at the same size as the letters it stands in for.
-            float cell = Mathf.Min(band.height - 2f, Mathf.Max(7f, UIFonts.LineHeightOf(font) - 4f));
+            float cell = Mathf.Min(band.height - 2f,
+                Mathf.Max(7f, UITextControl.LineHeight(ResearchFaces.Condensed, points) - 4f));
             float step = cell * (1f + Tracking);
 
             int room = Mathf.FloorToInt((band.width + cell * Tracking) / step);
