@@ -178,6 +178,26 @@ namespace Gideon.UIOverhaul.Features.Research
         /// <summary>Which queue row is being dragged, or -1. Cleared on mouse up wherever that happens.</summary>
         private static int dragFrom = -1;
 
+        /// <summary>
+        /// The project being dragged, held by identity rather than by its place.
+        ///
+        /// <b>The row number and the queue number are not the same number.</b> A row carries its place in the
+        /// main lane, and the queue it reorders also holds the anomaly projects, so the two diverge the moment
+        /// anything from Anomaly is queued -- a drag would then move whichever project happened to be sitting
+        /// at the row number. The queue is also free to change under a drag, when a project finishes. Both are
+        /// answered by carrying the project itself and asking the queue where it is on the drop.
+        /// </summary>
+        private static ResearchProjectDef dragProject;
+
+        /// <summary>Where the drop would land, as a gap in the main lane, or -1 for nowhere.</summary>
+        private static int dragTo = -1;
+
+        /// <summary>What the dragged row says, so it can be drawn again under the cursor.</summary>
+        private static string dragLabel;
+
+        /// <summary>Width of the grip, shared by the glyph and the rect that grabs it.</summary>
+        private const float GripWidth = 16f;
+
         /// <summary>The last refusal from a drag, and the frame it happened, so it fades rather than sticks.</summary>
         private static string refusal;
 
@@ -288,9 +308,11 @@ namespace Gideon.UIOverhaul.Features.Research
             if (showQueue)
                 QueueRail(queueRect, palette);
 
-            // Anywhere, because a drag that ends over the canvas or off the window still ends.
+            // Anywhere, because a drag that ends over the canvas or off the window still ends. The queue
+            // rail has already had its chance to land the drop by this point; this is the case where the
+            // release happened somewhere the rail never saw.
             if (dragFrom >= 0 && Event.current.type == EventType.MouseUp)
-                dragFrom = -1;
+                ClearDrag();
         }
 
         // ---------------------------------------------------------------------------------------
@@ -2232,6 +2254,14 @@ namespace Gideon.UIOverhaul.Features.Research
 
             UIRailControl.Draw(view, elements, currentKey, ref queueScroll, ref queueDragging,
                 ref queueDragOffset, palette, false);
+
+            if (dragFrom < 0)
+                return;
+
+            QueueGhost(view, palette);
+
+            if (Event.current.type == EventType.MouseUp)
+                QueueDrop(queue);
         }
 
         /// <summary>
@@ -2318,35 +2348,134 @@ namespace Gideon.UIOverhaul.Features.Research
             if (index < 0)
                 return;
 
-            Rect grip = new Rect(row.x, row.y, 16f, row.height);
+            Rect grip = new Rect(row.x, row.y, GripWidth, row.height);
 
             if (Event.current.type == EventType.MouseDown && Event.current.button == 0
                                                           && Mouse.IsOver(grip))
             {
                 dragFrom = index;
+                dragProject = index < mainLane.Count ? mainLane[index] : null;
+                dragLabel = dragProject == null ? null : dragProject.LabelCap.ToString();
+                dragTo = -1;
 
                 Event.current.Use();
 
                 return;
             }
 
-            if (dragFrom < 0 || dragFrom == index)
+            if (dragFrom < 0 || !Mouse.IsOver(row))
                 return;
 
-            if (!Mouse.IsOver(row) || Event.current.type != EventType.MouseUp)
+            // Which half of the row the cursor is in, so a drop is a gap between two rows rather than a row:
+            // the top half of the fourth row means before the fourth, not onto it.
+            bool above = Event.current.mousePosition.y < row.center.y;
+
+            dragTo = above ? index : index + 1;
+
+            // Landing on either side of where it started is not a move, and a line drawn there would promise
+            // one.
+            if (dragTo == dragFrom || dragTo == dragFrom + 1)
                 return;
 
-            string why;
+            // Drawn here, inside the list own scroll view, so it is clipped with the rows it sits between
+            // rather than floating over the panel.
+            float y = above ? row.y : row.yMax - 2f;
 
-            if (!queue.Move(dragFrom, index, out why) && why != null)
+            Widgets.DrawBoxSolid(new Rect(row.x, y, row.width, 2f),
+                ResearchFaces.AccentOf(UIColorPaletteDef.Active));
+        }
+
+        /// <summary>
+        /// The dragged row, drawn again under the cursor.
+        ///
+        /// <b>After the list rather than inside it,</b> so it rides over the rows it is passing instead of
+        /// being clipped by them, and so it survives the cursor leaving the list.
+        /// </summary>
+        private static void QueueGhost(Rect view, UIColorPaletteDef palette)
+        {
+            if (dragLabel.NullOrEmpty())
+                return;
+
+            Rect ghost = new Rect(view.x + 4f, Event.current.mousePosition.y - RowHeight * 0.5f,
+                view.width - 8f, RowHeight);
+
+            UIElementPainter.OutlineRounded(ghost, ResearchFaces.AccentOf(palette), palette.SurfaceRaised);
+
+            if (ResearchGlyphs.Grip != null)
             {
-                // Recorded rather than thrown as a game message: the panel shows it in its own footer for a
-                // few seconds, which keeps the answer beside the thing that was refused.
-                refusal = why;
-                refusedAt = Time.frameCount;
+                Color previous = GUI.color;
+
+                GUI.color = palette.TextSecondary;
+
+                GUI.DrawTexture(new Rect(ghost.x + 4f, ghost.y + (ghost.height - 16f) / 2f, 12f, 16f),
+                    ResearchGlyphs.Grip);
+
+                GUI.color = previous;
             }
 
+            TabParts.RowLabel(new Rect(ghost.x + GripWidth + 6f, ghost.y, ghost.width - GripWidth - 12f,
+                ghost.height), dragLabel, palette.TextPrimary, GameFont.Small, ResearchFaces.Condensed,
+                ResearchFaces.Size.RailName);
+        }
+
+        /// <summary>
+        /// Ends the drag, wherever the button came up.
+        ///
+        /// <b>The release used to be acted on only by the row under the cursor.</b> A queue row can have a
+        /// note under it saying what it is waiting for, and a note is its own element rather than part of the
+        /// row, so letting go over one reached no row at all and the drag was simply dropped. The panel then
+        /// cleared the grab on the way out and nothing had happened. That is the half of "sometimes it works"
+        /// a player sees as the list ignoring them; the other half moved the wrong project, and is
+        /// <see cref="dragProject"/>.
+        ///
+        /// Now the target is remembered from the last row the cursor crossed, so a release over a note, over a
+        /// heading or off the end of the list still lands where the line was drawn.
+        /// </summary>
+        private static void QueueDrop(GameComponent_ResearchQueue queue)
+        {
+            if (dragProject != null && dragTo >= 0)
+            {
+                int from = queue.PlaceOf(dragProject);
+                int to = QueuePlace(queue, from);
+
+                string why;
+
+                if (from >= 0 && to >= 0 && to != from && !queue.Move(from, to, out why) && why != null)
+                {
+                    // Recorded rather than thrown as a game message: the panel shows it in its own footer
+                    // for a few seconds, which keeps the answer beside the thing that was refused.
+                    refusal = why;
+                    refusedAt = Time.frameCount;
+                }
+            }
+
+            ClearDrag();
+        }
+
+        /// <summary>Forgets the drag. One place, so a release outside the list cannot half-clear it.</summary>
+        private static void ClearDrag()
+        {
             dragFrom = -1;
+            dragTo = -1;
+            dragProject = null;
+            dragLabel = null;
+        }
+
+        /// <summary>
+        /// The drop place in the queue, converted from its place in the main lane.
+        ///
+        /// The two are different lists: the queue carries the anomaly projects as well, so a gap three rows
+        /// down the lane is not queue index three. Converted through whichever project the gap sits above.
+        /// </summary>
+        private static int QueuePlace(GameComponent_ResearchQueue queue, int from)
+        {
+            if (dragTo >= mainLane.Count)
+                return queue.Entries.Count - 1;
+
+            int to = queue.PlaceOf(mainLane[dragTo]);
+
+            // Move takes the place after the row has been lifted out, so everything below it has come up one.
+            return to > from ? to - 1 : to;
         }
 
         /// <summary>The remove cross. Consumes its own click so the row is not selected as well.</summary>
