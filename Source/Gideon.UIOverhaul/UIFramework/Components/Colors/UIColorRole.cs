@@ -131,6 +131,20 @@ namespace Gideon.UIFramework.Components.Colors
         TabPower,
 
         /// <summary>
+        /// The Growing Zones tab's own color, the fifth of the per-tab identities. A muted wheat,
+        /// defaulting to <c>#C0AE6A</c>.
+        ///
+        /// <b>Not the green a grower would reach for first.</b> That hue is taken twice over: <c>success</c>
+        /// is what a healthy temperature reads as inside this very tab, and the sage of
+        /// <see cref="TabAnimals"/> sits next door in the tab strip. Wheat is what the zone is for rather
+        /// than what it is made of, and it is far enough from both to be told apart at a glance.
+        ///
+        /// It shares a hue with <see cref="Warning"/> and is separated by saturation, the same way every tab
+        /// color here is: a state shouts and an identity does not.
+        /// </summary>
+        TabGrowing,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

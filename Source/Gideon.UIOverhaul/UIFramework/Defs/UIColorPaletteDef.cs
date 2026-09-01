@@ -59,6 +59,7 @@ namespace Gideon.UIFramework.Defs
         public string tabQuests;
         public string tabAnimals;
         public string tabPower;
+        public string tabGrowing;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -253,6 +254,9 @@ namespace Gideon.UIFramework.Defs
 
         /// <summary>The Power tab's own color. See <see cref="UIColorRole.TabPower"/>.</summary>
         public Color TabPower => Get(UIColorRole.TabPower);
+
+        /// <summary>The Growing Zones tab's own color. See <see cref="UIColorRole.TabGrowing"/>.</summary>
+        public Color TabGrowing => Get(UIColorRole.TabGrowing);
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -418,6 +422,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabQuests => tabQuests,
                 UIColorRole.TabAnimals => tabAnimals,
                 UIColorRole.TabPower => tabPower,
+                UIColorRole.TabGrowing => tabGrowing,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,

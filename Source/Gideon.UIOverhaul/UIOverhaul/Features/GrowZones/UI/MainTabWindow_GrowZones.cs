@@ -118,16 +118,15 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
         }
 
         /// <summary>
-        /// The tab's own colour, or the accent when the palette has never heard of this tab.
+        /// This tab's own color, the fifth of the per-tab identities.
         ///
-        /// <b>Muted where the state colours are saturated.</b> This tab spends green on a healthy
-        /// temperature, so its identity cannot be that same green -- and a growing tab in anything other
-        /// than green would be perverse. The separation is weight rather than hue: a state colour shouts
-        /// and an identity does not, which lets the two greens sit in one row without merging.
+        /// <b>Wheat rather than green.</b> The obvious hue is spoken for twice: success green is what a
+        /// healthy temperature reads as inside this very tab, and the animals tab next door already took the
+        /// muted sage. Wheat says what the zone is for instead of what it is made of.
         /// </summary>
         private static Color Identity(UIColorPaletteDef palette)
         {
-            return palette.Custom("tabGrowing", palette.Accent);
+            return palette.TabGrowing;
         }
 
         /// <summary>
