@@ -65,6 +65,7 @@ namespace Gideon.UIFramework.Defs
         public string tabHospital;
         public string tabResearch;
         public string tabFactions;
+        public string tabHistory;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -277,6 +278,10 @@ namespace Gideon.UIFramework.Defs
         /// <summary>The Factions tab's own color. See <see cref="UIColorRole.TabFactions"/>.</summary>
         public Color TabFactions => Get(UIColorRole.TabFactions);
 
+        /// <summary>The History tab's own color. See <see cref="UIColorRole.TabHistory"/>.</summary>
+        public Color TabHistory => Get(UIColorRole.TabHistory);
+
+
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -448,6 +453,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabHospital => tabHospital,
                 UIColorRole.TabResearch => tabResearch,
                 UIColorRole.TabFactions => tabFactions,
+                UIColorRole.TabHistory => tabHistory,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -504,6 +510,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabHospital => 0xCC8BC7FF,
                 UIColorRole.TabResearch => 0x8B90CCFF,
                 UIColorRole.TabFactions => 0x65B486FF,
+                UIColorRole.TabHistory => 0x72B3C0FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,

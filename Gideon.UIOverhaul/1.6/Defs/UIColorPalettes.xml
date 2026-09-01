@@ -48,6 +48,13 @@
          resting band in secondary text rather than in this, so the identity never lands beside the green
          that means Ally. -->
     <tabFactions>#65B486</tabFactions>
+
+    <!-- The eleventh, and the last one the ring has room for. It was drawn at 145 too, independently, and
+         moved when factions got there first. 190 is eighteen degrees off the power teal and nineteen off
+         the quests blue, which is tighter than anything above; it is taken anyway because the purple arc
+         is nineteen off mood, which this tab plots as a whole graph, and the citron is eighteen off
+         warning. Cool also puts it as far as the wheel allows from its own chart series, which are gold. -->
+    <tabHistory>#72B3C0</tabHistory>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -137,6 +144,7 @@
     <tabHospital>#99458C</tabHospital>
     <tabResearch>#4A4F94</tabResearch>
     <tabFactions>#2B8752</tabFactions>
+    <tabHistory>#2C6F7D</tabHistory>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>

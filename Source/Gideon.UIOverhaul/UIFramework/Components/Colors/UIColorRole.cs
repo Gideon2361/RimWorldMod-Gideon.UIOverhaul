@@ -242,6 +242,38 @@ namespace Gideon.UIFramework.Components.Colors
         TabFactions,
 
         /// <summary>
+        /// The History tab's own color, the eleventh of the per-tab identities. A muted cyan, defaulting to
+        /// <c>#72B3C0</c>.
+        ///
+        /// <b>This was drawn at 145 and moved, because <see cref="TabFactions"/> got there first.</b> Two
+        /// tabs reached that arc in the same week by the same argument, independently, which is the clearest
+        /// evidence yet both that the argument was right and that the ring has run out of good answers.
+        /// Factions had shipped; this moved.
+        ///
+        /// <b>Which leaves 190, and it is a tighter fit than anything above it.</b> Eighteen degrees from
+        /// <see cref="TabPower"/> at 172 and nineteen from <see cref="TabQuests"/> at 209, against the twenty
+        /// five and twenty seven Factions kept. That is the honest cost, and it is paid rather than dodged
+        /// because every alternative is worse: the purple arc at 286 is nineteen degrees from
+        /// <see cref="Mood"/>, which this tab plots as an entire graph, and the citron at 64 is eighteen from
+        /// <see cref="Warning"/> with <see cref="TabGrowing"/> already sitting on that hue.
+        ///
+        /// <b>What makes 190 survivable is saturation and the plot.</b> It sits at 38 percent against the
+        /// power teal's 27, and no two identities are ever on screen together. More to the point, what this
+        /// tab actually shows is a gold ramp: the four chart series run 40 to 45 degrees, so a cool identity is
+        /// as far from the data as the wheel allows -- which is the separation that matters most on a screen
+        /// whose entire content is colored quantities.
+        ///
+        /// <b>It never draws inside the axes.</b> The series own the plot; this draws only on the chrome
+        /// around it -- the header mark and title, the range segments, the rail selection and the open row.
+        /// The same rule <see cref="TabResearch"/> keeps from its band colors.
+        ///
+        /// <b>The ring is full at eleven.</b> A twelfth identity cannot be placed more than eighteen degrees
+        /// from its neighbours anywhere, so the next tab either shares an arc on purpose or this system needs
+        /// a second channel to tell tabs apart by.
+        /// </summary>
+        TabHistory,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>
