@@ -489,6 +489,10 @@ namespace Gideon.UIOverhaul.Features.Quests
                 Count = QuestFacts.Count(which),
                 Rise = 26f,
                 Face = QuestFaces.Condensed,
+
+                // Named without a size, this drew Barlow Condensed at whatever GameFont.Small is rather than
+                // at the rail size, so the quests rail stood a step larger than every other rail in the mod.
+                Points = QuestFaces.Size.RailName,
                 TextColor = on ? palette.TabQuests : (Color?) null,
                 CountFace = QuestFaces.Mono,
                 CountPoints = QuestFaces.Size.RailCount,

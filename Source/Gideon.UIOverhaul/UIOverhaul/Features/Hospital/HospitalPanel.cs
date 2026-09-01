@@ -153,7 +153,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
         private static bool builtColumns;
 
         /// <summary>Which rail entry is chosen. Never null: the tab opens on every patient it has.</summary>
-        private static string railKey = AllKey;
+        private static string railKey = CareKey;
 
         private static Vector2 railScroll;
 
@@ -184,7 +184,6 @@ namespace Gideon.UIOverhaul.Features.Hospital
         // Rail keys
         // ---------------------------------------------------------------------------------------
 
-        private const string AllKey = "*all";
         private const string CareKey = "*care";
         private const string SurgeryKey = "*surgery";
         private const string RecoveringKey = "*recovering";
@@ -498,9 +497,6 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             RailItems.Add(Head("Care", palette));
 
-            RailItems.Add(Entry(AllKey, "All patients", Listed(sections), false, palette,
-                "Everybody the colony's doctors would be asked about."));
-
             RailItems.Add(Entry(CareKey, "Needs care", needing, needing > 0, palette,
                 "Critical and in treatment together: the people something should be happening to."));
 
@@ -592,17 +588,6 @@ namespace Gideon.UIOverhaul.Features.Hospital
         private static int Needing(List<HospitalSection> sections)
         {
             return Count(sections, HospitalTriage.Critical) + Count(sections, HospitalTriage.InTreatment);
-        }
-
-        /// <summary>Everybody currently on the list, whatever the scope happens to be.</summary>
-        private static int Listed(List<HospitalSection> sections)
-        {
-            int total = 0;
-
-            for (int i = 0; i < sections.Count; i++)
-                total += sections[i].Count;
-
-            return total;
         }
 
         // ---------------------------------------------------------------------------------------
@@ -932,7 +917,13 @@ namespace Gideon.UIOverhaul.Features.Hospital
             }
         }
 
-        /// <summary>Whether the rail's current entry wants this section at all.</summary>
+        /// <summary>
+        /// Whether the rail's current entry wants this section at all.
+        ///
+        /// <b>There is deliberately no entry that shows everything.</b> It was there and it was the pawns tab
+        /// with fewer columns: every colonist and every animal, listed, on a screen whose whole argument is
+        /// that a hospital tab which lists healthy colonists has hidden the two who are not.
+        /// </summary>
         private static bool Shown(HospitalSection section)
         {
             switch (railKey)

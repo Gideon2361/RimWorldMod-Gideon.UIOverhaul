@@ -26,7 +26,7 @@ namespace Gideon.UIOverhaul.Features.Power
             internal const float BlockHead = 7.875f;
             internal const float RailHead = 9.375f;
             internal const float RailName = 12.75f;
-            internal const float RailCount = 9f;
+            internal const float RailCount = 9.75f;
             internal const float Name = 11.25f;
             internal const float Body = 10.5f;
             internal const float Label = 7.875f;
