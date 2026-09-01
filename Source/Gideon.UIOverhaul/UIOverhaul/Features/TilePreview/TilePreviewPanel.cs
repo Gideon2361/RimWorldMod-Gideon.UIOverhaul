@@ -72,6 +72,9 @@ namespace Gideon.UIOverhaul.Features.TilePreview
 
         private const float Gap = 6f;
 
+        /// <summary>The strip along the bottom that says this reading is an estimate.</summary>
+        private const float FooterHeight = 14f;
+
         internal static float Width
         {
             get { return ImageSize + ColumnWidth + Pad * 3f; }
@@ -79,7 +82,7 @@ namespace Gideon.UIOverhaul.Features.TilePreview
 
         internal static float Height
         {
-            get { return HeaderHeight + ImageSize + Pad * 2f + 2f; }
+            get { return HeaderHeight + ImageSize + Pad * 2f + 2f + FooterHeight; }
         }
 
         internal static void Draw()
@@ -127,6 +130,49 @@ namespace Gideon.UIOverhaul.Features.TilePreview
             Widgets.DrawBox(image);
 
             Figures(new Rect(image.xMax + Pad, image.y, ColumnWidth, image.height), entry.Reading, palette);
+
+            Footer(new Rect(rect.x + Pad, image.yMax + Pad, rect.width - Pad * 2f, FooterHeight), palette);
+        }
+
+        /// <summary>
+        /// The line that says this panel is a guess.
+        ///
+        /// <b>Because everything above it is an estimate and nothing about it looks like one.</b> The reading is
+        /// rebuilt from the elevation and fertility step alone, so it knows nothing about the landmarks,
+        /// mutators and mod added generation steps that carve a lake into a tile or drop a chasm through it.
+        /// That gap does not announce itself: the arithmetic succeeds and returns a plausible map of a world
+        /// that will not be generated, under a confident percentage in large type. A figure that can be wrong
+        /// has to say so beside the figure, not in a changelog.
+        /// </summary>
+        private static void Footer(Rect rect, UIColorPaletteDef palette)
+        {
+            Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, rect.width, 1f), palette.Border);
+
+            Hint(new Rect(rect.x, rect.y + 1f, rect.width, rect.height - 1f),
+                "Click map tile for true analysis", palette.TextDisabled,
+                TilePreviewFaces.Condensed, TilePreviewFaces.Size.Note);
+        }
+
+        private static void Hint(Rect rect, string text, Color color, UIFace face, float points)
+        {
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleCenter;
+                Text.WordWrap = false;
+                GUI.color = color;
+
+                UITextControl.LabelEllipses(rect, text, face, points);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
         }
 
         /// <summary>
