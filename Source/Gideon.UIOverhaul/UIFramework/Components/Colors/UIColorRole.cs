@@ -172,6 +172,26 @@ namespace Gideon.UIFramework.Components.Colors
         TabPawns,
 
         /// <summary>
+        /// The Factions tab's own color, the eighth of the per-tab identities. An orchid, defaulting to
+        /// <c>#BF7DBB</c>.
+        ///
+        /// <b>Green and red were never available to this one.</b> Its whole content is standing, and standing
+        /// is drawn in <see cref="Success"/>, <see cref="TextSecondary"/> and <see cref="Danger"/> on every
+        /// row. An identity from either of those families would be read as a verdict on the faction rather
+        /// than as the name of the tab.
+        ///
+        /// <b>What is left is the span between <see cref="TabTheDead"/> and <see cref="TabPawns"/>,</b> which
+        /// is also the widest clear stretch of the wheel this palette still has: thirty six degrees to the
+        /// violet on one side and the same to the rose on the other. Every other gap is closed by a state
+        /// color sitting in the middle of it.
+        ///
+        /// <b>It is also the drift.</b> On this tab the identity does one job beyond naming the screen: the
+        /// resting band a faction's goodwill is pulled back into is drawn in it, because that band is what
+        /// the tab is pointing at and it must not be mistaken for a standing.
+        /// </summary>
+        TabFactions,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>
