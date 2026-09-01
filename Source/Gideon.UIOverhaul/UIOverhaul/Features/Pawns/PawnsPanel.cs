@@ -124,6 +124,25 @@ namespace Gideon.UIOverhaul.Features.Pawns
             RowGap = 2f,
             SectionHeaderHeight = 30f,
 
+            // The heading row joins the convention the header block above it uses: upper-case mono at caption
+            // size, on the grid's own surface with a rule under it. It was already pinned -- it is drawn
+            // outside the scroll view -- but on the panel background and in the game font it read as text
+            // floating above the table rather than as the table's own top edge.
+            HeaderFace = PawnFaces.Mono,
+            HeaderPoints = PawnFaces.Size.Caption,
+            HeaderUppercase = true,
+            HeaderSeated = true,
+
+            // No PinnedColumns here, and it is not an oversight. The name column is the obvious candidate --
+            // scrolled right this table is a screen of toggles with nobody attached to them -- but pinning
+            // makes the control walk the rows twice, once per region, and each pass invokes a row's
+            // DrawBackground. This panel's registers the whole-row click that opens the schedule, so it would
+            // be registered twice and a single click would open and immediately close the row.
+            //
+            // The work tab pins its first column safely because its own DrawBackground only paints. Fixing
+            // this properly means the control telling a row which pass it is in, which is its change to make
+            // and not this restyle's.
+
             // No column banding here, unlike the work tab. Banding exists to keep the eye on one column across a
             // wide grid of like values; this tab has six wide columns of unlike things -- a name, a sentence, two
             // bars -- where every column already looks different from its neighbors. The stripes only competed
@@ -598,6 +617,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Condition",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = HealthStateColumnWidth,
                 DrawCell = DrawConditionCell
             });
@@ -605,6 +625,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Health",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = BarColumnWidth,
                 DrawCell = DrawHealthBarCell
             });
@@ -612,6 +633,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Mood",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = BarColumnWidth,
                 DrawCell = DrawMoodCell
             });
@@ -619,6 +641,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Activity",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = ActivityColumnWidth,
                 DrawCell = DrawActivityCell
             });
@@ -628,6 +651,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Schedule",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = 110f,
                 DrawCell = DrawScheduleHintCell
             });
@@ -641,6 +665,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Area",
+                HeaderAnchor = TextAnchor.MiddleLeft,
                 Width = AreaColumnWidth,
                 Tooltip = "Where each pawn is allowed to be. Unrestricted lets them use the whole map.",
                 OwnsClicks = true,
@@ -657,6 +682,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Attack mode",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = ResponseColumnWidth,
                 Tooltip = "HostilityReponseTip".Translate().ToString() + "\n\nIgnore, attack, or flee, left to right.",
                 OwnsClicks = true,
@@ -666,6 +692,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Self-tend",
+                HeaderAnchor = TextAnchor.MiddleCenter,
                 Width = SelfTendColumnWidth,
                 Tooltip = "Whether each colonist patches their own wounds up rather than waiting for a doctor.",
                 OwnsClicks = true,
@@ -679,6 +706,7 @@ namespace Gideon.UIOverhaul.Features.Pawns
             Grid.Columns.Add(new UIDesignatorTabColumn
             {
                 Label = "Edit",
+                HeaderAnchor = TextAnchor.MiddleRight,
                 Width = EditColumnWidth,
                 OwnsClicks = true,
                 Tooltip = "Clear, copy, paste and template everything about a pawn at once: their work "
