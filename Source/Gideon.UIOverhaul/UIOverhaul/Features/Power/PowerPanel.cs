@@ -165,7 +165,12 @@ namespace Gideon.UIOverhaul.Features.Power
 
                 Color previous = GUI.color;
 
-                GUI.color = palette.Warning;
+                // The same colour as the title beside it. The bolt was drawn in Warning, which reads as a
+                // caution the moment a grid is actually in trouble -- amber is the tab saying something is
+                // wrong, and it cannot also be the tab saying its own name. The Dead mockup makes the same
+                // pairing: the mark and the title are one colour, because together they are the tab.
+                GUI.color = palette.Accent;
+
                 GUI.DrawTexture(glyph, Bolt);
                 GUI.color = previous;
 
