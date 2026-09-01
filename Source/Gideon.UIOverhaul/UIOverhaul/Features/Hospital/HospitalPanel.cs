@@ -27,6 +27,7 @@ namespace Gideon.UIOverhaul.Features.Hospital
     /// <b>Rows are rebuilt every frame from a roster that is not.</b> Layout is cheap and disposable; reading a
     /// patient is real work and happens twice a game second. The same arrangement the animals tab uses.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class HospitalPanel
     {
         // ---------------------------------------------------------------------------------------
@@ -45,11 +46,39 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private const float WindowChrome = 24f;
         private const float PaneGap = 8f;
-        private const float ToolbarHeight = 30f;
-        private const float ToolbarGap = 6f;
-        private const float StripHeight = 62f;
+        private const float Pad = 12f;
+
+        /// <summary>The header block, sized as every other restyled tab sizes its own.</summary>
+        private const float HeaderHeight = 66f;
+
+        /// <summary>Side of the header glyph, and the air between it and the title.</summary>
+        private const float GlyphSize = 34f;
+
+        private const float GlyphGap = 10f;
+
+        /// <summary>The strip under the header: the search, and the visitor policies beside it.</summary>
+        private const float StripHeight = 26f;
+
+        private const float StripGap = 6f;
+
+        /// <summary>Width of the rail down the left, the same as every other restyled tab's.</summary>
+        private const float RailWidth = 200f;
 
         private const float PortraitSize = 34f;
+
+        /// <summary>Height of a block's own heading bar.</summary>
+        private const float BlockHeadHeight = 20f;
+
+        /// <summary>Height of the admissions block: a toggle, a schedule and its axis.</summary>
+        private const float AdmissionsHeight = 140f;
+
+        /// <summary>
+        /// Widest the twenty-four hour blocks are allowed to get.
+        ///
+        /// A day stretched across a two thousand pixel window is a cell a hundred wide holding one hour, which
+        /// reads as a bar chart of nothing. The mockup's proportion, kept.
+        /// </summary>
+        private const float HoursWidth = 560f;
 
         private static float CaptionHeight
         {
@@ -93,6 +122,22 @@ namespace Gideon.UIOverhaul.Features.Hospital
         /// <summary>Scratch for a bed menu. Never held past the click that built it.</summary>
         private static readonly List<Building_Bed> Beds = new List<Building_Bed>();
 
+        /// <summary>The tab's own mark, the same texture its button on the bar uses.</summary>
+        private static readonly Texture2D Glyph;
+
+        static HospitalPanel()
+        {
+            // Through a local, because a readonly field can only be assigned in the constructor itself and the
+            // guard does its work in a closure.
+            Texture2D glyph = null;
+
+            UIGuard.Try("Hospital.Glyph",
+                () => glyph = ContentFinder<Texture2D>.Get("UI/MainButtonIcons/Medical", false),
+                "The header has no glyph this session. Everything on the tab still reads.");
+
+            Glyph = glyph;
+        }
+
         // ---------------------------------------------------------------------------------------
         // State
         // ---------------------------------------------------------------------------------------
@@ -107,13 +152,53 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
         private static bool builtColumns;
 
+        /// <summary>Which rail entry is chosen. Never null: the tab opens on every patient it has.</summary>
+        private static string railKey = AllKey;
+
+        private static Vector2 railScroll;
+
+        private static bool railDragging;
+
+        private static float railOffset;
+
+        private static readonly List<UIRailElement> RailItems = new List<UIRailElement>();
+
+        /// <summary>
+        /// Sections this panel folded because nothing in them was wrong.
+        ///
+        /// Kept apart from the grid's own fold set so the two can be told apart: a section in here was folded by
+        /// us and will be unfolded by us the moment somebody in it stops being well, while one the player folded
+        /// by hand stays folded until they say otherwise.
+        /// </summary>
+        private static readonly HashSet<string> AutoCollapsed = new HashSet<string>();
+
+        /// <summary>
+        /// What a drag across the receiving hours is painting: on, off, or nothing in progress.
+        ///
+        /// Held for the length of the drag so every cell the pointer crosses takes the value the first one took,
+        /// rather than each toggling itself and leaving a stripe.
+        /// </summary>
+        private static bool? hourPaint;
+
+        // ---------------------------------------------------------------------------------------
+        // Rail keys
+        // ---------------------------------------------------------------------------------------
+
+        private const string AllKey = "*all";
+        private const string CareKey = "*care";
+        private const string SurgeryKey = "*surgery";
+        private const string RecoveringKey = "*recovering";
+        private const string ColonistsKey = "*colonists";
+        private const string AnimalsKey = "*animals";
+        private const string AdmissionsKey = "*admissions";
+
         internal static float WindowWidth
         {
             get
             {
                 EnsureColumns();
 
-                float wanted = Grid.RequestedWidth + WindowChrome;
+                float wanted = Grid.RequestedWidth + WindowChrome + RailWidth + Pad;
 
                 if (paneOpen)
                     wanted += HospitalPatientPane.PaneWidth + PaneGap;
@@ -147,51 +232,58 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             List<HospitalSection> sections = HospitalRoster.Sections;
 
-            Collect(sections);
-
             Rect content = inRect.ContractedBy(6f);
 
-            Rect toolbar = new Rect(content.x, content.y, content.width, ToolbarHeight);
+            float top = Header(new Rect(content.x, content.y, content.width, HeaderHeight), palette, sections);
 
-            Toolbar(toolbar, palette);
+            Rect body = new Rect(content.x, top, content.width, Mathf.Max(0f, content.yMax - top));
 
-            content = new Rect(content.x, toolbar.yMax + ToolbarGap, content.width,
-                Mathf.Max(0f, content.height - ToolbarHeight - ToolbarGap));
+            Rail(new Rect(body.x, body.y, RailWidth, body.height), palette, sections);
 
-            if (HospitalVisitors.Available)
+            Rect rest = new Rect(body.x + RailWidth + Pad, body.y,
+                Mathf.Max(0f, body.width - RailWidth - Pad), body.height);
+
+            if (railKey == AdmissionsKey && HospitalVisitors.Available)
             {
-                Rect strip = new Rect(content.x, content.y, content.width, StripHeight);
+                Admissions(rest, palette);
+            }
+            else
+            {
+                Rect strip = new Rect(rest.x, rest.y, rest.width, StripHeight);
 
                 Strip(strip, palette);
 
-                content = new Rect(content.x, strip.yMax + ToolbarGap, content.width,
-                    Mathf.Max(0f, content.height - StripHeight - ToolbarGap));
-            }
+                rest = new Rect(rest.x, strip.yMax + StripGap, rest.width,
+                    Mathf.Max(0f, rest.height - StripHeight - StripGap));
 
-            // The pane takes its width off the right before the grid lays out, so the grid draws into what is
-            // left rather than under it. The same order the animals and pawns tabs use.
-            if (paneOpen)
-            {
-                HospitalPatient patient = HospitalRoster.PatientFor(paneFor);
-
-                if (patient == null)
+                // The pane takes its width off the right before the grid lays out, so the grid draws into what
+                // is left rather than under it. The same order the animals and pawns tabs use.
+                if (paneOpen)
                 {
-                    ClosePane();
-                }
-                else
-                {
-                    Rect pane = new Rect(content.xMax - HospitalPatientPane.PaneWidth, content.y,
-                        HospitalPatientPane.PaneWidth, content.height);
+                    HospitalPatient patient = HospitalRoster.PatientFor(paneFor);
 
-                    content = new Rect(content.x, content.y,
-                        content.width - HospitalPatientPane.PaneWidth - PaneGap, content.height);
-
-                    if (!HospitalPatientPane.Draw(pane, patient, palette, HospitalRoster.Invalidate, ClosePane))
+                    if (patient == null)
+                    {
                         ClosePane();
-                }
-            }
+                    }
+                    else
+                    {
+                        Rect pane = new Rect(rest.xMax - HospitalPatientPane.PaneWidth, rest.y,
+                            HospitalPatientPane.PaneWidth, rest.height);
 
-            Grid.Draw(content, palette);
+                        rest = new Rect(rest.x, rest.y,
+                            rest.width - HospitalPatientPane.PaneWidth - PaneGap, rest.height);
+
+                        if (!HospitalPatientPane.Draw(pane, patient, palette, HospitalRoster.Invalidate,
+                                ClosePane))
+                            ClosePane();
+                    }
+                }
+
+                Collect(sections);
+
+                Grid.Draw(rest, palette);
+            }
 
             // After the grid, so any scroll view a click happened inside has been closed out.
             PawnCameraJump.Resolve();
@@ -220,30 +312,92 @@ namespace Gideon.UIOverhaul.Features.Hospital
         }
 
         // ---------------------------------------------------------------------------------------
-        // Toolbar
+        // Header
         // ---------------------------------------------------------------------------------------
 
         /// <summary>
-        /// The search, the one toggle, and the three readouts that decide whether the colony can cope.
+        /// The block that names the screen, with the colony's medical figures seated in it.
         ///
-        /// <b>Beds, doctors and medicine, because those are the three things a ward runs out of.</b> Each is a
-        /// fact about the colony rather than about a patient, which is why they sit above the list rather than in
-        /// a column of it.
+        /// <b>The same shape every restyled tab uses.</b> What was a toolbar of a search box, a checkbox and
+        /// three readouts is now a header saying where you are and what the ward has, a rail saying what you are
+        /// looking at, and a strip holding nothing but controls.
         /// </summary>
-        private static void Toolbar(Rect bar, UIColorPaletteDef palette)
+        private static float Header(Rect rect, UIColorPaletteDef palette, List<HospitalSection> sections)
         {
-            Search.Draw(new Rect(bar.x, bar.y, 240f, ToolbarHeight - 2f), palette);
+            // SurfaceSunken, the same fill the rail beside it uses: header and rail are both chrome framing the
+            // content, so they share a surface and the blocks between them sit above it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
-            bool everybody = HospitalRoster.ShowEverybody;
+            Rect inner = rect.ContractedBy(10f);
 
-            if (UICheckboxControl.Draw(new Rect(bar.x + 250f, bar.y, 190f, ToolbarHeight - 2f), ref everybody,
-                    palette, "Show everybody"))
+            float text = inner.x;
+
+            if (Glyph != null)
             {
-                HospitalRoster.ShowEverybody = everybody;
+                Rect mark = new Rect(inner.x, inner.y + (inner.height - GlyphSize) * 0.5f, GlyphSize, GlyphSize);
 
-                HospitalRoster.Invalidate();
+                Color previous = GUI.color;
+
+                GUI.color = HospitalFaces.AccentOf(palette);
+                GUI.DrawTexture(mark, Glyph);
+                GUI.color = previous;
+
+                text = mark.xMax + GlyphGap;
             }
 
+            TabParts.RowLabel(new Rect(text, inner.y + 2f, 320f, 26f), "Hospital",
+                HospitalFaces.AccentOf(palette), GameFont.Medium, HospitalFaces.Display,
+                HospitalFaces.Size.Title);
+
+            TabParts.RowLabel(new Rect(text, inner.y + 28f, 460f, 18f), Subtitle(), palette.TextSecondary,
+                GameFont.Tiny, HospitalFaces.Condensed, HospitalFaces.Size.Subtitle);
+
+            Readouts(inner, palette, sections);
+
+            return rect.yMax + 6f;
+        }
+
+        /// <summary>
+        /// The line under the title.
+        ///
+        /// <b>With Colony Hospital installed it is the three settings, because they are what the screen is
+        /// currently doing.</b> The two policies and the receiving switch used to be a band of controls
+        /// announcing themselves; the controls are still reachable, but what they are set to belongs here, where
+        /// a subtitle would otherwise be repeating the tab's own name back at the player.
+        /// </summary>
+        private static string Subtitle()
+        {
+            Map map = Find.CurrentMap;
+
+            if (!HospitalVisitors.Available || map == null)
+                return "Who needs a doctor, and what is being done about it";
+
+            return UIGuard.Try<string>("Hospital.Subtitle", () =>
+            {
+                FoodPolicy food = HospitalVisitors.PatientFood(map);
+
+                return HospitalVisitors.DefaultCare().GetLabel()
+                       + "  -  " + (food != null ? food.label : "default") + " patient food"
+                       + "  -  " + (HospitalVisitors.Receiving(map)
+                           ? "admitting patients"
+                           : "not admitting patients");
+            }, "Who needs a doctor, and what is being done about it", null);
+        }
+
+        /// <summary>
+        /// The figures, right to left: what the ward has, and what it is failing to cover.
+        ///
+        /// <b>Medicine is two readouts rather than one string.</b> It was "2  herbal 546" in a single cell,
+        /// which cannot be scanned, cannot be colored separately, and was using the gap between two numbers as a
+        /// label. Glitterworld joins them only when there is any, because a permanent nought for something most
+        /// colonies never see is a column of nothing.
+        ///
+        /// <b>Doctors reads in the danger color at nought,</b> whatever else is true. Two people with heatstroke
+        /// and nobody set to treat them is the whole story of that screen, and it was a grey nought among five
+        /// other grey figures.
+        /// </summary>
+        private static void Readouts(Rect area, UIColorPaletteDef palette, List<HospitalSection> sections)
+        {
             Map map = Find.CurrentMap;
 
             if (map == null)
@@ -254,16 +408,40 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
             HospitalBeds.Count(map, out occupied, out total);
 
-            float x = bar.xMax;
+            int doctors = Doctors(map);
+            int needing = Needing(sections);
 
-            x = TabParts.Readout(bar, x, "medicine", Medicine(map), palette,
-                "How much medicine and how much herbal is on this map, unforbidden.");
+            float x = area.xMax;
 
-            x = TabParts.Readout(bar, x, "doctors", Doctors(map).ToString(), palette,
-                "Colonists who can do doctoring and are not down themselves.");
+            x = TabParts.Readout(area, x, "need care", needing.ToString(), palette,
+                "Patients who are bleeding, downed, or carrying something a doctor should be treating.",
+                needing > 0 ? palette.Warning : palette.TextPrimary);
 
-            TabParts.Readout(bar, x, "medical beds", occupied + " / " + total, palette,
+            x = TabParts.Readout(area, x, "doctors", doctors.ToString(), palette,
+                "Colonists who can do doctoring and are not down themselves.",
+                doctors == 0 ? palette.Danger : palette.TextPrimary);
+
+            x = TabParts.Readout(area, x, "medical beds", occupied + " / " + total, palette,
                 "Beds marked medical, and how many have somebody in them.");
+
+            x = TabParts.Readout(area, x, "medicine", Stock(map, ThingDefOf.MedicineIndustrial).ToString(),
+                palette, "Industrial medicine on this map, unforbidden.");
+
+            int glitter = Stock(map, ThingDefOf.MedicineUltratech);
+
+            if (glitter > 0)
+            {
+                x = TabParts.Readout(area, x, "glitter", glitter.ToString(), palette,
+                    "Glitterworld medicine on this map, unforbidden.");
+            }
+
+            TabParts.Readout(area, x, "herbal", Stock(map, ThingDefOf.MedicineHerbal).ToString(), palette,
+                "Herbal medicine on this map, unforbidden.");
+        }
+
+        private static int Stock(Map map, ThingDef medicine)
+        {
+            return UIGuard.Try("Hospital.Stock", () => HospitalSurgery.Stock(map, medicine), 0, null);
         }
 
         private static int Doctors(Map map)
@@ -296,173 +474,209 @@ namespace Gideon.UIOverhaul.Features.Hospital
             }, 0, null);
         }
 
-        private static string Medicine(Map map)
-        {
-            return UIGuard.Try<string>("Hospital.Medicine", () =>
-            {
-                int normal = HospitalSurgery.Stock(map, ThingDefOf.MedicineIndustrial);
-                int herbal = HospitalSurgery.Stock(map, ThingDefOf.MedicineHerbal);
-                int glitter = HospitalSurgery.Stock(map, ThingDefOf.MedicineUltratech);
-
-                string text = normal.ToString();
-
-                if (herbal > 0)
-                    text += "  herbal " + herbal;
-
-                if (glitter > 0)
-                    text += "  glitter " + glitter;
-
-                return text;
-            }, "?", null);
-        }
-
         // ---------------------------------------------------------------------------------------
-        // The hospital strip, with Colony Hospital installed
+        // Rail
         // ---------------------------------------------------------------------------------------
 
         /// <summary>
-        /// The map-level controls, which are about the hospital rather than about a patient.
+        /// The rail: what you are looking at, and how wide the question is.
         ///
-        /// <b>Only with Colony Hospital installed, and every control is one of their public members.</b> Whether
-        /// you are open, the hours you accept arrivals, the medicine visitors get and what they are fed: their
-        /// tab's content, in ours, because two tabs for one screen is the thing this merge exists to avoid.
+        /// <b>It replaces the section headings as the way to get somewhere.</b> Five triage groups is a lot of
+        /// scrolling to reach the one you came for; as entries with counts, and a warning-colored count on the
+        /// group that needs a doctor, the trip is one click. The headings stay in the list, because they are
+        /// still what a patient belongs to.
+        ///
+        /// <b>Everyone is the once-a-quadrum question of who is fit to travel,</b> and it is a filter like the
+        /// rest rather than a switch: the roster lists the whole colony either way and the tab folds the groups
+        /// where nothing is wrong. The toolbar checkbox that used to widen the list is gone with it.
+        /// </summary>
+        private static void Rail(Rect rect, UIColorPaletteDef palette, List<HospitalSection> sections)
+        {
+            RailItems.Clear();
+
+            int needing = Needing(sections);
+
+            RailItems.Add(Head("Care", palette));
+
+            RailItems.Add(Entry(AllKey, "All patients", Listed(sections), false, palette,
+                "Everybody the colony's doctors would be asked about."));
+
+            RailItems.Add(Entry(CareKey, "Needs care", needing, needing > 0, palette,
+                "Critical and in treatment together: the people something should be happening to."));
+
+            RailItems.Add(Entry(SurgeryKey, "Awaiting surgery", Count(sections, HospitalTriage.AwaitingSurgery),
+                false, palette, "Operations queued and waiting on a surgeon."));
+
+            RailItems.Add(Entry(RecoveringKey, "Recovering", Count(sections, HospitalTriage.Recovering), false,
+                palette, "In a bed, healing, with nothing holding it up."));
+
+            RailItems.Add(new UIRailDividerControl { Color = palette.Border });
+            RailItems.Add(Head("Everyone", palette));
+
+            RailItems.Add(Entry(ColonistsKey, "Colonists", HospitalRoster.Colonists, false, palette,
+                "Everybody on the map who is not an animal, whether or not anything is wrong with them."));
+
+            RailItems.Add(Entry(AnimalsKey, "Animals", HospitalRoster.Animals, false, palette,
+                "Every colony animal, whether or not anything is wrong with them."));
+
+            if (HospitalVisitors.Available)
+            {
+                RailItems.Add(new UIRailDividerControl { Color = palette.Border });
+                RailItems.Add(Head("Guests", palette));
+
+                RailItems.Add(Entry(AdmissionsKey, "Admissions", HospitalRoster.Visiting, false, palette,
+                    "The hospital itself: whether you are open, the hours you accept arrivals, and what your "
+                    + "visitors owe."));
+            }
+
+            string picked = UIRailControl.Draw(rect, RailItems, railKey, ref railScroll, ref railDragging,
+                ref railOffset, palette);
+
+            if (picked == null || picked == railKey)
+                return;
+
+            railKey = picked;
+
+            Grid.Scroll = Vector2.zero;
+        }
+
+        private static UIRailSectionHeaderControl Head(string label, UIColorPaletteDef palette)
+        {
+            return new UIRailSectionHeaderControl
+            {
+                Label = label,
+                Uppercase = true,
+                Face = HospitalFaces.Mono,
+                Points = HospitalFaces.Size.RailHead,
+                Color = palette.TextDisabled
+            };
+        }
+
+        /// <summary>
+        /// One rail entry. <paramref name="alarm"/> colors the count, which is how a group in difficulty is
+        /// spotted without opening it.
+        /// </summary>
+        private static UIRailClickableEntry Entry(string key, string label, int count, bool alarm,
+            UIColorPaletteDef palette, string tip)
+        {
+            bool on = railKey == key;
+
+            return new UIRailClickableEntry(key, label)
+            {
+                Count = count,
+                Tooltip = tip,
+                Face = HospitalFaces.Condensed,
+                Points = HospitalFaces.Size.RailName,
+                CountFace = HospitalFaces.Mono,
+                CountPoints = HospitalFaces.Size.RailCount,
+                TextColor = on ? HospitalFaces.AccentOf(palette) : (Color?) null,
+                CountColor = alarm
+                    ? palette.Warning
+                    : on ? HospitalFaces.AccentOf(palette) : (Color?) null
+            };
+        }
+
+        /// <summary>Patients in one triage section.</summary>
+        private static int Count(List<HospitalSection> sections, HospitalTriage triage)
+        {
+            for (int i = 0; i < sections.Count; i++)
+            {
+                if (sections[i].Triage == triage)
+                    return sections[i].Count;
+            }
+
+            return 0;
+        }
+
+        /// <summary>Critical and in treatment together, which is the figure the header leads with.</summary>
+        private static int Needing(List<HospitalSection> sections)
+        {
+            return Count(sections, HospitalTriage.Critical) + Count(sections, HospitalTriage.InTreatment);
+        }
+
+        /// <summary>Everybody currently on the list, whatever the scope happens to be.</summary>
+        private static int Listed(List<HospitalSection> sections)
+        {
+            int total = 0;
+
+            for (int i = 0; i < sections.Count; i++)
+                total += sections[i].Count;
+
+            return total;
+        }
+
+        // ---------------------------------------------------------------------------------------
+        // Strip
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The search, and the two visitor policies beside it.
+        ///
+        /// The policies are Colony Hospital's and are absent without it. Chips rather than dropdowns because
+        /// they change once a season and the header already says what they are set to; they only need to be
+        /// reachable, not announced.
         /// </summary>
         private static void Strip(Rect rect, UIColorPaletteDef palette)
         {
+            Search.Draw(new Rect(rect.x, rect.y, 240f, rect.height), palette);
+
             Map map = Find.CurrentMap;
 
-            if (map == null)
+            if (!HospitalVisitors.Available || map == null)
                 return;
 
-            Widgets.DrawBoxSolid(rect, palette.PanelBackground);
+            float x = rect.x + 248f;
 
-            Rect inner = rect.ContractedBy(6f);
+            // Sized from what is actually left rather than from a literal. The chips carry policy names as long
+            // as "herbal medicine or worse", and a fixed width for those was the whole of the truncation Aaron
+            // screenshotted on the old strip.
+            float width = Mathf.Min(240f, (rect.xMax - x - 8f) * 0.5f);
 
-            bool receiving = HospitalVisitors.Receiving(map);
-
-            bool was = receiving;
-
-            // Measured rather than written down. A literal 170 left the label about 114 pixels after the switch
-            // and its gap, which is a little under what "Receiving patients" needs, so it clipped to
-            // "Receiving pati...". Same fault as the chips below carry a note about, and as a toolbar hit with
-            // "Include buried". The three numbers that decide the answer are private to the control, so WidthFor
-            // is the only thing that can get it right, and it keeps getting it right if the label is translated.
-            string receivingLabel = "Receiving patients";
-
-            Rect receivingRect = new Rect(inner.x, inner.y, UICheckboxControl.WidthFor(receivingLabel), 24f);
-
-            if (UICheckboxControl.Draw(receivingRect, ref receiving, palette, receivingLabel) && receiving != was)
-                HospitalVisitors.SetReceiving(map, receiving);
-
-            Hours(new Rect(inner.x, inner.y + 26f, HoursWidth, 18f), map, palette);
-
-            int occupied;
-            int total;
-
-            HospitalVisitors.Beds(map, out occupied, out total);
-
-            float x = inner.xMax;
-
-            x = TabParts.Readout(inner, x, "owed", HospitalVisitors.Owed(map).ToString(), palette,
-                "What the current visitors owe between them.");
-
-            x = TabParts.Readout(inner, x, "hospital beds", occupied + " / " + total, palette,
-                "Beds designated as hospital beds by Colony Hospital.");
-
-            x = TabParts.Readout(inner, x, "reputation", HospitalVisitors.Reputation(map).ToString(), palette,
-                "Colony Hospital's reputation for this colony.");
-
-            // Sized from what the readouts actually left rather than from a literal 220. The chips carry policy
-            // names as long as "herbal medicine or worse", and a fixed width for those was the whole of the
-            // truncation Aaron screenshotted.
-            float chipsX = inner.x + HoursWidth + 12f;
-
-            Care(new Rect(chipsX, inner.y, Mathf.Max(0f, x - 10f - chipsX), inner.height), map, palette);
-        }
-
-        /// <summary>How much of the strip the twenty-four hour blocks take.</summary>
-        private const float HoursWidth = 360f;
-
-        /// <summary>The twenty-four receiving hours, as a strip of togglable blocks.</summary>
-        private static void Hours(Rect rect, Map map, UIColorPaletteDef palette)
-        {
-            float width = rect.width / 24f;
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                Rect block = new Rect(rect.x + hour * width, rect.y, width - 1f, rect.height);
-
-                bool on = HospitalVisitors.ReceivingHour(map, hour);
-
-                Widgets.DrawBoxSolid(block, on ? palette.Accent : palette.SurfaceSunken);
-
-                if (Mouse.IsOver(block))
-                    TooltipHandler.TipRegion(block,
-                        (TipSignal) (hour + ":00 - " + (on ? "accepting arrivals" : "closed")));
-
-                if (!Widgets.ButtonInvisible(block))
-                    continue;
-
-                HospitalVisitors.SetReceivingHour(map, hour, !on);
-            }
-        }
-
-        /// <summary>
-        /// The two policy chips: what visitors are treated with, and what they are fed.
-        ///
-        /// <b>Caption above, value inside, rather than both on one line.</b> "Default care: herbal medicine or
-        /// worse" is a long sentence to fit in a chip, and a chip that has to say what it is every time it says
-        /// what it is set to spends most of its width on the half that never changes. Side by side rather than
-        /// stacked, because the strip is one row of controls tall.
-        /// </summary>
-        private static void Care(Rect rect, Map map, UIColorPaletteDef palette)
-        {
-            // Below this there is not enough room for a policy name to survive, and two chips reading nothing but
-            // ellipses are worse than the readouts they would be crowding.
-            if (rect.width < 200f)
+            // Below this a policy name cannot survive, and two chips reading nothing but ellipses are worse than
+            // the space they would be taking.
+            if (width < 130f)
                 return;
 
-            float half = Mathf.Floor((rect.width - 8f) * 0.5f);
+            MedicalCareCategory care = HospitalVisitors.DefaultCare();
 
-            MedicalCareCategory current = HospitalVisitors.DefaultCare();
-
-            Chip(new Rect(rect.x, rect.y, half, rect.height), "default care", current.GetLabel(), palette,
+            Chip(new Rect(x, rect.y, width, rect.height), "DEFAULT CARE", care.GetLabel(), palette,
                 "Colony Hospital's own setting, which applies to every colony rather than only this one.",
                 () => Find.WindowStack.Add(new FloatMenu(CareOptions())));
 
             FoodPolicy policy = HospitalVisitors.PatientFood(map);
 
-            Chip(new Rect(rect.x + half + 8f, rect.y, half, rect.height), "patient food",
+            Chip(new Rect(x + width + 8f, rect.y, width, rect.height), "PATIENT FOOD",
                 policy != null ? policy.label : "default", palette,
                 "What visiting patients are fed while they are here.",
                 () => Find.WindowStack.Add(new FloatMenu(FoodOptions(map))));
         }
 
-        /// <summary>A dim caption over a button carrying the current value.</summary>
+        /// <summary>
+        /// A chip: what the setting is, in small caps, then what it is set to.
+        ///
+        /// <b>Both on one line rather than a caption above a button.</b> The strip is one control tall now that
+        /// the readouts have moved into the header, and a caption stacked over a value would make it two.
+        /// </summary>
         private static void Chip(Rect rect, string caption, string value, UIColorPaletteDef palette, string tip,
             System.Action clicked)
         {
-            GameFont previousFont = Text.Font;
-            Color previousColor = GUI.color;
-            bool previousWrap = Text.WordWrap;
+            bool over = Mouse.IsOver(rect);
 
-            try
-            {
-                Text.Font = GameFont.Tiny;
-                Text.WordWrap = false;
-                GUI.color = palette.TextDisabled;
+            UIElementPainter.OutlineRounded(rect, over ? HospitalFaces.AccentOf(palette) : palette.Border,
+                over ? palette.SurfaceRaised : palette.SurfaceSunken);
 
-                Widgets.Label(new Rect(rect.x + 2f, rect.y, rect.width - 4f, CaptionHeight), caption);
-            }
-            finally
-            {
-                Text.WordWrap = previousWrap;
-                GUI.color = previousColor;
-                Text.Font = previousFont;
-            }
+            float label = UITextControl.Width(caption, HospitalFaces.Mono, HospitalFaces.Size.RailHead) + 8f;
 
-            if (TabParts.Button(new Rect(rect.x, rect.y + CaptionHeight + 1f, rect.width, 24f), value,
-                    palette, true, false, tip))
+            TabParts.RowLabel(new Rect(rect.x + 8f, rect.y, label, rect.height), caption, palette.TextDisabled,
+                GameFont.Tiny, HospitalFaces.Mono, HospitalFaces.Size.RailHead);
+
+            TabParts.RowLabel(new Rect(rect.x + 8f + label, rect.y,
+                    Mathf.Max(0f, rect.width - 16f - label), rect.height), value, palette.TextPrimary,
+                GameFont.Small, HospitalFaces.Condensed, HospitalFaces.Size.RailName);
+
+            TooltipHandler.TipRegion(rect, (TipSignal) tip);
+
+            if (Widgets.ButtonInvisible(rect))
                 clicked();
         }
 
@@ -504,6 +718,178 @@ namespace Gideon.UIOverhaul.Features.Hospital
         }
 
         // ---------------------------------------------------------------------------------------
+        // Admissions, with Colony Hospital installed
+        // ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The hospital itself: whether you are open, what you are owed, and the hours you accept arrivals.
+        ///
+        /// <b>A second business that shares this tab, so it gets a rail entry rather than a band above the
+        /// list.</b> Reputation, owed and hospital beds are about the hospital; medicine, doctors and medical
+        /// beds are about the ward. They are not the same question, and they were sitting in two rows of
+        /// readouts competing to be read as one.
+        ///
+        /// <b>Every control here is a public member of Colony Hospital's.</b> Absent entirely without that mod,
+        /// which is why the rail entry is conditional too.
+        /// </summary>
+        private static void Admissions(Rect rect, UIColorPaletteDef palette)
+        {
+            Map map = Find.CurrentMap;
+
+            if (map == null)
+                return;
+
+            Rect block = new Rect(rect.x, rect.y, rect.width, Mathf.Min(AdmissionsHeight, rect.height));
+
+            UIElementPainter.OutlineRounded(block, palette.Border, palette.PanelBackground);
+
+            Rect bar = new Rect(block.x + 1f, block.y + 1f, block.width - 2f, BlockHeadHeight);
+
+            Widgets.DrawBoxSolid(bar, palette.SurfaceSunken);
+            Widgets.DrawBoxSolid(new Rect(bar.x, bar.yMax, bar.width, 1f), palette.Border);
+
+            TabParts.RowLabel(new Rect(bar.x + 12f, bar.y, bar.width * 0.5f, bar.height), "ADMISSIONS",
+                palette.TextSecondary, GameFont.Tiny, HospitalFaces.Mono, HospitalFaces.Size.RailHead);
+
+            Trailing(bar, "Colony Hospital", palette);
+
+            Rect body = new Rect(block.x + 12f, bar.yMax + 12f, block.width - 24f, 24f);
+
+            bool receiving = HospitalVisitors.Receiving(map);
+            bool was = receiving;
+
+            // Measured rather than written down: a literal width left "Receiving patients" clipped to
+            // "Receiving pati...", and the three numbers that decide the answer are private to the control.
+            string label = "Receiving patients";
+
+            Rect toggle = new Rect(body.x, body.y, UICheckboxControl.WidthFor(label), body.height);
+
+            if (UICheckboxControl.Draw(toggle, ref receiving, palette, label) && receiving != was)
+                HospitalVisitors.SetReceiving(map, receiving);
+
+            int occupied;
+            int total;
+
+            HospitalVisitors.Beds(map, out occupied, out total);
+
+            float x = body.xMax;
+
+            x = TabParts.Readout(body, x, "reputation", HospitalVisitors.Reputation(map).ToString(), palette,
+                "Colony Hospital's reputation for this colony.");
+
+            x = TabParts.Readout(body, x, "hospital beds", occupied + " / " + total, palette,
+                "Beds designated as hospital beds by Colony Hospital.");
+
+            TabParts.Readout(body, x, "owed", HospitalVisitors.Owed(map).ToString(), palette,
+                "What the current visitors owe between them.");
+
+            float width = Mathf.Min(HoursWidth, body.width);
+
+            TabParts.RowLabel(new Rect(body.x, body.yMax + 14f, width, 14f),
+                "ACCEPTING ARRIVALS  -  DRAG TO CHANGE", palette.TextDisabled, GameFont.Tiny,
+                HospitalFaces.Mono, HospitalFaces.Size.RailHead);
+
+            Hours(new Rect(body.x, body.yMax + 32f, width, 20f), map, palette);
+
+            Ticks(new Rect(body.x, body.yMax + 54f, width, 12f), palette);
+        }
+
+        /// <summary>The right-hand note on a block's heading bar.</summary>
+        private static void Trailing(Rect bar, string text, UIColorPaletteDef palette)
+        {
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                Text.WordWrap = false;
+                GUI.color = palette.TextDisabled;
+
+                UITextControl.LabelEllipses(new Rect(bar.x, bar.y, bar.width - 12f, bar.height), text,
+                    HospitalFaces.Mono, HospitalFaces.Size.RailHead);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
+        }
+
+        /// <summary>
+        /// The twenty-four receiving hours, as blocks you can drag across.
+        ///
+        /// <b>Drawn in the tab's own color rather than the accent.</b> Inside a restyled tab the tab color
+        /// already means the thing you have chosen, because it is what lights the rail selection, so the hours
+        /// you have picked belong in it and the accent stays free for the meaning it carries everywhere else.
+        ///
+        /// <b>A drag paints one value.</b> The first cell decides whether the drag is opening or closing and
+        /// every cell the pointer crosses takes that; each cell toggling itself would leave a stripe wherever
+        /// the run you dragged over was not uniform to begin with.
+        /// </summary>
+        private static void Hours(Rect rect, Map map, UIColorPaletteDef palette)
+        {
+            float width = rect.width / 24f;
+
+            Color chosen = HospitalFaces.AccentOf(palette);
+
+            if (Event.current.type == EventType.MouseUp)
+                hourPaint = null;
+
+            for (int hour = 0; hour < 24; hour++)
+            {
+                Rect block = new Rect(rect.x + hour * width, rect.y, Mathf.Max(1f, width - 2f), rect.height);
+
+                bool on = HospitalVisitors.ReceivingHour(map, hour);
+
+                UIElementPainter.OutlineRounded(block, on ? chosen : palette.Border,
+                    on ? chosen : palette.SurfaceSunken);
+
+                if (!Mouse.IsOver(block))
+                    continue;
+
+                TooltipHandler.TipRegion(block,
+                    (TipSignal) (hour + ":00  -  " + (on ? "accepting arrivals" : "closed")));
+
+                if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
+                {
+                    hourPaint = !on;
+
+                    HospitalVisitors.SetReceivingHour(map, hour, !on);
+
+                    Event.current.Use();
+                }
+                else if (Event.current.type == EventType.MouseDrag && hourPaint.HasValue
+                         && on != hourPaint.Value)
+                {
+                    HospitalVisitors.SetReceivingHour(map, hour, hourPaint.Value);
+
+                    Event.current.Use();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The hour axis under the blocks.
+        ///
+        /// Without it a run of color is a shape rather than a time: you can see that something is on without
+        /// being able to say when it starts. Every sixth hour, which is as many marks as the cells have room for.
+        /// </summary>
+        private static void Ticks(Rect rect, UIColorPaletteDef palette)
+        {
+            float width = rect.width / 24f;
+
+            for (int hour = 0; hour < 24; hour += 6)
+            {
+                TabParts.RowLabel(new Rect(rect.x + hour * width, rect.y, width * 3f, rect.height),
+                    hour.ToString(), palette.TextDisabled, GameFont.Tiny, HospitalFaces.Mono,
+                    HospitalFaces.Size.RailHead);
+            }
+        }
+
+        // ---------------------------------------------------------------------------------------
         // Rows
         // ---------------------------------------------------------------------------------------
 
@@ -517,15 +903,22 @@ namespace Gideon.UIOverhaul.Features.Hospital
             {
                 HospitalSection section = sections[s];
 
+                if (!Shown(section))
+                    continue;
+
                 List<HospitalPatient> matching = Matching(section);
 
                 if (matching.Count == 0)
                     continue;
 
+                bool calm = Calm(matching);
+
+                Fold(section, calm);
+
                 Grid.Rows.Add(new UIDesignatorTabRow
                 {
                     SectionLabel = section.Label,
-                    SectionSuffix = matching.Count.ToString()
+                    SectionSuffix = Suffix(section, matching.Count, calm)
                 });
 
                 for (int i = 0; i < matching.Count; i++)
@@ -537,6 +930,91 @@ namespace Gideon.UIOverhaul.Features.Hospital
                     });
                 }
             }
+        }
+
+        /// <summary>Whether the rail's current entry wants this section at all.</summary>
+        private static bool Shown(HospitalSection section)
+        {
+            switch (railKey)
+            {
+                case CareKey:
+                    return section.Triage == HospitalTriage.Critical
+                           || section.Triage == HospitalTriage.InTreatment;
+
+                case SurgeryKey:
+                    return section.Triage == HospitalTriage.AwaitingSurgery;
+
+                case RecoveringKey:
+                    return section.Triage == HospitalTriage.Recovering;
+
+                case AnimalsKey:
+                    return section.Triage == HospitalTriage.Animals;
+
+                case ColonistsKey:
+                    return section.Triage != HospitalTriage.Animals;
+
+                default:
+                    return true;
+            }
+        }
+
+        /// <summary>
+        /// Whether nothing in this section is wrong: everybody whole, nobody in pain, nothing queued.
+        ///
+        /// <b>This is what stops a healthy colony being thirty rows of dashes.</b> Eight people reading
+        /// "Healthy, 100%, none, -, -, none, -" is eight columns saying nothing, eight times over, and the two
+        /// who do need something end up as items four and ten.
+        /// </summary>
+        private static bool Calm(List<HospitalPatient> patients)
+        {
+            for (int i = 0; i < patients.Count; i++)
+            {
+                HospitalPatient patient = patients[i];
+
+                if (patient.Health < 0.999f || patient.Pain > 0f || patient.Operations > 0
+                    || patient.Doses > 0 || patient.Treatment.Active)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Folds a section where nothing is wrong, and unfolds it the moment something is.
+        ///
+        /// <b>Only sections this panel folded are reopened by it.</b> The player folding a section by hand is a
+        /// decision and stays; one we closed because it was quiet reopens the instant it stops being quiet,
+        /// which is the whole point of having closed it.
+        /// </summary>
+        private static void Fold(HospitalSection section, bool calm)
+        {
+            if (calm == AutoCollapsed.Contains(section.Label))
+                return;
+
+            if (calm)
+            {
+                AutoCollapsed.Add(section.Label);
+                Grid.CollapsedSections.Add(section.Label);
+            }
+            else
+            {
+                AutoCollapsed.Remove(section.Label);
+                Grid.CollapsedSections.Remove(section.Label);
+            }
+        }
+
+        /// <summary>
+        /// What the heading says on its right. A count, unless there is nothing to report, in which case it says
+        /// so in words: a folded row has to read as an answer rather than as a row somebody hid.
+        /// </summary>
+        private static string Suffix(HospitalSection section, int count, bool calm)
+        {
+            if (!calm)
+                return count.ToString();
+
+            return count + (section.Triage == HospitalTriage.Animals
+                ? " at full health"
+                : " at full health, nothing scheduled");
         }
 
         private static readonly List<HospitalPatient> Filtered = new List<HospitalPatient>();

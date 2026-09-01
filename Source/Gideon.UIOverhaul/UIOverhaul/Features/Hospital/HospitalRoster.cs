@@ -131,10 +131,16 @@ namespace Gideon.UIOverhaul.Features.Hospital
     /// Who the colony's doctors have to think about, sorted into what you would do about each one.
     ///
     /// <b>The rule for who appears is Aaron's, and it is a rule about the patient rather than about the colony.</b>
-    /// Anything other than healthy, or an operation queued on them, or a bed somebody deliberately marked medical,
-    /// or a standing order pointed at them, or a hospital mod calling them a patient. Everybody else is absent,
-    /// because a hospital tab listing eleven healthy colonists has hidden the two who are not. The toolbar's
-    /// toggle brings them back for the once-a-quadrum question of who is fit to travel.
+    /// Anybody the colony's doctors would ever be asked about: its own people, its prisoners and slaves, its
+    /// animals, a guest asleep in one of our beds, and a hospital mod's paying visitor. A hostile standing on
+    /// the map is not, whatever state they are in.
+    ///
+    /// <b>Everybody who qualifies is listed, healthy or not, and the tab folds the quiet groups instead.</b>
+    /// The healthy used to be dropped here unless a toolbar checkbox asked for them, because a hospital tab
+    /// listing eleven healthy colonists has hidden the two who are not. Folding answers that better than
+    /// dropping does: a group where nothing is wrong collapses to one heading that says so, the two who need
+    /// something are still the first thing on the screen, and the eleven are one click away rather than behind
+    /// a setting. See <c>HospitalPanel.Calm</c>.
     ///
     /// <b>Animals are a section rather than a mixed-in row.</b> They take beds, medicine and a doctor's time, so
     /// they belong on this screen; they are also read completely differently, so they sit under the people rather
@@ -162,8 +168,20 @@ namespace Gideon.UIOverhaul.Features.Hospital
         private static bool dirty = true;
         private static bool subscribed;
 
-        /// <summary>Whether the toolbar toggle is asking for the whole colony rather than only its patients.</summary>
-        internal static bool ShowEverybody;
+        /// <summary>
+        /// How many people, animals and paying visitors this screen would ever be asked about.
+        ///
+        /// Counted while gathering rather than summed from the sections afterwards, because the sections are
+        /// triage groups and none of them is "the animals": a healthy animal and a dying one are filed apart.
+        /// The rail's Everyone entries want the colony figure, not a section's.
+        /// </summary>
+        internal static int Colonists;
+
+        /// <summary>Colony animals. See <see cref="Colonists"/>.</summary>
+        internal static int Animals;
+
+        /// <summary>A hospital mod's paying patients. See <see cref="Colonists"/>.</summary>
+        internal static int Visiting;
 
         /// <summary>
         /// The current sections, rebuilt first if they are stale.
@@ -246,6 +264,10 @@ namespace Gideon.UIOverhaul.Features.Hospital
         {
             Recycle();
 
+            Colonists = 0;
+            Animals = 0;
+            Visiting = 0;
+
             List<Map> maps = Verse.Find.Maps;
 
             if (maps != null)
@@ -315,21 +337,18 @@ namespace Gideon.UIOverhaul.Features.Hospital
 
                 Read(patient, pawn, map);
 
-                if (patient.Triage == HospitalTriage.Healthy)
-                {
-                    if (!ShowEverybody)
-                    {
-                        patient.Reset();
-                        Spare.Add(patient);
+                if (patient.Animal)
+                    Animals++;
+                else
+                    Colonists++;
 
-                        continue;
-                    }
+                if (patient.Visiting)
+                    Visiting++;
 
-                    // With the roster turned on, a healthy animal still belongs with the animals rather than
-                    // among the colonists: the toggle asks for everybody, not for the sections to be abandoned.
-                    if (patient.Animal)
-                        patient.Triage = HospitalTriage.Animals;
-                }
+                // A healthy animal still belongs with the animals rather than among the colonists: nothing
+                // being wrong with it is not a reason for the sections to be abandoned.
+                if (patient.Triage == HospitalTriage.Healthy && patient.Animal)
+                    patient.Triage = HospitalTriage.Animals;
 
                 Section(patient.Triage).Patients.Add(patient);
             }
