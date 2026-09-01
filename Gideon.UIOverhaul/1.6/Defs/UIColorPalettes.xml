@@ -33,6 +33,8 @@
     <tabAnimals>#98AC80</tabAnimals>
     <tabPower>#74AFA6</tabPower>
     <tabGrowing>#C0AE6A</tabGrowing>
+    <tabBills>#C4907A</tabBills>
+    <tabPawns>#C98BA4</tabPawns>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -109,7 +111,7 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
-    <!-- The five role based tab identities, deepened for this theme. They live on the shared template as
+    <!-- The seven role based tab identities, deepened for this theme. They live on the shared template as
          their dark values, and a violet picked to read on near black is washed out on near white, so each
          one is restated here rather than inherited. -->
     <tabTheDead>#7A56A8</tabTheDead>
@@ -117,6 +119,8 @@
     <tabAnimals>#5F7F3D</tabAnimals>
     <tabPower>#2E8076</tabPower>
     <tabGrowing>#8A6F2C</tabGrowing>
+    <tabBills>#9A5A41</tabBills>
+    <tabPawns>#9A4568</tabPawns>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>

@@ -60,6 +60,8 @@ namespace Gideon.UIFramework.Defs
         public string tabAnimals;
         public string tabPower;
         public string tabGrowing;
+        public string tabBills;
+        public string tabPawns;
         public string hoverOverlay;
         public string pressedOverlay;
         public string selectionOverlay;
@@ -257,6 +259,11 @@ namespace Gideon.UIFramework.Defs
 
         /// <summary>The Growing Zones tab's own color. See <see cref="UIColorRole.TabGrowing"/>.</summary>
         public Color TabGrowing => Get(UIColorRole.TabGrowing);
+        /// <summary>The Bills tab's own color. See <see cref="UIColorRole.TabBills"/>.</summary>
+        public Color TabBills => Get(UIColorRole.TabBills);
+
+        /// <summary>The Pawns tab's own color. See <see cref="UIColorRole.TabPawns"/>.</summary>
+        public Color TabPawns => Get(UIColorRole.TabPawns);
         public Color HoverOverlay => Get(UIColorRole.HoverOverlay);
         public Color PressedOverlay => Get(UIColorRole.PressedOverlay);
         public Color SelectionOverlay => Get(UIColorRole.SelectionOverlay);
@@ -423,6 +430,8 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabAnimals => tabAnimals,
                 UIColorRole.TabPower => tabPower,
                 UIColorRole.TabGrowing => tabGrowing,
+                UIColorRole.TabBills => tabBills,
+                UIColorRole.TabPawns => tabPawns,
                 UIColorRole.HoverOverlay => hoverOverlay,
                 UIColorRole.PressedOverlay => pressedOverlay,
                 UIColorRole.SelectionOverlay => selectionOverlay,
@@ -473,6 +482,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabQuests => 0x7FA3C9FF,
                 UIColorRole.TabAnimals => 0x98AC80FF,
                 UIColorRole.TabPower => 0x74AFA6FF,
+                UIColorRole.TabBills => 0xC4907AFF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,

@@ -125,10 +125,9 @@ namespace Gideon.UIOverhaul.Features.Quests
 
         private static void Header(Rect rect, UIColorPaletteDef palette)
         {
-            // PanelBackground rather than SurfaceRaised: the two are the same value as the window behind
-            // them in the default dark palette, so a raised header had nothing but its border to separate
-            // it from the page and from the sunken rail beside it.
-            UIElementPainter.OutlineRounded(rect, palette.Border, palette.PanelBackground);
+            // SurfaceSunken, the same fill the rail beside it uses: header and rail are both chrome framing
+            // the content, so they share a surface and the blocks between them sit above it.
+            UIElementPainter.OutlineRounded(rect, palette.Border, palette.SurfaceSunken);
 
             Rect inner = rect.ContractedBy(10f);
 
