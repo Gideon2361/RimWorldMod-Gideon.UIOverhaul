@@ -32,6 +32,9 @@ namespace Gideon.UIOverhaul.Features.TilePreview
         internal int Fertile;
 
         internal int Water;
+
+        /// <summary>Cells standing in something built rather than grown: ruins, quarries, ancient structures.</summary>
+        internal int Structures;
     }
 
     /// <summary>
@@ -211,6 +214,164 @@ namespace Gideon.UIOverhaul.Features.TilePreview
             return texture;
         }
 
+        /// <summary>
+        /// The same picture and figures, taken off a map the generator really built.
+        ///
+        /// <b>Read rather than inferred, which is the whole difference.</b> The estimate bands one noise grid
+        /// at the thresholds the rock step uses and calls the result terrain. This asks the map what its
+        /// terrain is, what is standing on each cell and what is roofed over it, so a lake is water because a
+        /// mutator made it water, and a ruin is a ruin because a structure step put it there.
+        ///
+        /// <b>Structures are drawn in their own material's colour rather than as rock.</b> An ancient wall and
+        /// a granite spur occupy a cell the same way and matter to a settler differently: one is loot and cover
+        /// and the other is a mining job.
+        /// </summary>
+        internal static Texture2D RenderTrue(Map map, out TilePreviewReading reading)
+        {
+            TilePreviewReading taken = default(TilePreviewReading);
+
+            Texture2D texture = UIGuard.Try("TilePreview.RenderTrue", () => BuildTrue(map, out taken), null,
+                "A tile could not be analyzed in full; the estimate is still shown.");
+
+            reading = taken;
+
+            return texture;
+        }
+
+        private static Texture2D BuildTrue(Map map, out TilePreviewReading reading)
+        {
+            reading = default(TilePreviewReading);
+
+            if (map == null || map.Size.x <= 0 || map.Size.z <= 0)
+                return null;
+
+            int width = map.Size.x;
+            int height = map.Size.z;
+            int cells = width * height;
+
+            Prepare(cells);
+
+            Tile tile = map.TileInfo;
+            Color32 stone = StoneColor(tile);
+            Color32 mountain = Darken(stone, 0.55f);
+            Color32 roofed = Darken(stone, 0.78f);
+
+            Color32[] pixels = new Color32[cells];
+
+            int buildable = 0;
+            int mountainCells = 0;
+            int rockCells = 0;
+            int waterCells = 0;
+            int fertileCells = 0;
+            int structureCells = 0;
+
+            for (int z = 0; z < height; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = z * width + x;
+
+                    open[i] = false;
+
+                    IntVec3 cell = new IntVec3(x, 0, z);
+
+                    TerrainDef terrain = map.terrainGrid.TerrainAt(cell);
+                    Building edifice = cell.GetEdifice(map);
+                    RoofDef roof = map.roofGrid.RoofAt(cell);
+
+                    bool overhead = roof != null && roof.isThickRoof && roof.isNatural;
+
+                    if (edifice != null)
+                    {
+                        bool naturalRock = edifice.def != null && edifice.def.building != null
+                            && edifice.def.building.isNaturalRock;
+
+                        if (naturalRock)
+                        {
+                            pixels[i] = overhead ? mountain : roofed;
+                            rockCells++;
+
+                            if (overhead)
+                                mountainCells++;
+                        }
+                        else
+                        {
+                            pixels[i] = MinimapTerrainColors.ForThing(edifice.def);
+                            structureCells++;
+                        }
+
+                        continue;
+                    }
+
+                    if (overhead)
+                        mountainCells++;
+
+                    if (terrain == null)
+                    {
+                        pixels[i] = stone;
+
+                        continue;
+                    }
+
+                    pixels[i] = MinimapTerrainColors.For(terrain);
+
+                    if (terrain.IsWater)
+                    {
+                        waterCells++;
+
+                        continue;
+                    }
+
+                    buildable++;
+                    open[i] = true;
+
+                    if (terrain.fertility >= FertileAt)
+                        fertileCells++;
+                }
+            }
+
+            reading = new TilePreviewReading
+            {
+                Buildable = Share(buildable, cells),
+                Mountain = Share(mountainCells, cells),
+                Rock = Share(rockCells, cells),
+                Water = Share(waterCells, cells),
+                Structures = Share(structureCells, cells),
+                Fertile = buildable > 0 ? Share(fertileCells, buildable) : 0,
+                LargestRun = Share(LargestRun(width, height), cells)
+            };
+
+            return Upload(pixels, width, height);
+        }
+
+        /// <summary>
+        /// Rows are written top down here and Unity reads its textures bottom up, which would mirror the
+        /// preview against the map it is a picture of. Flipped once, on the way in.
+        /// </summary>
+        private static Texture2D Upload(Color32[] pixels, int width, int height)
+        {
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+
+            Color32[] flipped = new Color32[width * height];
+
+            for (int z = 0; z < height; z++)
+            {
+                int from = z * width;
+                int to = (height - 1 - z) * width;
+
+                for (int x = 0; x < width; x++)
+                    flipped[to + x] = pixels[from + x];
+            }
+
+            texture.SetPixels32(flipped);
+            texture.Apply(false);
+
+            return texture;
+        }
         private static int Share(int part, int whole)
         {
             return whole <= 0 ? 0 : Mathf.RoundToInt(part / (float) whole * 100f);

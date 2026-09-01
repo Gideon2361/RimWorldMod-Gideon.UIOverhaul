@@ -17,6 +17,15 @@ namespace Gideon.UIOverhaul.Features.TilePreview
         internal bool Valid;
 
         /// <summary>
+        /// Whether this came from a real generation rather than from the estimate.
+        ///
+        /// Kept on the entry rather than on the panel because it outlives the analysis: once a tile has been
+        /// generated the answer is cached, so hovering back over it later shows the true picture and the panel
+        /// has to know not to invite the player to ask for it again.
+        /// </summary>
+        internal bool True;
+
+        /// <summary>
         /// The biome's name, read once here rather than off the grid every frame.
         ///
         /// The panel draws inside a guard that retires on its first failure, so a null biome reached from the
@@ -113,6 +122,40 @@ namespace Gideon.UIOverhaul.Features.TilePreview
             seed = current;
 
             Clear();
+        }
+
+        /// <summary>
+        /// Swaps a tile's estimate for the answer a real generation gave, destroying the picture it replaces.
+        ///
+        /// Nothing is added if the tile has no entry: an analysis whose estimate has already been swept out of
+        /// the cache is one the player has moved on from, and storing it would evict a tile they are looking at
+        /// now in favour of one they are not.
+        /// </summary>
+        internal static void Replace(PlanetTile tile, Texture2D texture, TilePreviewReading reading)
+        {
+            TilePreviewEntry entry;
+
+            if (texture == null || !Entries.TryGetValue(tile, out entry) || entry == null)
+                return;
+
+            UIGuard.Try("TilePreview.ReplaceTexture", () =>
+            {
+                if (entry.Texture != null && entry.Texture != texture)
+                    Object.Destroy(entry.Texture);
+            }, null);
+
+            entry.Texture = texture;
+            entry.Reading = reading;
+            entry.Valid = true;
+            entry.True = true;
+        }
+
+        /// <summary>Whether this tile already carries an answer from a real generation.</summary>
+        internal static bool Analyzed(PlanetTile tile)
+        {
+            TilePreviewEntry entry;
+
+            return Entries.TryGetValue(tile, out entry) && entry != null && entry.True;
         }
 
         /// <summary>Drops every preview, destroying the textures rather than leaving them to Unity.</summary>

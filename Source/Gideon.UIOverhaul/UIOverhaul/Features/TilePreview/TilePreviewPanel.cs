@@ -75,6 +75,9 @@ namespace Gideon.UIOverhaul.Features.TilePreview
         /// <summary>The strip along the bottom that says this reading is an estimate.</summary>
         private const float FooterHeight = 14f;
 
+        /// <summary>The selection an analysis was last started for, so one click starts one generation.</summary>
+        private static PlanetTile chosen = PlanetTile.Invalid;
+
         internal static float Width
         {
             get { return ImageSize + ColumnWidth + Pad * 3f; }
@@ -90,7 +93,17 @@ namespace Gideon.UIOverhaul.Features.TilePreview
             if (Event.current.type == EventType.Layout)
                 return;
 
-            PlanetTile tile = Hovered();
+            Selection();
+
+            TilePreviewJob.Advance();
+
+            Harvest();
+
+            // Pinned to the tile under analysis rather than the one under the cursor, so the player can watch
+            // the thing they asked for instead of losing it the moment the mouse moves.
+            PlanetTile tile = TilePreviewJob.Running && TilePreviewJob.Tile.Valid
+                ? TilePreviewJob.Tile
+                : Hovered();
 
             if (!tile.Valid)
                 return;
@@ -125,13 +138,72 @@ namespace Gideon.UIOverhaul.Features.TilePreview
 
             Rect image = new Rect(rect.x + Pad, head.yMax + Pad, ImageSize, ImageSize);
 
-            Widgets.DrawBoxSolid(image, palette.SurfaceSunken);
-            GUI.DrawTexture(image, entry.Texture, ScaleMode.ScaleToFit);
-            Widgets.DrawBox(image);
+            if (TilePreviewJob.Running && TilePreviewJob.Tile == tile)
+            {
+                TilePreviewZoom.Draw(image, entry.Texture, palette);
+            }
+            else
+            {
+                Widgets.DrawBoxSolid(image, palette.SurfaceSunken);
+                GUI.DrawTexture(image, entry.Texture, ScaleMode.ScaleToFit);
+                Widgets.DrawBox(image);
+            }
 
             Figures(new Rect(image.xMax + Pad, image.y, ColumnWidth, image.height), entry.Reading, palette);
 
-            Footer(new Rect(rect.x + Pad, image.yMax + Pad, rect.width - Pad * 2f, FooterHeight), palette);
+            Footer(new Rect(rect.x + Pad, image.yMax + Pad, rect.width - Pad * 2f, FooterHeight), palette,
+                entry, tile);
+        }
+
+        /// <summary>
+        /// Starts a true analysis when the player clicks a tile.
+        ///
+        /// <b>The selection is the click.</b> Watching <c>WorldSelector.SelectedTile</c> rather than reading
+        /// mouse events means this agrees with whatever the world map decided a click was, including the ones
+        /// that land on a world object rather than on bare ground.
+        ///
+        /// A tile already carrying a real answer is not generated twice; the cached one is what gets shown.
+        /// </summary>
+        private static void Selection()
+        {
+            PlanetTile selected = UIGuard.Try("TilePreview.Selected", () =>
+            {
+                WorldSelector selector = Find.WorldSelector;
+
+                return selector != null ? selector.SelectedTile : PlanetTile.Invalid;
+            }, PlanetTile.Invalid, null);
+
+            if (selected == chosen)
+                return;
+
+            chosen = selected;
+
+            if (selected.Valid && !TilePreviewCache.Analyzed(selected))
+                TilePreviewJob.Start(selected);
+        }
+
+        /// <summary>
+        /// Reads the finished map into the cache and lets it go.
+        ///
+        /// Done here rather than inside the job because it is the one part that touches Unity: the texture
+        /// upload has to happen while the GUI is the thing running.
+        /// </summary>
+        private static void Harvest()
+        {
+            Map finished = TilePreviewJob.Finished;
+
+            if (finished == null)
+                return;
+
+            PlanetTile analyzed = TilePreviewJob.Tile;
+
+            TilePreviewReading reading;
+
+            Texture2D texture = TilePreviewImage.RenderTrue(finished, out reading);
+
+            TilePreviewCache.Replace(analyzed, texture, reading);
+
+            TilePreviewJob.Complete();
         }
 
         /// <summary>
@@ -144,12 +216,32 @@ namespace Gideon.UIOverhaul.Features.TilePreview
         /// that will not be generated, under a confident percentage in large type. A figure that can be wrong
         /// has to say so beside the figure, not in a changelog.
         /// </summary>
-        private static void Footer(Rect rect, UIColorPaletteDef palette)
+        private static void Footer(Rect rect, UIColorPaletteDef palette, TilePreviewEntry entry, PlanetTile tile)
         {
             Widgets.DrawBoxSolid(new Rect(rect.x, rect.y, rect.width, 1f), palette.Border);
 
-            Hint(new Rect(rect.x, rect.y + 1f, rect.width, rect.height - 1f),
-                "Click map tile for true analysis", palette.TextDisabled,
+            bool analyzing = TilePreviewJob.Running && TilePreviewJob.Tile == tile;
+
+            string text;
+            Color tint;
+
+            if (analyzing)
+            {
+                text = TilePreviewZoom.Caption();
+                tint = palette.Accent;
+            }
+            else if (entry != null && entry.True)
+            {
+                text = "True analysis";
+                tint = palette.Success;
+            }
+            else
+            {
+                text = "Click map tile for true analysis";
+                tint = palette.TextDisabled;
+            }
+
+            Hint(new Rect(rect.x, rect.y + 1f, rect.width, rect.height - 1f), text, tint,
                 TilePreviewFaces.Condensed, TilePreviewFaces.Size.Note);
         }
 
@@ -198,7 +290,10 @@ namespace Gideon.UIOverhaul.Features.TilePreview
             y = Row(rect, y, reading.Fertile, "Fertile ground", palette.TextPrimary, palette);
 
             if (reading.Water > 0)
-                Row(rect, y, reading.Water, "Water", palette.TextPrimary, palette);
+                y = Row(rect, y, reading.Water, "Water", palette.TextPrimary, palette);
+
+            if (reading.Structures > 0)
+                Row(rect, y, reading.Structures, "Structures", palette.TextPrimary, palette);
         }
 
         /// <summary>The headline: the share of the map that is neither stone nor water.</summary>
