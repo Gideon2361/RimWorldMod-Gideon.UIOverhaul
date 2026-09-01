@@ -489,7 +489,7 @@ namespace Gideon.UIFramework.Defs
                 UIColorRole.TabAnimals => 0x98AC80FF,
                 UIColorRole.TabPower => 0x74AFA6FF,
                 UIColorRole.TabBills => 0xC4907AFF,
-                UIColorRole.TabFactions => 0xBF7DBBFF,
+                UIColorRole.TabFactions => 0x65B486FF,
                 UIColorRole.HoverOverlay => 0xFFFFFF0C,
                 UIColorRole.PressedOverlay => 0xFFFFFF1F,
                 UIColorRole.SelectionOverlay => 0x73BFFF24,

@@ -843,12 +843,17 @@ namespace Gideon.UIOverhaul.Features.Factions
         /// standing outside it is pulled back by ten every fifty days until it is inside again. Two bare
         /// figures cannot say that, and the pair vanilla draws actively suggests the opposite.
         ///
-        /// <b>The band is in the tab's own colour</b> because it is what the screen is pointing at, and
-        /// because green, grey and red are already spoken for: on this tab they mean a standing, and a band
-        /// drawn in any of them would read as a verdict.
+        /// <b>The band is grey, not the tab colour, and that was a correction.</b> It was drawn in
+        /// <c>TabFactions</c> on the reasoning that the identity should mark what the screen is pointing at.
+        /// That breaks the rule every other tab identity in this palette follows -- see
+        /// <see cref="UIColorRole.TabPawns"/>, which states it outright: an identity never touches a row. It
+        /// also put a second colour inside a control that already carries three, and for an allied faction
+        /// the pin, the ally zone and the band would all have been green. The band is the scale's own
+        /// furniture, like the zones at either end, so it is drawn as furniture.
         ///
-        /// <b>The ceiling is amber and is the only amber on the tab.</b> It is genuinely a warning: the number
-        /// beside it cannot climb past that mark however many gifts are sent.
+        /// <b>The ceiling is amber, and the pull is the only other amber on the tab.</b> Both are genuinely
+        /// warnings: one is a mark the standing cannot climb past however many gifts are sent, the other is
+        /// the game about to move a number the player did not move.
         /// </summary>
         internal static void Scale(Rect rect, FactionRow row, UIColorPaletteDef palette, bool large)
         {
@@ -917,7 +922,7 @@ namespace Gideon.UIOverhaul.Features.Factions
             float high = At(rect, row.restingHigh);
 
             Widgets.DrawBoxSolid(new Rect(low, barTop, Mathf.Max(1f, high - low), thickness),
-                Faded(palette.TabFactions, 0.55f));
+                Faded(palette.TextSecondary, 0.42f));
 
             if (row.ceiling < 100)
             {
@@ -943,9 +948,10 @@ namespace Gideon.UIOverhaul.Features.Factions
             }
 
             // The resting value itself, as a hairline inside its band. It is a term of the band rather than a
-            // reading of its own, so it is drawn thinner than anything else on the track.
+            // reading of its own, so it is drawn thinner than anything else on the track and in the same
+            // family as the band around it.
             Widgets.DrawBoxSolid(new Rect(At(rect, row.natural) - 0.5f, barTop - 2f, 1f, thickness + 4f),
-                palette.TabFactions);
+                palette.TextSecondary);
 
             // Where the standing stood before the ceiling clipped it. Drawn only when the two disagree, which
             // is a fact the game gives the player no way of seeing today.

@@ -35,7 +35,7 @@
     <tabGrowing>#C0AE6A</tabGrowing>
     <tabBills>#C4907A</tabBills>
     <tabPawns>#C98BA4</tabPawns>
-    <tabFactions>#BF7DBB</tabFactions>
+    <tabFactions>#65B486</tabFactions>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -122,7 +122,7 @@
     <tabGrowing>#8A6F2C</tabGrowing>
     <tabBills>#9A5A41</tabBills>
     <tabPawns>#9A4568</tabPawns>
-    <tabFactions>#8E4A8A</tabFactions>
+    <tabFactions>#2B8752</tabFactions>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>

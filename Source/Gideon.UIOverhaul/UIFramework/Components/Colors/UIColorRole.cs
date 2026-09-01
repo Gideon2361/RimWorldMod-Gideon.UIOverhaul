@@ -172,22 +172,27 @@ namespace Gideon.UIFramework.Components.Colors
         TabPawns,
 
         /// <summary>
-        /// The Factions tab's own color, the eighth of the per-tab identities. An orchid, defaulting to
-        /// <c>#BF7DBB</c>.
+        /// The Factions tab's own color, the tenth of the per-tab identities. A sea green, defaulting to
+        /// <c>#65B486</c>.
         ///
-        /// <b>Green and red were never available to this one.</b> Its whole content is standing, and standing
-        /// is drawn in <see cref="Success"/>, <see cref="TextSecondary"/> and <see cref="Danger"/> on every
-        /// row. An identity from either of those families would be read as a verdict on the faction rather
-        /// than as the name of the tab.
+        /// <b>This one takes the hole <see cref="TabResearch"/> turned down, and it can because it moved the
+        /// band out of the way first.</b> The nine identities above sit at 18, 44, 85, 172, 209, 235, 268,
+        /// 305 and 336 degrees. The only stretch left wider than 37 is 85 to 172, and the reason two tabs in
+        /// a row refused it is <see cref="Success"/> at 120: research spends success green on the word
+        /// "Done", and this tab spends it on the word "Ally".
         ///
-        /// <b>What is left is the span between <see cref="TabTheDead"/> and <see cref="TabPawns"/>,</b> which
-        /// is also the widest clear stretch of the wheel this palette still has: thirty six degrees to the
-        /// violet on one side and the same to the rose on the other. Every other gap is closed by a state
-        /// color sitting in the middle of it.
+        /// <b>The refusal was about adjacency, not about hue.</b> An identity is separated from a state by
+        /// saturation in this palette -- <see cref="TabGrowing"/> is two degrees from <see cref="Warning"/>
+        /// and reads as a different thing entirely -- so green was never disqualified on its own. What
+        /// disqualified it was that the factions scale drew its resting band in the identity, which would
+        /// have put a green band under a green pin inside a green zone on an allied faction's row. The band
+        /// is grey now, the identity never touches a row, and the objection goes with it.
         ///
-        /// <b>It is also the drift.</b> On this tab the identity does one job beyond naming the screen: the
-        /// resting band a faction's goodwill is pulled back into is drawn in it, because that band is what
-        /// the tab is pointing at and it must not be mistaken for a standing.
+        /// <b>So 145 degrees, at the far side of success from the teal.</b> Twenty five degrees from
+        /// <see cref="Success"/> with fifteen points less saturation, and twenty seven from
+        /// <see cref="TabPower"/>, which is wider clearance than <see cref="TabBills"/> and
+        /// <see cref="TabGrowing"/> have from each other. Every other opening left is under twenty degrees
+        /// from two identities at once, and the purple arc already holds three.
         /// </summary>
         TabFactions,
 
