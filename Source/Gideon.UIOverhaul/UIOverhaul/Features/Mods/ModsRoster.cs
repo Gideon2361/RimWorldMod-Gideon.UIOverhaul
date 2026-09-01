@@ -84,6 +84,12 @@ namespace Gideon.UIOverhaul.Features.Mods
     {
         internal static readonly List<ModRow> Rows = new List<ModRow>();
 
+        /// <summary>
+        /// Bumped by every rebuild, so a screen caching anything derived from the roster can tell in one
+        /// comparison whether its cache is still good rather than rebuilding it every frame.
+        /// </summary>
+        internal static int Version;
+
         internal static int ActiveCount;
 
         internal static int InstalledCount;
@@ -112,6 +118,8 @@ namespace Gideon.UIOverhaul.Features.Mods
 
         private static void RebuildInt()
         {
+            Version++;
+
             Rows.Clear();
 
             ActiveCount = 0;
