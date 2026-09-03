@@ -37,6 +37,7 @@
     <li>dubwise.dubsmintmenus</li> <!-- Duplicate features -->
     <li>Gideon.CleanArchitect</li> <!-- Duplicate features -->
     <li>nowayjose.remanager</li> <!-- Duplicate features -->
+    <li>spacemoth.mechtab</li> <!-- Duplicate features -->
   </incompatibleWith>
   <loadAfter>
     <!-- Storage mods we unify -->
