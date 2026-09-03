@@ -142,6 +142,69 @@ namespace Gideon.UIOverhaul.Features.Mods
             Glyph = glyph;
         }
 
+        private static int warmedVersion = -1;
+
+        private static readonly HashSet<char> Glyphs = new HashSet<char>();
+
+        /// <summary>
+        /// Rasterises every glyph the list can show, once, instead of a screenful at a time.
+        ///
+        /// <b>This is what made switching rail sections stutter.</b> The bundled faces are genuine dynamic
+        /// fonts -- see <c>UIBundledFonts</c> -- so Unity rasterises a glyph the first time it is asked to
+        /// draw one and grows its atlas texture to fit. Switching scope replaces thirty visible rows with
+        /// thirty mod names nobody has drawn yet, every one of them asking for glyphs that are not in the
+        /// atlas, and when the atlas has to grow Unity rebuilds it and re-uploads the texture inside that
+        /// frame. None of the caches on this screen could touch it, because the work is not ours and the
+        /// data being cached was never the problem.
+        ///
+        /// <b>Asked for in one request rather than left to arrive in thirty.</b>
+        /// <c>Font.RequestCharactersInTexture</c> takes the lot at once, so the atlas is sized and built
+        /// once per roster rather than rebuilt on the way into each section.
+        ///
+        /// <b>Once per roster version.</b> The character set only changes when the mod list does, and a
+        /// thousand mod names is a few hundred distinct characters once deduplicated -- far more of them are
+        /// shared than not, even across scripts.
+        /// </summary>
+        private static void Warm()
+        {
+            if (warmedVersion == ModsRoster.Version)
+                return;
+
+            warmedVersion = ModsRoster.Version;
+
+            UIGuard.Try("Mods.WarmGlyphs", () =>
+            {
+                FontStyle synthesize;
+                Font font = UIFaces.FontFor(ModsFaces.Condensed, FontStyle.Normal, out synthesize);
+
+                if (font == null || !font.dynamic)
+                    return;
+
+                Glyphs.Clear();
+
+                for (int i = 0; i < ModsRoster.Rows.Count; i++)
+                {
+                    string name = ModsRoster.Rows[i].Name;
+
+                    for (int c = 0; name != null && c < name.Length; c++)
+                        Glyphs.Add(name[c]);
+                }
+
+                if (Glyphs.Count == 0)
+                    return;
+
+                char[] characters = new char[Glyphs.Count];
+                Glyphs.CopyTo(characters);
+
+                // The size the row names are actually drawn at. A different size is a different rasterisation,
+                // so warming the wrong one warms nothing.
+                int size = Mathf.Max(1, Mathf.RoundToInt(UIFonts.ToPixels(ModsFaces.Size.RowName)));
+
+                font.RequestCharactersInTexture(new string(characters), size, synthesize);
+            }, "Mod names are rasterised as they scroll into view this session, which can stutter when "
+               + "switching between sections of the list.");
+        }
+
         /// <summary>Called when the page opens, before anything is drawn.</summary>
         internal static void Opened()
         {
@@ -166,6 +229,8 @@ namespace Gideon.UIOverhaul.Features.Mods
             // that somehow arrived without one, which would otherwise be an empty screen.
             if (ModsRoster.Rows.Count == 0 && ModsRoster.InstalledCount == 0)
                 ModsRoster.Rebuild();
+
+            Warm();
 
             Header(new Rect(rect.x, rect.y, rect.width, HeaderHeight), palette);
 
