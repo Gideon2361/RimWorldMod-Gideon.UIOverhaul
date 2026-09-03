@@ -53,8 +53,16 @@ namespace Gideon.UIOverhaul.Features.Mechs
                 Widgets.DrawBoxSolid(rect, palette.HoverOverlay);
             }
 
-            Widgets.DrawLineHorizontal(rect.x + 6f, rect.y, rect.width - 12f);
-
+            // No rule between rows.
+            //
+            // <b>There was one, and it was drawn in white.</b> <c>Widgets.DrawLineHorizontal</c> paints in
+            // whatever <c>GUI.color</c> happens to be, which is white unless the caller sets it, so every
+            // row carried a bright line across it that read as a rendering fault rather than as a divider.
+            //
+            // Removed rather than recolored: a forty pixel row with a portrait, a name and a second line of
+            // chips has enough structure of its own, and the hover and selection washes are what actually
+            // tell one row from the next. The two rules that remain on this screen are structural, separate
+            // the card's header band from its rows, and are drawn in Border.
             float x = rect.x + 10f;
 
             // The portrait owns its own click, which is the camera jump. The rest of the row selects.

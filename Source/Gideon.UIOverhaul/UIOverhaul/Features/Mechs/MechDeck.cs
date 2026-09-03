@@ -272,7 +272,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Rect head = new Rect(card.x + 1f, card.y + 1f, card.width - 2f, MechsPanel.CardHead);
 
             Widgets.DrawBoxSolid(head, palette.SurfaceSunken);
-            Widgets.DrawLineHorizontal(head.x, head.yMax, head.width);
+            Widgets.DrawBoxSolid(new Rect(head.x, head.yMax, head.width, 1f), palette.Border);
 
             GroupHeader(head, palette, owner, group);
 
@@ -321,7 +321,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Rect head = new Rect(card.x + 1f, card.y + 1f, card.width - 2f, MechsPanel.CardHead);
 
             Widgets.DrawBoxSolid(head, palette.SurfaceSunken);
-            Widgets.DrawLineHorizontal(head.x, head.yMax, head.width);
+            Widgets.DrawBoxSolid(new Rect(head.x, head.yMax, head.width, 1f), palette.Border);
 
             TabParts.RowLabel(new Rect(head.x + 10f, head.y, head.width - 120f, head.height), title,
                 tint ?? palette.TextPrimary, MechsFaces.Condensed, MechsFaces.Size.RailName);
@@ -632,7 +632,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Rect head = new Rect(card.x + 1f, card.y + 1f, card.width - 2f, MechsPanel.CardHead);
 
             Widgets.DrawBoxSolid(head, palette.SurfaceSunken);
-            Widgets.DrawLineHorizontal(head.x, head.yMax, head.width);
+            Widgets.DrawBoxSolid(new Rect(head.x, head.yMax, head.width, 1f), palette.Border);
 
             TabParts.RowLabel(new Rect(head.x + 10f, head.y, head.width - 140f, head.height), "Gestating",
                 palette.Info, MechsFaces.Condensed, MechsFaces.Size.RailName);

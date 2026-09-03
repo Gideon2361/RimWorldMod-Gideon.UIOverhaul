@@ -432,7 +432,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Text.Anchor = anchor;
             GUI.color = color;
 
-            Widgets.DrawLineHorizontal(view.x, y + 16f, view.width);
+            Widgets.DrawBoxSolid(new Rect(view.x, y + 16f, view.width, 1f), palette.Border);
 
             return y + 20f;
         }

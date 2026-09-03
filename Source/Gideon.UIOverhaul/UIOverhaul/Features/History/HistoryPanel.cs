@@ -516,6 +516,7 @@ namespace Gideon.UIOverhaul.Features.History
 
             RangeControl(new Rect(head.xMax - 356f, head.y, 356f, head.height), palette);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -630,6 +631,7 @@ namespace Gideon.UIOverhaul.Features.History
 
             Search.Draw(new Rect(head.xMax - 220f, head.y, 220f, ControlHeight), palette);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -716,6 +718,7 @@ namespace Gideon.UIOverhaul.Features.History
         private static void Columns(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(rect.x, rect.yMax, rect.width);
             GUI.color = Color.white;
 
@@ -950,6 +953,7 @@ namespace Gideon.UIOverhaul.Features.History
             TabParts.RowLabel(new Rect(head.x, head.y, head.width, head.height), "Battles",
                 palette.TextPrimary, GameFont.Small, HistoryFaces.Condensed, HistoryFaces.Size.Row);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -987,6 +991,7 @@ namespace Gideon.UIOverhaul.Features.History
         private static void BattleColumns(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(rect.x, rect.yMax, rect.width);
             GUI.color = Color.white;
 
