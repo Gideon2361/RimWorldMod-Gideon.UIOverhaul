@@ -2,6 +2,7 @@ using Gideon.UIFramework.Defs;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Gideon.UIOverhaul.Shared;
 
 namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 {
@@ -63,7 +64,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
 
             if (cached == null || degrees != cachedDegrees || cachedMode != Prefs.TemperatureMode)
             {
-                cached = celsius.ToStringTemperature("F0");
+                cached = TemperatureText.Of(celsius);
                 cachedDegrees = degrees;
                 cachedMode = Prefs.TemperatureMode;
             }
@@ -98,7 +99,7 @@ namespace Gideon.UIOverhaul.Features.ButtonBar.BarWidgets
             EnsureComfyRange();
 
             return "Outdoor temperature.\n\nColonists are comfortable between "
-                   + comfyMin.ToStringTemperature("F0") + " and " + comfyMax.ToStringTemperature("F0")
+                   + TemperatureText.Of(comfyMin) + " and " + TemperatureText.Of(comfyMax)
                    + ".";
         }
 

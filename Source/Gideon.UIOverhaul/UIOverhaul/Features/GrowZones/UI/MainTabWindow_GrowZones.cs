@@ -17,7 +17,16 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
     /// </summary>
     public class MainTabWindow_GrowZones : MainTabWindow
     {
-        private const float HeaderHeight = 42f;
+        /// <summary>
+        /// Height of the header band.
+        ///
+        /// <b>Sixty-six, which is what every other restyled tab uses,</b> and it is a fix rather than a
+        /// preference: at 42 the band was shorter than the two lines and three readouts laid out inside it.
+        /// The inner rect is the band less ten a side, so 42 left 22 for a 24 pixel title, a subtitle
+        /// starting below that, and a 28 pixel mark centred in less than its own height. The subtitle and the
+        /// readout captions both spilled out of the bottom border and onto the rail heading under it.
+        /// </summary>
+        private const float HeaderHeight = 66f;
         private const float RailWidth = 190f;
         private const float MarkSize = 28f;
         private const float BlockGap = 10f;
@@ -203,19 +212,44 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
                           + 4f;
 
             Rect box = new Rect(right - width, inner.y, width, inner.height);
-            TextAnchor previousAnchor = Text.Anchor;
 
-            Text.Anchor = TextAnchor.MiddleRight;
+            RightLabel(new Rect(box.x, box.y + 2f, box.width, 20f), value, tint, GrowFaces.Size.Readout);
 
-            TabParts.RowLabel(new Rect(box.x, box.y + 2f, box.width, 20f), value, tint, GameFont.Small,
-                GrowFaces.Mono, GrowFaces.Size.Readout);
-
-            TabParts.RowLabel(new Rect(box.x, box.y + 24f, box.width, 14f), caption.ToUpperInvariant(),
-                palette.TextDisabled, GameFont.Tiny, GrowFaces.Mono, GrowFaces.Size.Caption);
-
-            Text.Anchor = previousAnchor;
+            RightLabel(new Rect(box.x, box.y + 24f, box.width, 14f), caption.ToUpperInvariant(),
+                palette.TextDisabled, GrowFaces.Size.Caption);
 
             return box.x - 22f;
+        }
+
+        /// <summary>
+        /// A right aligned label in the mono face.
+        ///
+        /// <b>Not <c>TabParts.RowLabel</c>, which forces <c>MiddleLeft</c> itself.</b> Setting the anchor
+        /// around that call does nothing, because it overwrites it on the way in and puts the caller's value
+        /// back on the way out. Three labels here were written that way and all three drew left: a block's
+        /// trailing note landed on top of the caption it was meant to sit opposite, which is what made the
+        /// crop block read GROW over Forever and the growth block 22% over GROWTH.
+        /// </summary>
+        private static void RightLabel(Rect rect, string text, Color color, float points)
+        {
+            TextAnchor previousAnchor = Text.Anchor;
+            Color previousColor = GUI.color;
+            bool previousWrap = Text.WordWrap;
+
+            try
+            {
+                Text.Anchor = TextAnchor.MiddleRight;
+                Text.WordWrap = false;
+                GUI.color = color;
+
+                UITextControl.LabelEllipses(rect, text, GrowFaces.Mono, points);
+            }
+            finally
+            {
+                Text.WordWrap = previousWrap;
+                GUI.color = previousColor;
+                Text.Anchor = previousAnchor;
+            }
         }
 
         /// <summary>
@@ -345,16 +379,8 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
 
             if (!trailing.NullOrEmpty())
             {
-                // Right aligned around the call, since RowLabel takes a face and a size but not an
-                // alignment. Drawn left it would sit on top of the caption rather than opposite it.
-                TextAnchor previousAnchor = Text.Anchor;
-
-                Text.Anchor = TextAnchor.MiddleRight;
-
-                TabParts.RowLabel(new Rect(strip.x + 10f, strip.y, strip.width - 20f, strip.height),
-                    trailing, palette.TextDisabled, GameFont.Tiny, GrowFaces.Mono, GrowFaces.Size.Small);
-
-                Text.Anchor = previousAnchor;
+                RightLabel(new Rect(strip.x + 10f, strip.y, strip.width - 20f, strip.height), trailing,
+                    palette.TextDisabled, GrowFaces.Size.Small);
             }
 
             return new Rect(rect.x + 10f, strip.yMax + 8f, rect.width - 20f, rect.yMax - strip.yMax - 16f);
@@ -480,12 +506,12 @@ namespace Gideon.UIOverhaul.Features.GrowZones.UI
             string state = cold ? "too cold to grow" : hot ? "too hot to grow" : "growing";
 
             TabParts.RowLabel(new Rect(body.x, body.y, body.width, 20f),
-                temp.ToStringTemperature("F0"), tint, GameFont.Small, GrowFaces.Mono,
+                TemperatureText.Of(temp), tint, GameFont.Small, GrowFaces.Mono,
                 GrowFaces.Size.Figure);
 
             TabParts.RowLabel(new Rect(body.x, body.y + 24f, body.width, 16f),
-                state + "  -  " + props.minGrowthTemperature.ToStringTemperature("F0") + " to "
-                + props.maxGrowthTemperature.ToStringTemperature("F0"), palette.TextSecondary,
+                state + "  -  " + TemperatureText.Of(props.minGrowthTemperature) + " to "
+                + TemperatureText.Of(props.maxGrowthTemperature), palette.TextSecondary,
                 GameFont.Tiny, GrowFaces.Condensed, GrowFaces.Size.Small);
         }
 

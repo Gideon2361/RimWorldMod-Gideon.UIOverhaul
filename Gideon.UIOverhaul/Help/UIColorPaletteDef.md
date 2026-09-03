@@ -85,6 +85,36 @@ Alpha matters on the three overlay roles: they are drawn *on top of* what is alr
 | `controlBackgroundFaded` | `ControlBackgroundFaded` | Body of a control holding no value: an off toggle, an unselected radio button, the unfilled part of a slider | `#434A53` |
 | `hudBackground` | `HudBackground` | Fill for chrome drawn over the map: corner readouts, docked messages, the colonist bar. Carries alpha | `#15191DCC` |
 
+### Per-screen colors
+
+A few screens draw their own title, glyph and rail selection in a color of their own rather than in
+`accent`, so that screens visited in the same session are told apart by more than their words. These
+are ordinary roles with nothing special about them: a theme can move any of them, and setting one to
+the same value as `accent` puts that screen back in step with the rest.
+
+| Field | Role | Screen | Built-in default |
+|---|---|---|---|
+| `tabTheDead` | `TabTheDead` | The Dead | `#A98FC8` |
+| `tabQuests` | `TabQuests` | Quests | `#7FA3C9` |
+| `tabAnimals` | `TabAnimals` | Animals | `#98AC80` |
+| `tabPower` | `TabPower` | Power | `#74AFA6` |
+| `tabGrowing` | `TabGrowing` | Growing Zones | `#C0AE6A` |
+| `tabBills` | `TabBills` | Bills | `#C4907A` |
+| `tabPawns` | `TabPawns` | Pawns | `#C98BA4` |
+| `tabHospital` | `TabHospital` | Hospital | `#CC8BC7` |
+| `tabResearch` | `TabResearch` | Research | `#8B90CC` |
+| `tabFactions` | `TabFactions` | Factions | `#65B486` |
+
+**The prefix says which kind of screen the color belongs to.** `tab` is a colony main tab, reached
+from the row of buttons along the bottom during play. `page` is a screen reached from the main menu,
+which has no colony behind it and is entered and left rather than toggled open. The palette system
+itself draws no distinction between the two; the prefix is there so that a theme author can tell from
+the field name alone which part of the game they are about to recolor. No `page` role ships yet.
+
+These are spread around the hue circle rather than picked one at a time, and kept to a similar
+lightness so that no one screen shouts louder than its neighbours. A theme retuning them will get a
+better result rotating the whole set than replacing a single member of it.
+
 ### A note on `controlBackgroundFaded`
 
 This is the one role most likely to be wrong in a new theme, so it is worth a paragraph.

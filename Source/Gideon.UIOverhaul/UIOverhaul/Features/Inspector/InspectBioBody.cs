@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gideon.UIFramework.Defs;
 using Gideon.UIFramework.Helpers;
@@ -26,6 +27,26 @@ namespace Gideon.UIOverhaul.Features.Inspector
         /// <summary>Reused between frames, since the pane redraws every one of them.</summary>
         private static readonly List<WorkTypeDef> Disabled = new List<WorkTypeDef>();
 
+        /// <summary>Reused between frames, for the same reason as <see cref="Disabled"/>.</summary>
+        private static readonly List<Ability> Castable = new List<Ability>();
+
+        /// <summary>
+        /// The order abilities are listed in: the author's, then alphabetical to break ties.
+        ///
+        /// <c>displayOrder</c> is what the gizmo bar sorts on, so a mod that has arranged its own set has
+        /// already said how it wants them read and this follows it. The tie break matters more than it looks:
+        /// the default is zero, so a pawn drawing on several sources is mostly ties, and without it the row
+        /// would reshuffle whenever the tracker rebuilt its cache in a different order.
+        /// </summary>
+        private static readonly Comparison<Ability> ByDisplayOrder = (a, b) =>
+        {
+            int order = a.def.displayOrder.CompareTo(b.def.displayOrder);
+
+            return order != 0
+                ? order
+                : string.Compare(a.def.label, b.def.label, StringComparison.CurrentCultureIgnoreCase);
+        };
+
         internal static float Draw(Rect view, Pawn pawn, UIColorPaletteDef palette)
         {
             if (pawn.story == null)
@@ -46,6 +67,7 @@ namespace Gideon.UIOverhaul.Features.Inspector
             float secondY = split ? view.y : leftY;
 
             secondY = Traits(second, secondY, pawn, palette);
+            secondY = Abilities(second, secondY, pawn, palette);
             secondY = Standing(second, secondY, pawn, palette);
             secondY = Workout(second, secondY, pawn, palette);
 
@@ -345,6 +367,84 @@ namespace Gideon.UIOverhaul.Features.Inspector
             return y + rowHeight + InspectPaneParts.BlockGap;
         }
 
+        /// <summary>
+        /// What this person can do that nobody else can: psycasts, gene granted abilities, and everything else
+        /// the game counts as one.
+        ///
+        /// <b>One block rather than one per source, because vanilla already keeps one list.</b> Asked for on
+        /// 2026-09-01 for xenotypes and psycasters, which sound like two features and are not.
+        /// <c>AllAbilitiesForReading</c> starts from the permanent list that a gene or a psylink writes into and
+        /// adds what hediffs, worn apparel, a held weapon, a royal title, an ideoligion and a mutant state grant
+        /// on top. Splitting that back apart would mean guessing at where each one came from, and getting it
+        /// wrong for every modded source that does not fit the guess.
+        ///
+        /// <b>Absent rather than empty, which is the opposite of Traits directly above.</b> Every pawn has
+        /// traits, so a pawn with none is a fact worth stating; almost no pawn has an ability, so a block
+        /// saying "None." would be a line of nothing on the panel that gets read the most.
+        ///
+        /// <b>Greyed means it cannot be cast right now,</b> which is the one piece of live state a chip can
+        /// carry honestly. The reason is in the tooltip, because there are many reasons and they are the game's
+        /// to word: on cooldown, out of charges, no psyfocus, downed. This is the same treatment a suppressed
+        /// trait gets, and for the same reason -- colour for state, the game's own text for detail.
+        /// </summary>
+        private static float Abilities(Rect view, float y, Pawn pawn, UIColorPaletteDef palette)
+        {
+            if (pawn.abilities == null)
+                return y;
+
+            // Copied out rather than held. The list behind that property is a cache the tracker clears and
+            // refills whenever anything changes, so keeping the reference and reading it later is reading
+            // somebody else's buffer.
+            Castable.Clear();
+
+            UIGuard.Try("Inspector.AbilityList", () =>
+            {
+                List<Ability> all = pawn.abilities.AllAbilitiesForReading;
+
+                if (all == null)
+                    return;
+
+                for (int i = 0; i < all.Count; i++)
+                {
+                    if (all[i] != null && all[i].def != null)
+                        Castable.Add(all[i]);
+                }
+            }, null);
+
+            if (Castable.Count == 0)
+                return y;
+
+            UIGuard.Try("Inspector.AbilitySort", () => Castable.Sort(ByDisplayOrder), null);
+
+            y = InspectPaneParts.Cap(view, y, "Abilities", Castable.Count.ToString(), palette);
+
+            float x = view.x;
+            float rowHeight = 0f;
+
+            for (int i = 0; i < Castable.Count; i++)
+            {
+                Ability ability = Castable[i];
+
+                // Arbitrary code from whichever mod owns the ability: VPE subclasses Ability, and CanCast walks
+                // every comp on it. A throw costs this chip its colour and nothing else.
+                bool ready = UIGuard.Try("Inspector.AbilityReady",
+                    () => !ability.OnCooldown && ability.CanCast.Accepted, true, null);
+
+                Rect chip = InspectPaneParts.Chip(view, ref x, ref y, ref rowHeight,
+                    UIGuard.Try("Inspector.AbilityLabel", () => ability.def.LabelCap.ToString(), "?", null),
+                    ready ? palette.Accent : palette.TextDisabled, false, palette);
+
+                if (!Mouse.IsOver(chip))
+                    continue;
+
+                string tip = UIGuard.Try("Inspector.AbilityTip", () => ability.Tooltip, null, null);
+
+                if (!tip.NullOrEmpty())
+                    TooltipHandler.TipRegion(chip, (TipSignal) tip);
+            }
+
+            return y + rowHeight + InspectPaneParts.BlockGap;
+        }
         /// <summary>
         /// Age, kind, faith, rank and time served: the facts that are about standing rather than history.
         ///

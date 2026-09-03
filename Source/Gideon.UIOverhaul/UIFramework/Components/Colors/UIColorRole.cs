@@ -143,6 +143,8 @@ namespace Gideon.UIFramework.Components.Colors
         /// color here is: a state shouts and an identity does not.
         /// </summary>
         TabGrowing,
+
+        /// <summary>
         /// The Bills tab's own color, the sixth of the per-tab identities.
         ///
         /// <b>A warm clay, and the first identity that is not a cool hue.</b> The others are violet, steel
@@ -217,36 +219,119 @@ namespace Gideon.UIFramework.Components.Colors
         TabResearch,
 
         /// <summary>
-        /// The Mechs tab's own color, the tenth identity. A pale gunmetal, defaulting to <c>#9FC6CE</c>.
+        /// The Factions tab's own color, the tenth of the per-tab identities. A sea green, defaulting to
+        /// <c>#65B486</c>.
         ///
-        /// <b>The first one that could not be placed on hue.</b> Nine tabs and six meaning-carrying roles put
-        /// fifteen points on the wheel: 9, 18, 45, 47, 87, 120, 171, 207, 211, 211, 235, 264, 267, 305 and
-        /// 336. The widest space left between any two of them is 51 degrees, from <see cref="Success"/> at
-        /// 120 to <see cref="TabPower"/> at 171, which would put a jade at about 145.
+        /// <b>This one takes the hole <see cref="TabResearch"/> turned down, and it can because it moved the
+        /// band out of the way first.</b> The nine identities above sit at 18, 44, 85, 172, 209, 235, 268,
+        /// 305 and 336 degrees. The only stretch left wider than 37 is 85 to 172, and the reason two tabs in
+        /// a row refused it is <see cref="Success"/> at 120: research spends success green on the word
+        /// "Done", and this tab spends it on the word "Ally".
         ///
-        /// <b>And that gap is blocked, for the reason it was blocked for <see cref="TabResearch"/>.</b> This
-        /// is a tab about stored charge, and charge is already green: <c>ChargePill</c> paints
-        /// <see cref="Success"/> for a store that is gaining and this screen stacks eight of those pills in a
-        /// column. A jade title over them is exactly the confusion the per-tab identities exist to prevent.
+        /// <b>The refusal was about adjacency, not about hue.</b> An identity is separated from a state by
+        /// saturation in this palette -- <see cref="TabGrowing"/> is two degrees from <see cref="Warning"/>
+        /// and reads as a different thing entirely -- so green was never disqualified on its own. What
+        /// disqualified it was that the factions scale drew its resting band in the identity, which would
+        /// have put a green band under a green pin inside a green zone on an allied faction's row. The band
+        /// is grey now, the identity never touches a row, and the objection goes with it.
         ///
-        /// <b>Every other gap is narrower than the tightest pair already shipped.</b>
-        /// <see cref="TabQuests"/> at 211 and <see cref="TabResearch"/> at 235 live 24 degrees apart and that
-        /// is the current floor; the best unblocked space left runs 47 to 87, which offers 20 and is a muddy
-        /// chartreuse between a wheat and a sage.
+        /// <b>So 145 degrees, at the far side of success from the teal.</b> Twenty five degrees from
+        /// <see cref="Success"/> with fifteen points less saturation, and twenty seven from
+        /// <see cref="TabPower"/>, which is wider clearance than <see cref="TabBills"/> and
+        /// <see cref="TabGrowing"/> have from each other. Every other opening left is under twenty degrees
+        /// from two identities at once, and the purple arc already holds three.
+        /// </summary>
+        TabFactions,
+
+        /// <summary>
+        /// The History tab's own color, the eleventh of the per-tab identities. A muted cyan, defaulting to
+        /// <c>#72B3C0</c>.
         ///
-        /// <b>So it takes 190 degrees and stays pale.</b> The nine before it carry between 44 and 86 points
-        /// of chroma; this carries 47, the bottom of that band. What makes 190 work is the company it keeps:
-        /// <see cref="TabPower"/> at 171 has 59 points and <see cref="Accent"/> at 207 has 140 and is the
-        /// most saturated thing in the mod. Against a blue that vivid a pale cyan does not read as a
-        /// competing blue, it reads as metal, which is what the subject is. The only color control on
-        /// RimWorld's own mech tab is a button asking the player to pick one, because mechs do not have one.
+        /// <b>This was drawn at 145 and moved, because <see cref="TabFactions"/> got there first.</b> Two
+        /// tabs reached that arc in the same week by the same argument, independently, which is the clearest
+        /// evidence yet both that the argument was right and that the ring has run out of good answers.
+        /// Factions had shipped; this moved.
         ///
-        /// <b>The collision to survive is <see cref="TextSecondary"/>,</b> at <c>#9EA6B2</c>, a cool grey at
-        /// 216 degrees that is on this screen constantly. Cleared three ways: 26 degrees of hue, twice the
-        /// saturation at 0.23 against 0.11, and a clearly higher value at 0.81 against 0.70. The title also
-        /// carries Oswald at 15.75pt against the mono at 8.25pt, which is most of it on its own.
+        /// <b>Which leaves 190, and it is a tighter fit than anything above it.</b> Eighteen degrees from
+        /// <see cref="TabPower"/> at 172 and nineteen from <see cref="TabQuests"/> at 209, against the twenty
+        /// five and twenty seven Factions kept. That is the honest cost, and it is paid rather than dodged
+        /// because every alternative is worse: the purple arc at 286 is nineteen degrees from
+        /// <see cref="Mood"/>, which this tab plots as an entire graph, and the citron at 64 is eighteen from
+        /// <see cref="Warning"/> with <see cref="TabGrowing"/> already sitting on that hue.
+        ///
+        /// <b>What makes 190 survivable is saturation and the plot.</b> It sits at 38 percent against the
+        /// power teal's 27, and no two identities are ever on screen together. More to the point, what this
+        /// tab actually shows is a gold ramp: the four chart series run 40 to 45 degrees, so a cool identity is
+        /// as far from the data as the wheel allows -- which is the separation that matters most on a screen
+        /// whose entire content is colored quantities.
+        ///
+        /// <b>It never draws inside the axes.</b> The series own the plot; this draws only on the chrome
+        /// around it -- the header mark and title, the range segments, the rail selection and the open row.
+        /// The same rule <see cref="TabResearch"/> keeps from its band colors.
+        ///
+        /// <b>The ring is full at eleven.</b> A twelfth identity cannot be placed more than eighteen degrees
+        /// from its neighbours anywhere, so the next tab either shares an arc on purpose or this system needs
+        /// a second channel to tell tabs apart by.
+        /// </summary>
+        TabHistory,
+
+        /// <summary>
+        /// The Mechs tab's own color, the twelfth of the per-tab identities. A warm pewter, defaulting to
+        /// <c>#CCBCAD</c>.
+        ///
+        /// <b><see cref="TabHistory"/> called the ring full at eleven and said the next tab would need a
+        /// second channel to be told apart by. This is that tab, and this is that channel.</b> It was drawn
+        /// at 190 first, on the same reasoning History used, and moved when it turned out History was already
+        /// there: at 41 percent saturation against this one's 15 the two were still the same color at a
+        /// glance, and in the light theme <c>#2C6F7D</c> and <c>#37737F</c> were four percent apart.
+        ///
+        /// <b>So this one is not placed on an arc at all.</b> Twenty nine degrees, carrying 31 points of
+        /// chroma against the 44 to 86 every identity above it carries. It sits between
+        /// <see cref="TabBills"/> at 18 and <see cref="TabGrowing"/> at 47, eleven and eighteen degrees off,
+        /// and is told apart from both by being under half as colored: a pale stone between a clay and a
+        /// wheat. That is the trick <see cref="TabGrowing"/> already plays against <see cref="Warning"/> two
+        /// degrees away, at a wider margin.
+        ///
+        /// <b>Warm rather than cold, and not only because cold was taken.</b> The entire grey ramp in this
+        /// palette sits at 216 degrees -- <see cref="TextSecondary"/>, <see cref="TextDisabled"/> and
+        /// <see cref="ControlBackgroundFaded"/> are all the same cool hue -- so a near-neutral placed
+        /// anywhere cold is the one thing that could be mistaken for the text beside it. At 29 degrees it
+        /// cannot: warm grey against cool grey is legible even at this chroma.
+        ///
+        /// <b>And it is right for the subject.</b> A mech is unpainted metal. The only color control on
+        /// RimWorld's own mech tab is a button asking the player to choose one for them, because they do not
+        /// have one.
+        ///
+        /// <b>It never encodes a state.</b> Charge, integrity and bandwidth all carry meaning-bearing colors
+        /// on that screen, and a work priority carries the three the pawns tab spends on priorities. This
+        /// draws only on chrome: the header mark and title, the segment underline, the selected row's bar and
+        /// the selected rail entry's, the auto repair box when it is on, and the bandwidth meter.
         /// </summary>
         TabMechs,
+
+        /// <summary>
+        /// The mods screen draws its title, glyph and rail selection in this.
+        ///
+        /// <b>Page rather than tab, and the prefix is the whole point.</b> Every identity above belongs to a
+        /// <c>MainTabWindow</c> reached from the button bar during play. This one belongs to a page reached
+        /// from the main menu, with no colony behind it, so a theme author reading the field name alone can
+        /// tell which part of the game they are about to recolor.
+        ///
+        /// <b>Not <see cref="Accent"/>, which the other two non-tab screens use.</b> The loading console and
+        /// the modern log can afford the accent because neither means anything else by it. This screen does:
+        /// a mod out of load order is the fixable problem and reads in the accent blue, so taking the same
+        /// blue for the title would put an identity and a state on one screen in one hue.
+        ///
+        /// <b>The same indigo as <see cref="TabResearch"/>, which is deliberate rather than an oversight.</b>
+        /// Ten tab identities and five state colors have used the hue circle up: every gap still open is
+        /// either under twenty degrees from two neighbours at once, or sits on a semantic, and 120 degrees
+        /// is <see cref="Success"/>. Rather than take a color too close to two tabs to be told from either,
+        /// this shares one with the tab it cannot be seen beside. A research tab is reached from the button
+        /// bar during play; this page is reached from the main menu with no colony loaded, so the two are
+        /// never on screen in the same session state and cannot be mistaken for one another. They are
+        /// separate roles, so a theme that wants them apart can move either.
+        /// </summary>
+        PageMods,
 
         /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these

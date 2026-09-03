@@ -393,6 +393,19 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool mechHibernation;
 
         /// <summary>
+        /// Whether the world map previews the map a tile would generate.
+        ///
+        /// On by default: it draws nothing until the cursor is over a tile, and what it answers is the one
+        /// question the planet view cannot -- what the word mountainous actually costs on this particular tile.
+        ///
+        /// <b>It has a switch because the shape is reproduced from a generation step rather than read from a
+        /// map.</b> That step belongs to Ludeon and changes between versions; if it drifts, the preview goes
+        /// quietly wrong rather than visibly broken, and a player who can see that needs to be able to turn it
+        /// off without removing the mod.
+        /// </summary>
+        public bool showTilePreview = true;
+
+        /// <summary>
         /// Whether a pawn somebody is offering is described beside the letter that offers them.
         ///
         /// On by default. The letters this reaches ask the player to accept, refuse, ransom or pick between
@@ -620,6 +633,20 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool musicPlayer = true;
 
         /// <summary>
+        /// Whether to run our music player even though another mod is managing the music.
+        ///
+        /// <b>An escape hatch, because the detection is a heuristic over other people's patches.</b>
+        /// <c>MusicRivals</c> decides by reading Harmony's patch list, and no reading of somebody else's patches
+        /// is ever going to be right about every mod. When it is wrong the feature is silently absent, which the
+        /// player has no way to diagnose, so there has to be a way to say "run it anyway".
+        ///
+        /// <b>Defaults off, and stays a separate setting rather than folding into the one above.</b> The two say
+        /// different things: <c>musicPlayer</c> is whether the player wants the feature, this is whether they
+        /// want it despite the warning. Merging them would lose the warning the moment they were merged.
+        /// </summary>
+        public bool musicPlayerOverride;
+
+        /// <summary>
         /// Whether the now playing strip is drawn in the corner with the other readouts.
         ///
         /// Its own setting like every other row down there, because somebody who wants the player but not a
@@ -643,6 +670,16 @@ namespace Gideon.UIOverhaul.Features.Options
         /// Defaults on, so it reads the permissive way round: only an explicit false turns it off.
         /// </summary>
         public bool researchTab = true;
+
+        /// <summary>
+        /// Whether this mod draws the history tab.
+        ///
+        /// The three vanilla pages become one screen with a rail, and the archive, the graph and the battle log
+        /// end up on the same time axis. Somebody who wants RimWorld's own three tabs back turns this off.
+        ///
+        /// Defaults on, so it reads the permissive way round: only an explicit false turns it off.
+        /// </summary>
+        public bool historyTab = true;
 
         /// <summary>
         /// Which characters an undiscovered Anomaly project is written in.
@@ -1439,12 +1476,22 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.musicPlayer = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Defaults off, so this one reads the strict way round: only an explicit true overrides
+                        // a rival. An absent value must never force our player on top of somebody else's.
+                        case "musicPlayerOverride":
+                            settings.musicPlayerOverride = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "showMusicWidget":
                             settings.showMusicWidget = !value.EqualsIgnoreCase("false");
                             break;
 
                         case "researchTab":
                             settings.researchTab = !value.EqualsIgnoreCase("false");
+                            break;
+
+                        case "historyTab":
+                            settings.historyTab = !value.EqualsIgnoreCase("false");
                             break;
 
                         case "anomalyScript":
@@ -1521,6 +1568,9 @@ namespace Gideon.UIOverhaul.Features.Options
                             break;
                         case "showBlastRadius":
                             settings.showBlastRadius = !value.EqualsIgnoreCase("false");
+                            break;
+                        case "showTilePreview":
+                            settings.showTilePreview = !value.EqualsIgnoreCase("false");
                             break;
                         case "pawnDetailsOnOffers":
                             settings.pawnDetailsOnOffers = !value.EqualsIgnoreCase("false");
@@ -1821,8 +1871,10 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("barracksAreNeutral", barracksAreNeutral ? "true" : "false");
                     writer.WriteElementString("characterEditor", characterEditor ? "true" : "false");
                     writer.WriteElementString("musicPlayer", musicPlayer ? "true" : "false");
+                    writer.WriteElementString("musicPlayerOverride", musicPlayerOverride ? "true" : "false");
                     writer.WriteElementString("showMusicWidget", showMusicWidget ? "true" : "false");
                     writer.WriteElementString("researchTab", researchTab ? "true" : "false");
+                    writer.WriteElementString("historyTab", historyTab ? "true" : "false");
                     writer.WriteElementString("anomalyScript", anomalyScript.ToString());
                     writer.WriteElementString("disabledThreats", disabledThreats ?? string.Empty);
                     writer.WriteElementString("gravshipOverrides", gravshipOverrides ? "true" : "false");
@@ -1848,6 +1900,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("showMineableOverlay",
                         showMineableOverlay ? "true" : "false");
                     writer.WriteElementString("showBlastRadius", showBlastRadius ? "true" : "false");
+                    writer.WriteElementString("showTilePreview", showTilePreview ? "true" : "false");
                     writer.WriteElementString("pawnDetailsOnOffers",
                         pawnDetailsOnOffers ? "true" : "false");
                     writer.WriteElementString("quietIdleAlert", quietIdleAlert ? "true" : "false");

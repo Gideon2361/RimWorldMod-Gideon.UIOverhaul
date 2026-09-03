@@ -2750,6 +2750,17 @@ namespace Gideon.UIOverhaul.Features.Options
                 + "and a tank with fuel in it both blow up bigger than one of them would, and the ring grows to "
                 + "match.");
 
+            WidgetToggle(view, ref y, palette, settings, Indent, "Preview a world tile's map",
+                settings.showTilePreview, value => settings.showTilePreview = value,
+                "Draws the map a world tile would generate, in the top right of the planet view, for "
+                + "whichever tile the cursor is over.\n\nThe tile inspector tells you the biome and one "
+                + "word of hilliness. It cannot tell you how much of the map that leaves buildable, whether "
+                + "the open ground is one piece or nine pockets between rock spurs, or how much of it sits "
+                + "under overhead mountain, and those are what you are actually choosing between.\n\nThe "
+                + "shape is exact, because it is read from the same noise the map will be generated from. "
+                + "What is missing is missing visibly: no rivers, roads, plants or ruins, because placing "
+                + "those needs a map that does not exist yet.");
+
             y += 8f;
 
             GroupLabel(view, ref y, palette, "Offers");
@@ -2925,24 +2936,58 @@ namespace Gideon.UIOverhaul.Features.Options
 
             string rival = Music.MusicRivals.Detected;
 
+            // The rival is still named while overridden, because the reason the player unlocked this is a thing
+            // they may want to undo later, and a line that had gone quiet would give them nothing to undo.
+            bool standDown = rival != null && !settings.musicPlayerOverride;
+
             WidgetToggle(view, ref y, palette, settings, Indent, "Enable the music player",
-                settings.musicPlayer && rival == null, value => settings.musicPlayer = value,
+                settings.musicPlayer && !standDown, value => settings.musicPlayer = value,
                 "Replaces RimWorld's hidden music system with one you can see: your own playlists, music from "
                 + "your drive in ogg, wav, mp3, mp4 or m4a, and every song your mods added -- including the ones "
                 + "the game will never choose on its own.\n\nOpen it from the speaker in the play settings row, "
                 + "the strip in the corner, or the main menu.\n\nWith this off nothing is patched and nothing is "
                 + "watching: the game picks songs the way it always did, and there is no window and no strip. "
                 + "Playlists you made are kept and come back if you switch it on again.",
-                rival != null);
+                standDown);
 
             // The reason a locked toggle is locked, which is the one thing a player cannot work out for
             // themselves. Not an explanation of the control: without this line the feature reads as broken.
+            //
+            // The override sits on this line rather than beside the checkbox above, so the three parts read in
+            // the order they are needed: what was found, what it costs, and how to insist. Two controls side by
+            // side that both look like they switch the feature on is a worse window than one locked control
+            // with its reason underneath.
             if (rival != null)
             {
+                float buttonWidth = 116f;
+                float textWidth = view.width - Indent - buttonWidth - 8f;
+
                 GUI.color = palette.Warning;
-                Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
-                    "Switched off: " + rival + " is loaded and manages music itself.");
+                Widgets.Label(new Rect(Indent, y, textWidth, RowHeight), standDown
+                    ? "Switched off: " + rival + " is loaded and manages music itself."
+                    : "Running anyway: " + rival + " is also managing music.");
                 GUI.color = palette.TextPrimary;
+
+                Rect button = new Rect(Indent + textWidth + 8f, y - 2f, buttonWidth, RowHeight);
+
+                if (UIActionButtonControl.Draw(button, standDown ? "Run it anyway" : "Stand down", palette,
+                        false, true, GameFont.Tiny,
+                        standDown
+                            ? "Runs this mod's music player even though " + rival + " is loaded.\n\nThe check "
+                              + "that found it reads other mods' Harmony patches, and no such check is right "
+                              + "about every mod: a mod that only adjusts the volume of its own songs looks the "
+                              + "same from outside as one taking the music over. If this is that, nothing goes "
+                              + "wrong and you get your playlists back.\n\nIf it really is a second music "
+                              + "player, both will drive RimWorld's one audio source and music will cut out "
+                              + "every few seconds. Press this again to stand back down if that happens."
+                            : "Stops running this mod's music player while " + rival + " is loaded, which is "
+                              + "the default. Your playlists are kept.",
+                        !standDown))
+                {
+                    settings.musicPlayerOverride = !settings.musicPlayerOverride;
+
+                    settings.Save();
+                }
 
                 y += RowHeight + 6f;
             }
@@ -2964,6 +3009,20 @@ namespace Gideon.UIOverhaul.Features.Options
 
             if (settings.researchTab && ModsConfig.AnomalyActive)
                 DrawAnomalyScript(view, ref y, palette, settings);
+
+            y += 8f;
+
+            GroupLabel(view, ref y, palette, "History");
+
+            WidgetToggle(view, ref y, palette, settings, Indent, "Rebuild the history tab",
+                settings.historyTab, value => settings.historyTab = value,
+                "One screen in place of the Graph, Messages and Statistics pages. The graph, the archive and "
+                + "the battle log share a time axis, so a wealth cliff sits above the letters that caused it, "
+                + "and a rail replaces the Select graph menu.\n\nIt also adds a view the tab never had: the "
+                + "game keeps a record of the last twenty battles, and today that is only reachable one "
+                + "colonist at a time through their character card.\n\nThe archive says out loud that it keeps "
+                + "only 200 entries and drops the oldest, which is what the pin has always been for.\n\nWith "
+                + "this off the vanilla screen is untouched.");
 
             y += 8f;
 

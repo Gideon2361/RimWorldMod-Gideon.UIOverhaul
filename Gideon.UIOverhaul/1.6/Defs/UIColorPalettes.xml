@@ -43,13 +43,38 @@
          So the next gap takes it, an iris at 235 between the quests blue and the violet of the dead. -->
     <tabResearch>#8B90CC</tabResearch>
 
-    <!-- The tenth identity, and the first that could not be placed on hue at all. Nine tabs and six
-         meaning carrying roles fill the wheel; the widest gap left is a jade near 145, and it is wrong
-         for the same reason it was wrong for research, because this tab stacks a column of charge pills
-         and success green already means gaining. Every other gap is tighter than the tightest pair
-         already shipped. So this takes 190 degrees and stays pale: 47 points of chroma against the 44 to
-         86 the others carry, which beside an accent at 140 reads as metal rather than as a blue. -->
-    <tabMechs>#9FC6CE</tabMechs>
+    <!-- The tenth, and it takes the arc research turned down above, at 145 rather than 130: twenty five
+         degrees off success and twenty seven off the power teal. It can, because its own scale draws the
+         resting band in secondary text rather than in this, so the identity never lands beside the green
+         that means Ally. -->
+    <tabFactions>#65B486</tabFactions>
+
+    <!-- The eleventh, and the last one the ring has room for. It was drawn at 145 too, independently, and
+         moved when factions got there first. 190 is eighteen degrees off the power teal and nineteen off
+         the quests blue, which is tighter than anything above; it is taken anyway because the purple arc
+         is nineteen off mood, which this tab plots as a whole graph, and the citron is eighteen off
+         warning. Cool also puts it as far as the wheel allows from its own chart series, which are gold. -->
+    <tabHistory>#72B3C0</tabHistory>
+
+    <!-- The mods screen, which is a page reached from the main menu rather than a colony tab. Shares the
+         research indigo on purpose: the hue circle is full, and these two are the one pair that can never
+         be on screen together, since reaching this page means no colony is loaded. -->
+    <pageMods>#8F96C9</pageMods>
+
+    <!-- The twelfth, added after history had already called itself the last one the ring has room for,
+         which was true of hues and not of the wheel. This was drawn at 190 first and moved: history is
+         there at 41 percent saturation and the two were the same colour at a glance, light theme
+         included. There is no arc left, so this one is not on an arc. It is a warm pewter at 29 degrees
+         carrying 31 points of chroma, against the 44 to 86 every other identity carries, sitting between
+         the bills clay at 18 and the growing wheat at 47 and telling itself apart from both by being a
+         third as coloured. That is the tabGrowing and warning trick at a wider margin.
+
+         Warm rather than cold on purpose, and not only because cold was taken. The whole grey ramp in
+         this palette, from textSecondary down to controlBackgroundFaded, sits at 216 degrees, so a cool
+         near neutral is the one thing that could be confused with the text beside it. And a mech is
+         unpainted metal: the only colour control on RimWorld's own mech tab is a button asking the
+         player to pick one, because mechs do not have one. -->
+    <tabMechs>#CCBCAD</tabMechs>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -126,9 +151,9 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
-    <!-- The ten role based tab identities, deepened for this theme. They live on the shared template as
-         their dark values, and a violet picked to read on near black is washed out on near white, so each
-         one is restated here rather than inherited. -->
+    <!-- The twelve role based tab identities and the mods page, deepened for this theme. They live
+         on the shared template as their dark values, and a violet picked to read on near black is
+         washed out on near white, so each one is restated here rather than inherited. -->
     <tabTheDead>#7A56A8</tabTheDead>
     <tabQuests>#3C6E9E</tabQuests>
     <tabAnimals>#5F7F3D</tabAnimals>
@@ -138,7 +163,14 @@
     <tabPawns>#9A4568</tabPawns>
     <tabHospital>#99458C</tabHospital>
     <tabResearch>#4A4F94</tabResearch>
-    <tabMechs>#37737F</tabMechs>
+    <tabFactions>#2B8752</tabFactions>
+    <tabHistory>#2C6F7D</tabHistory>
+    <pageMods>#4A4F94</pageMods>
+
+    <!-- Same 29 degrees, deepened to a bronze. The dark value's whole argument is that it is far less
+         coloured than its neighbours, and that has to survive the theme: 52 points of chroma here against
+         the 89 of the bills clay and the 94 of the growing wheat on either side of it. -->
+    <tabMechs>#73593F</tabMechs>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>

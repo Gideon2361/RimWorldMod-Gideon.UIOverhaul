@@ -33,8 +33,8 @@ namespace Gideon.UIOverhaul.Features.Pawns
             /// <summary>Small caps under a figure, and the rail's own heading.</summary>
             internal const float Caption = 7.5f;
 
-            internal const float RailName = 11.25f;
-            internal const float RailCount = 8.25f;
+            internal const float RailName = 12.75f;
+            internal const float RailCount = 9.75f;
 
             /// <summary>A category chip's label, which sits beside its count.</summary>
             internal const float Chip = 9.75f;

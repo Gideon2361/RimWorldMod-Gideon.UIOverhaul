@@ -1137,10 +1137,10 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             y = InspectPaneParts.Cap(view, y, "Temperature", null, palette);
 
-            y = InspectPaneParts.Fact(view, y, "Target", target.ToStringTemperature("F0"), palette.TextPrimary,
+            y = InspectPaneParts.Fact(view, y, "Target", TemperatureText.Of(target), palette.TextPrimary,
                 palette);
 
-            y = InspectPaneParts.Fact(view, y, "Now", here.ToStringTemperature("F0"),
+            y = InspectPaneParts.Fact(view, y, "Now", TemperatureText.Of(here),
                 Mathf.Abs(here - target) <= 3f ? palette.Success : palette.Warning, palette);
 
             return y + InspectPaneParts.BlockGap;

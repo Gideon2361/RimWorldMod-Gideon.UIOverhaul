@@ -8,9 +8,9 @@ namespace Gideon.UIOverhaul.Features.Mechs
     /// <summary>
     /// The typefaces, sizes and accent this tab is set in, matching the other restyled tabs.
     ///
-    /// The same three roles the quests, power, bills, growing, pawns, hospital and research tabs use, so a
-    /// player moving between them is reading one typographic system rather than eight: a display face for the
-    /// tab's name, a condensed one for names in a column, and the mono for every figure and caption.
+    /// The same three roles every other restyled tab uses, so a player moving between them is reading one
+    /// typographic system rather than a dozen: a display face for the tab's name, a condensed one for names
+    /// in a column, and the mono for every figure and caption.
     ///
     /// Sizes are in points on the scale a word processor uses; see <see cref="UIFonts.PixelsPerPoint"/>.
     /// </summary>
@@ -29,7 +29,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
         internal const UIFace Mono = UIFace.IBMPlexMono;
 
         /// <summary>
-        /// This tab's color: a pale gunmetal, defaulting to <c>#9FC6CE</c>.
+        /// This tab's color: a warm pewter, defaulting to <c>#CCBCAD</c>.
         ///
         /// <b>It never encodes a state.</b> Charge, integrity and bandwidth all carry meaning-bearing colors
         /// already, and a work priority carries the same three the pawns tab spends on priorities. This draws
@@ -39,7 +39,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
         /// </summary>
         internal static Color AccentOf(UIColorPaletteDef palette)
         {
-            return palette == null ? new Color(0.624f, 0.776f, 0.808f) : palette.TabMechs;
+            return palette == null ? new Color(0.800f, 0.737f, 0.678f) : palette.TabMechs;
         }
 
         /// <summary>Point sizes, on the same scale the rest of the mod counts in.</summary>

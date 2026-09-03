@@ -53,9 +53,28 @@ namespace Gideon.UIOverhaul.Features.Editor
         private static readonly FieldInfo IndexField =
             AccessTools.Field(typeof(Page_ConfigureStartingPawns), "curPawnIndex");
 
-        public static void Postfix(Page_ConfigureStartingPawns __instance, Rect rect)
+        /// <summary>
+        /// The rect the page was handed, captured before it edits it.
+        ///
+        /// <b>A postfix sees the parameter local, not the argument.</b> <c>DoWindowContents</c> walks its own
+        /// copy down the window as it draws -- <c>yMin += 45</c> for the title, then <c>yMax -= 48</c> once the
+        /// bottom row is done -- so by the time a postfix runs, the rect describes the middle of the page rather
+        /// than the page. Anchoring the button to that put it forty-eight pixels above the row it belongs in,
+        /// floating over the team skills panel.
+        ///
+        /// Captured rather than corrected by adding the forty-eight back, which would be this mod carrying a
+        /// number out of somebody else's method and would move the button the day it changed.
+        /// </summary>
+        private static Rect given;
+
+        public static void Prefix(Rect rect)
         {
-            UIGuard.Try("Editor.StartingPawnsButton", () => Draw(__instance, rect),
+            given = rect;
+        }
+
+        public static void Postfix(Page_ConfigureStartingPawns __instance)
+        {
+            UIGuard.Try("Editor.StartingPawnsButton", () => Draw(__instance, given),
                 "The character editor button is missing from the starting characters page. The page itself is "
                 + "unaffected.");
         }
@@ -70,10 +89,8 @@ namespace Gideon.UIOverhaul.Features.Editor
             if (party == null || party.Count == 0)
                 return;
 
-            // Both taken from vanilla's own xenotype button, and both immune to the yMin shift the page performs
-            // on its rect before that button is drawn: raising yMin moves y and height together and leaves yMax
-            // where it was, and the width is not touched at all. So this lands on the same row whichever value of
-            // the rect the postfix is handed.
+            // Both taken from vanilla's own xenotype button. The rect is the one the page was given rather than
+            // the one it left behind, so this sits on the bottom row with that button instead of above it.
             float x = (rect.width - ButtonWidth) / 2f;
 
             if (ModsConfig.BiotechActive)

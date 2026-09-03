@@ -1,3 +1,4 @@
+using System;
 using Gideon.UIFramework.Helpers;
 using HarmonyLib;
 using RimWorld;
@@ -124,6 +125,9 @@ namespace Gideon.UIOverhaul.Features.Inspector
     [HarmonyPatch(typeof(MainTabWindow_Inspect), nameof(MainTabWindow_Inspect.PaneTopY), MethodType.Getter)]
     internal static class Patch_InspectPaneTopY
     {
+        /// <summary>Whether this getter is already being answered further up the stack.</summary>
+        [ThreadStatic] private static bool measuring;
+
         public static void Postfix(MainTabWindow_Inspect __instance, ref float __result)
         {
             if (!InspectPaneMetrics.Enabled)
@@ -131,9 +135,39 @@ namespace Gideon.UIOverhaul.Features.Inspector
 
             float vanilla = __result;
 
-            __result = UIGuard.Try("Inspector.TopY",
-                () => UI.screenHeight - InspectPaneMetrics.HeightFor(__instance) - InspectPaneMetrics.BarHeight,
-                vanilla, "The inspect pane sits where RimWorld puts it.");
+            // <b>Re-entrancy is guarded, and it is not a theoretical worry: it crashes the game to desktop.</b>
+            // Reported by Criz on 2026-09-01 against Vanilla Psycasts Expanded. Our height is measured by asking
+            // the hosted tab how big it wants to be, which runs the tab's own UpdateSize -- and a tab is entirely
+            // within its rights to size itself against the pane, because RimWorld hands it PaneTopY to do exactly
+            // that. VPE's psycast tree does: size.y = PaneTopY - 30f. That reaches back into this getter, which
+            // measures again, which asks again, and the recursion is unbounded.
+            //
+            // A StackOverflowException cannot be caught, so UIGuard never sees this one and neither does
+            // RimWorld: the process dies with nothing in the log at all. The guard is what makes that
+            // impossible rather than what reports it.
+            //
+            // Vanilla's own number is the right answer to give the inner call. It is always defined, it does not
+            // depend on anything we are part way through computing, and it is stable -- so a tab that sizes from
+            // the pane sizes from a fixed number, the pane grows to fit it once, and it settles. Returning a
+            // half-computed height instead would leave such a tab oscillating between two sizes every frame.
+            //
+            // Per thread for the same reason Patch_LogCapture is: the flag has to unwind with the stack that set
+            // it, and a finally is what guarantees a throw through UIGuard does not leave it stuck on.
+            if (measuring)
+                return;
+
+            measuring = true;
+
+            try
+            {
+                __result = UIGuard.Try("Inspector.TopY",
+                    () => UI.screenHeight - InspectPaneMetrics.HeightFor(__instance) - InspectPaneMetrics.BarHeight,
+                    vanilla, "The inspect pane sits where RimWorld puts it.");
+            }
+            finally
+            {
+                measuring = false;
+            }
         }
     }
 
