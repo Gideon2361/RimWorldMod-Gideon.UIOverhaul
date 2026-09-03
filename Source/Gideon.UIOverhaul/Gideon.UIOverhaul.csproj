@@ -34,7 +34,7 @@
              branches out together, and what it carries is whatever main last named plus whatever is
              being tested on top. -->
         <!-- Bumped on merge to main only. See the note above before changing this line. -->
-        <Version>1.6.4871.14210</Version>
+        <Version>1.6.4871.14211</Version>
 
         <!-- bin\Debug rather than bin\Debug\net481, matching where the deploy target looks. -->
         <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
