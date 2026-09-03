@@ -8,6 +8,7 @@ using Gideon.UIOverhaul.Shared;
 using RimWorld;
 using UnityEngine;
 using Verse;
+using Verse.Sound;
 
 namespace Gideon.UIOverhaul.Features.Mods
 {
@@ -54,7 +55,16 @@ namespace Gideon.UIOverhaul.Features.Mods
 
         private const float OrderWidth = 34f;
 
-        private const float CheckWidth = 26f;
+        /// <summary>
+        /// The switch column, which has to be at least as wide as the switch.
+        ///
+        /// <b>It was 26 against a 40 wide control.</b> <c>UICheckboxControl.Draw</c> ignores the width of the
+        /// rect it is handed for a box with no label: it centres a fixed <c>BoxWidth</c> by <c>BoxSize</c>
+        /// switch on the rect's centre. Handed a narrower rect it does not shrink, it overhangs, so every row
+        /// drew its switch across the order numeral on one side and the mod's name on the other. Taken from
+        /// the control's own constant rather than written down again, so the two cannot drift.
+        /// </summary>
+        private const float CheckWidth = UICheckboxControl.BoxWidth;
 
         private const float SourceWidth = 96f;
 
@@ -65,6 +75,7 @@ namespace Gideon.UIOverhaul.Features.Mods
         private const string KeyAll = "all";
         private const string KeyActive = "active";
         private const string KeyAvailable = "available";
+        private const string KeyProblems = "problems";
         private const string KeyMissing = "missing";
         private const string KeyOrder = "order";
         private const string KeyClash = "clash";
@@ -285,8 +296,29 @@ namespace Gideon.UIOverhaul.Features.Mods
             Rect words = new Rect(inner.x + leadWidth, inner.y, button.x - inner.x - leadWidth - 8f,
                 inner.height);
 
-            TabParts.RowLabel(words, Sentence(), palette.TextSecondary, GameFont.Small, ModsFaces.Body,
-                ModsFaces.Size.DetailBody);
+            // <b>The band is one line and cannot become a list, so it becomes a way into one.</b> It could
+            // only ever name the first two problems and count the rest, which reads as two problems on a
+            // colony that has nine. Clicking it selects the All problems entry in the rail, and the list is
+            // already scrolling and already virtualised, so every problem is there to be read and clicked
+            // through to. A second scrolling region inside a 34 pixel band would be the wrong answer twice.
+            bool over = Mouse.IsOver(words);
+
+            if (over)
+                Widgets.DrawBoxSolid(words, palette.HoverOverlay);
+
+            TabParts.RowLabel(words, Sentence(), over ? palette.TextPrimary : palette.TextSecondary,
+                GameFont.Small, ModsFaces.Body, ModsFaces.Size.DetailBody);
+
+            TooltipHandler.TipRegion(words, (TipSignal) ("Show all " + ModsRoster.ProblemCount
+                + " problems in the list."));
+
+            if (Widgets.ButtonInvisible(words))
+            {
+                scope = KeyProblems;
+                listScroll = Vector2.zero;
+
+                SoundDefOf.Click.PlayOneShotOnCamera();
+            }
         }
 
         /// <summary>
@@ -353,6 +385,15 @@ namespace Gideon.UIOverhaul.Features.Mods
                 RailItems.Add(new UIRailDividerControl());
                 RailItems.Add(Section("Needs attention", palette));
 
+                // Everything wrong, in one scrollable list.
+                //
+                // <b>The banner above can only ever name two.</b> It is one line of a fixed height, so a
+                // colony with nine problems read as two problems and the word "others" -- and the entries
+                // below it split the rest by kind, which is the wrong cut when the question is simply what
+                // is broken. This is the entry the banner sends you to.
+                RailItems.Add(Trouble(KeyProblems, "All problems", ModsRoster.ProblemCount,
+                    palette.Danger, palette, identity));
+
                 if (ModsRoster.MissingCount > 0)
                 {
                     RailItems.Add(Trouble(KeyMissing, "Missing dependency", ModsRoster.MissingCount,
@@ -387,8 +428,14 @@ namespace Gideon.UIOverhaul.Features.Mods
             string picked = UIRailControl.Draw(rect, RailItems, scope, ref railScroll, ref railDragging,
                 ref railOffset, palette);
 
-            if (!picked.NullOrEmpty())
+            // The scroll is reset with the scope. Switching from All mods, scrolled far down, to a section
+            // holding three rows left the view parked past the end of the new content: the virtualised
+            // draw range came out empty and the list looked broken rather than short.
+            if (!picked.NullOrEmpty() && picked != scope)
+            {
                 scope = picked;
+                listScroll = Vector2.zero;
+            }
         }
 
         private static UIRailSectionHeaderControl Section(string title, UIColorPaletteDef palette)
@@ -553,6 +600,10 @@ namespace Gideon.UIOverhaul.Features.Mods
             {
                 case KeyActive: return row.Active;
                 case KeyAvailable: return !row.Active;
+                case KeyProblems:
+                    return row.Trouble == ModTrouble.MissingDependency
+                           || row.Trouble == ModTrouble.Incompatible
+                           || row.Trouble == ModTrouble.OrderIssue;
                 case KeyMissing: return row.Trouble == ModTrouble.MissingDependency;
                 case KeyClash: return row.Trouble == ModTrouble.Incompatible;
                 case KeyOrder: return row.Trouble == ModTrouble.OrderIssue;
@@ -576,7 +627,7 @@ namespace Gideon.UIOverhaul.Features.Mods
 
             Heading(new Rect(x, rect.y, OrderWidth, rect.height), "#", palette, TextAnchor.MiddleRight);
 
-            x += OrderWidth + 8f + CheckWidth;
+            x += OrderWidth + 8f + CheckWidth + 8f;
 
             float names = rect.width - (x - rect.x) - SourceWidth - StateWidth - 24f;
 
@@ -656,11 +707,17 @@ namespace Gideon.UIOverhaul.Features.Mods
 
             // The switch. Core has no switch at all rather than a disabled one, because a control that cannot
             // be operated still invites the press that teaches you it cannot.
-            Rect check = new Rect(x, rect.y + (rect.height - 16f) * 0.5f, 16f, 16f);
+            Rect check = new Rect(x, rect.y, CheckWidth, rect.height);
 
             if (row.Locked)
             {
-                UIElementPainter.OutlineRounded(check, palette.Border, palette.ControlBackgroundFaded);
+                // Sized and placed exactly where a working switch would be, so Core's row does not look like
+                // a different kind of row: same column, same footprint, no knob and no press.
+                UIElementPainter.OutlineRounded(
+                    new Rect(check.center.x - UICheckboxControl.BoxWidth * 0.5f,
+                        check.center.y - UICheckboxControl.BoxSize * 0.5f,
+                        UICheckboxControl.BoxWidth, UICheckboxControl.BoxSize),
+                    palette.Border, palette.ControlBackgroundFaded);
             }
             else
             {
@@ -670,7 +727,7 @@ namespace Gideon.UIOverhaul.Features.Mods
                     Toggle(row, active, page);
             }
 
-            x += CheckWidth;
+            x += CheckWidth + 8f;
 
             float names = rect.width - (x - rect.x) - SourceWidth - StateWidth - 24f;
 
