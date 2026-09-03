@@ -2936,24 +2936,58 @@ namespace Gideon.UIOverhaul.Features.Options
 
             string rival = Music.MusicRivals.Detected;
 
+            // The rival is still named while overridden, because the reason the player unlocked this is a thing
+            // they may want to undo later, and a line that had gone quiet would give them nothing to undo.
+            bool standDown = rival != null && !settings.musicPlayerOverride;
+
             WidgetToggle(view, ref y, palette, settings, Indent, "Enable the music player",
-                settings.musicPlayer && rival == null, value => settings.musicPlayer = value,
+                settings.musicPlayer && !standDown, value => settings.musicPlayer = value,
                 "Replaces RimWorld's hidden music system with one you can see: your own playlists, music from "
                 + "your drive in ogg, wav, mp3, mp4 or m4a, and every song your mods added -- including the ones "
                 + "the game will never choose on its own.\n\nOpen it from the speaker in the play settings row, "
                 + "the strip in the corner, or the main menu.\n\nWith this off nothing is patched and nothing is "
                 + "watching: the game picks songs the way it always did, and there is no window and no strip. "
                 + "Playlists you made are kept and come back if you switch it on again.",
-                rival != null);
+                standDown);
 
             // The reason a locked toggle is locked, which is the one thing a player cannot work out for
             // themselves. Not an explanation of the control: without this line the feature reads as broken.
+            //
+            // The override sits on this line rather than beside the checkbox above, so the three parts read in
+            // the order they are needed: what was found, what it costs, and how to insist. Two controls side by
+            // side that both look like they switch the feature on is a worse window than one locked control
+            // with its reason underneath.
             if (rival != null)
             {
+                float buttonWidth = 116f;
+                float textWidth = view.width - Indent - buttonWidth - 8f;
+
                 GUI.color = palette.Warning;
-                Widgets.Label(new Rect(Indent, y, view.width - Indent, RowHeight),
-                    "Switched off: " + rival + " is loaded and manages music itself.");
+                Widgets.Label(new Rect(Indent, y, textWidth, RowHeight), standDown
+                    ? "Switched off: " + rival + " is loaded and manages music itself."
+                    : "Running anyway: " + rival + " is also managing music.");
                 GUI.color = palette.TextPrimary;
+
+                Rect button = new Rect(Indent + textWidth + 8f, y - 2f, buttonWidth, RowHeight);
+
+                if (UIActionButtonControl.Draw(button, standDown ? "Run it anyway" : "Stand down", palette,
+                        false, true, GameFont.Tiny,
+                        standDown
+                            ? "Runs this mod's music player even though " + rival + " is loaded.\n\nThe check "
+                              + "that found it reads other mods' Harmony patches, and no such check is right "
+                              + "about every mod: a mod that only adjusts the volume of its own songs looks the "
+                              + "same from outside as one taking the music over. If this is that, nothing goes "
+                              + "wrong and you get your playlists back.\n\nIf it really is a second music "
+                              + "player, both will drive RimWorld's one audio source and music will cut out "
+                              + "every few seconds. Press this again to stand back down if that happens."
+                            : "Stops running this mod's music player while " + rival + " is loaded, which is "
+                              + "the default. Your playlists are kept.",
+                        !standDown))
+                {
+                    settings.musicPlayerOverride = !settings.musicPlayerOverride;
+
+                    settings.Save();
+                }
 
                 y += RowHeight + 6f;
             }

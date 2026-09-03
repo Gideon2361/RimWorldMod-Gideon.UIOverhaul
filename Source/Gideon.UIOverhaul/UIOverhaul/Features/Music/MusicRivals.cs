@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Gideon.UIFramework.Helpers;
+using Gideon.UIOverhaul.Features.Options;
 using HarmonyLib;
 using RimWorld;
 using Verse;
@@ -51,6 +52,8 @@ namespace Gideon.UIOverhaul.Features.Music
         /// <c>SongDef</c>s -- which is nearly everything on the Workshop tagged music, including the three
         /// Odyssey soundtracks this was tested against -- patches none of these and is not a rival at all. It is
         /// content, and our player is the thing that finally shows it.
+        ///
+        /// Touching one of these is necessary and not sufficient; see <see cref="CanTakeOver"/>.
         /// </summary>
         private static readonly string[] Guarded = { "MusicUpdate", "StartNewSong", "ForcePlaySong" };
 
@@ -58,8 +61,28 @@ namespace Gideon.UIOverhaul.Features.Music
 
         private static string found;
 
-        /// <summary>Whether to stand down. False when we are the only music player loaded.</summary>
-        internal static bool Any => Detected != null;
+        /// <summary>
+        /// Whether to stand down: a rival is loaded and the player has not insisted.
+        ///
+        /// Separate from <see cref="Detected"/>, which stays the factual answer. The settings window needs to
+        /// name the rival even when it has been overridden, because a line saying nothing was found would be a
+        /// lie about why the checkbox is unlocked.
+        /// </summary>
+        internal static bool Any => Detected != null && !Overridden;
+
+        /// <summary>Whether the player has said to run ours anyway.</summary>
+        internal static bool Overridden
+        {
+            get
+            {
+                return UIGuard.Try("Music.Override", () =>
+                {
+                    UIOverhaulSettingsFile settings = UIOverhaulSettingsFile.Current;
+
+                    return settings != null && settings.musicPlayerOverride;
+                }, false, null);
+            }
+        }
 
         /// <summary>The rival's name for the settings window, or null when there is none.</summary>
         internal static string Detected
@@ -142,8 +165,9 @@ namespace Gideon.UIOverhaul.Features.Music
                 if (info == null)
                     continue;
 
-                string owner = ForeignOwner(info.Prefixes) ?? ForeignOwner(info.Postfixes)
-                    ?? ForeignOwner(info.Transpilers);
+                // Prefixes are judged on their return type; a transpiler is a rewrite whatever it returns.
+                // Postfixes are not asked at all, because a postfix cannot prevent anything.
+                string owner = ForeignOwner(info.Prefixes, true) ?? ForeignOwner(info.Transpilers, false);
 
                 if (owner != null)
                     return owner;
@@ -152,7 +176,7 @@ namespace Gideon.UIOverhaul.Features.Music
             return null;
         }
 
-        private static string ForeignOwner(IEnumerable<Patch> patches)
+        private static string ForeignOwner(IEnumerable<Patch> patches, bool canSkip)
         {
             if (patches == null)
                 return null;
@@ -165,10 +189,45 @@ namespace Gideon.UIOverhaul.Features.Music
                 if (patch.owner == UIOverhaulMod.HarmonyId)
                     continue;
 
+                if (!CanTakeOver(patch, canSkip))
+                    continue;
+
                 return patch.owner;
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Whether this patch could actually stop RimWorld's music from running, rather than decorate it.
+        ///
+        /// <b>Being on one of the guarded methods is not enough, and assuming it was misread a real mod.</b>
+        /// Reported 2026-09-01 against Isekai RPG Leveling, which patches <c>MusicUpdate</c> twice: a prefix
+        /// that keeps one of its own tracks from being faded out when the danger flag flips, and a postfix that
+        /// applies its fade envelope and volume. Both return void, both return early unless the song playing is
+        /// one of its own, and neither takes anything over. It was called a rival anyway and our player switched
+        /// itself off, which is the opposite of what the player wanted from either mod.
+        ///
+        /// <b>The test is the shape of the patch, not the name of the method.</b> Only two things can stop the
+        /// original running: a prefix that returns <c>bool</c>, and a transpiler, which rewrites the method
+        /// outright. That is exactly what our own takeover is -- a <c>bool</c> prefix on <c>MusicUpdate</c> --
+        /// so it is the honest definition of somebody doing what we do. A void prefix cannot skip anything and
+        /// a postfix runs after the work is already done; both are adjusting music that is playing, which is a
+        /// thing two mods can do at once.
+        ///
+        /// <b>The cost of being wrong is asymmetric,</b> which is why this is narrow rather than cautious. Two
+        /// real players fighting over the audio source is loud and obvious and the player can switch one off.
+        /// A false positive is silent: the feature is simply absent, and nothing tells them the mod they
+        /// installed it for is the reason.
+        /// </summary>
+        private static bool CanTakeOver(Patch patch, bool canSkip)
+        {
+            if (!canSkip)
+                return true;
+
+            MethodInfo method = patch.PatchMethod;
+
+            return method != null && method.ReturnType == typeof(bool);
         }
     }
 }
