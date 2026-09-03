@@ -618,6 +618,20 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool musicPlayer = true;
 
         /// <summary>
+        /// Whether to run our music player even though another mod is managing the music.
+        ///
+        /// <b>An escape hatch, because the detection is a heuristic over other people's patches.</b>
+        /// <c>MusicRivals</c> decides by reading Harmony's patch list, and no reading of somebody else's patches
+        /// is ever going to be right about every mod. When it is wrong the feature is silently absent, which the
+        /// player has no way to diagnose, so there has to be a way to say "run it anyway".
+        ///
+        /// <b>Defaults off, and stays a separate setting rather than folding into the one above.</b> The two say
+        /// different things: <c>musicPlayer</c> is whether the player wants the feature, this is whether they
+        /// want it despite the warning. Merging them would lose the warning the moment they were merged.
+        /// </summary>
+        public bool musicPlayerOverride;
+
+        /// <summary>
         /// Whether the now playing strip is drawn in the corner with the other readouts.
         ///
         /// Its own setting like every other row down there, because somebody who wants the player but not a
@@ -1447,6 +1461,12 @@ namespace Gideon.UIOverhaul.Features.Options
                             settings.musicPlayer = !value.EqualsIgnoreCase("false");
                             break;
 
+                        // Defaults off, so this one reads the strict way round: only an explicit true overrides
+                        // a rival. An absent value must never force our player on top of somebody else's.
+                        case "musicPlayerOverride":
+                            settings.musicPlayerOverride = value.EqualsIgnoreCase("true");
+                            break;
+
                         case "showMusicWidget":
                             settings.showMusicWidget = !value.EqualsIgnoreCase("false");
                             break;
@@ -1836,6 +1856,7 @@ namespace Gideon.UIOverhaul.Features.Options
                     writer.WriteElementString("barracksAreNeutral", barracksAreNeutral ? "true" : "false");
                     writer.WriteElementString("characterEditor", characterEditor ? "true" : "false");
                     writer.WriteElementString("musicPlayer", musicPlayer ? "true" : "false");
+                    writer.WriteElementString("musicPlayerOverride", musicPlayerOverride ? "true" : "false");
                     writer.WriteElementString("showMusicWidget", showMusicWidget ? "true" : "false");
                     writer.WriteElementString("researchTab", researchTab ? "true" : "false");
                     writer.WriteElementString("historyTab", historyTab ? "true" : "false");
