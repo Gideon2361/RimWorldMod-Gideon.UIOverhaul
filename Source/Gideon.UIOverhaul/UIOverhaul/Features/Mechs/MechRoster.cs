@@ -96,6 +96,15 @@ namespace Gideon.UIOverhaul.Features.Mechs
 
         internal static int GroupCount;
 
+        /// <summary>
+        /// Groups with nothing in them, which is what the Empty groups chip counts.
+        ///
+        /// Usually most of them. The base mechlink grants <c>MechControlGroups 2</c> and
+        /// <c>Notify_ControlGroupAmountMayChanged</c> creates every group the stat allows the moment a
+        /// mechanitor exists, so a colony of three mechanitors owns six groups before it owns one mech.
+        /// </summary>
+        internal static int EmptyGroupCount;
+
         /// <summary>Mean charge across every mech with an energy need, as a whole percent.</summary>
         internal static int MeanCharge;
 
@@ -210,6 +219,9 @@ namespace Gideon.UIOverhaul.Features.Mechs
                     }
 
                     entry.Groups.Add(built);
+
+                    if (built.Mechs.Count == 0)
+                        EmptyGroupCount++;
                 }
 
                 Mechanitors.Add(entry);
@@ -312,6 +324,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             TotalBandwidth = 0;
             MechCount = 0;
             GroupCount = 0;
+            EmptyGroupCount = 0;
             MeanCharge = 0;
             DamagedCount = 0;
             ChargingCount = 0;

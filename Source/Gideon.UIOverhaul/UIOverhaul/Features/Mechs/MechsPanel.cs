@@ -125,6 +125,9 @@ namespace Gideon.UIOverhaul.Features.Mechs
         private static bool onlyDamaged;
         private static bool onlyDrafted;
 
+        /// <summary>Whether control groups with no mechs are listed. Off: most of them are empty.</summary>
+        private static bool showEmptyGroups;
+
         private static readonly List<string> damagedParts = new List<string>();
 
         private static readonly List<Pawn> shown = new List<Pawn>();
@@ -422,6 +425,8 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Chip(x, bar, "Drafted", MechRoster.DraftedCount, onlyDrafted, palette.Accent, palette,
                 () => onlyDrafted = !onlyDrafted, "Show only mechs you have taken manual control of.");
 
+            x += 8f;
+
             // From the right, so the segments grow leftwards into whatever room is left rather than
             // colliding with the chips.
             float right = bar.xMax;
@@ -435,8 +440,54 @@ namespace Gideon.UIOverhaul.Features.Mechs
             right = Segment(right, bar, "By work", view == MechView.Work, palette, () => view = MechView.Work,
                 "Grouped by the work each mech is assigned to. A mech with two work types appears twice.");
 
-            Segment(right, bar, "By group", view == MechView.Group, palette, () => view = MechView.Group,
-                "The mechanitor tree: one card per control group.");
+            right = Segment(right, bar, "By group", view == MechView.Group, palette,
+                () => view = MechView.Group, "The mechanitor tree: one card per control group.");
+
+            // Last, and only where there is room left between the chips and the segments.
+            //
+            // <b>Empty groups are the default state of this screen, which is why they are hidden.</b> The
+            // base mechlink grants two control groups and RimWorld creates both the moment a mechanitor
+            // exists, so three mechanitors with one mech between them show six rows of which five say
+            // nothing. Hiding them is what makes the rail a list of things rather than a list of slots.
+            //
+            // <b>The chip stays visible when it is off,</b> because a control that vanishes when it is not
+            // in use is a control nobody finds. It carries the count, so the rail is honest about what it
+            // is not showing.
+            if (MechRoster.EmptyGroupCount > 0)
+            {
+                string figure = MechRoster.EmptyGroupCount.ToString();
+                float width = TabParts.FilterChipWidth("Empty groups", figure, MechsFaces.Condensed,
+                    MechsFaces.Size.Chip, MechsFaces.Mono, MechsFaces.Size.RailCount);
+
+                // Stops rather than clipping. A chip drawn under a segment is a control that silently does
+                // the wrong thing when clicked.
+                if (right - width - ChipGap > x)
+                {
+                    if (TabParts.FilterChip(new Rect(right - width - ChipGap * 3f, bar.y, width, bar.height),
+                            "Empty groups", figure, showEmptyGroups, null, palette, MechsFaces.Condensed,
+                            MechsFaces.Size.Chip, MechsFaces.Mono, MechsFaces.Size.RailCount,
+                            "Show control groups with no mechs in them.\n\nEvery mechanitor is given two "
+                            + "groups the moment they get a mechlink, so most colonies have several that "
+                            + "have never held anything. They are still the targets for Move to group."))
+                    {
+                        showEmptyGroups = !showEmptyGroups;
+
+                        SoundDefOf.Click.PlayOneShotOnCamera();
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether a group with nothing in it is drawn, in the rail and in the deck.
+        ///
+        /// The group the rail is standing on is always drawn whatever this says: a player who selected an
+        /// empty group meant to look at it, and having it disappear underneath them would be the control
+        /// fighting them.
+        /// </summary>
+        internal static bool ShowsEmpty(MechGroupEntry group)
+        {
+            return showEmptyGroups || group.Mechs.Count > 0 || railKey == group.Key;
         }
 
         private static float Chip(float x, Rect bar, string label, int count, bool on, Color? color,
@@ -611,6 +662,9 @@ namespace Gideon.UIOverhaul.Features.Mechs
                 for (int g = 0; g < entry.Groups.Count; g++)
                 {
                     MechGroupEntry group = entry.Groups[g];
+
+                    if (!ShowsEmpty(group))
+                        continue;
 
                     elements.Add(new UIRailClickableEntry(group.Key, GroupLabel(group))
                     {

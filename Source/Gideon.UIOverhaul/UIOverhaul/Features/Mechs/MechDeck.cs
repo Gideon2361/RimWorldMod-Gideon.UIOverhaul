@@ -112,7 +112,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
                         {
                             MechGroupEntry group = owner.Groups[g];
 
-                            if (!MechsPanel.InRail(owner, group))
+                            if (!MechsPanel.InRail(owner, group) || !MechsPanel.ShowsEmpty(group))
                                 continue;
 
                             y += CardHeight(Visible(group.Mechs), true) + MechsPanel.Spacing;
@@ -191,7 +191,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
                 {
                     MechGroupEntry group = owner.Groups[g];
 
-                    if (!MechsPanel.InRail(owner, group))
+                    if (!MechsPanel.InRail(owner, group) || !MechsPanel.ShowsEmpty(group))
                         continue;
 
                     any = true;
