@@ -299,7 +299,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             {
                 TabParts.RowLabel(new Rect(card.x + 14f, row, card.width - 28f, MechsPanel.Rows),
                     group.Mechs.Count == 0
-                        ? "Empty. Move a mech here from its own row."
+                        ? "Empty. Select a mech and use Move to group."
                         : "Every mech here is filtered out.",
                     palette.TextDisabled, MechsFaces.Body, MechsFaces.Size.Prose);
             }
@@ -576,13 +576,13 @@ namespace Gideon.UIOverhaul.Features.Mechs
             float x = rect.x + 10f + MechsPanel.Portrait + 10f;
 
             UITextControl.Label(new Rect(x, rect.y, MechsPanel.Name, rect.height),
-                "MECH  -  WORK PRIORITIES", MechsFaces.Mono, MechsFaces.Size.Caption);
+                "MECH AND WORK PRIORITIES", MechsFaces.Mono, MechsFaces.Size.Caption);
 
             x += MechsPanel.Name + 10f;
 
             Text.Anchor = TextAnchor.MiddleRight;
 
-            UITextControl.Label(new Rect(x, rect.y, MechsPanel.Cost, rect.height), "BAND", MechsFaces.Mono,
+            UITextControl.Label(new Rect(x, rect.y, MechsPanel.Cost, rect.height), "BW", MechsFaces.Mono,
                 MechsFaces.Size.Caption);
 
             Text.Anchor = TextAnchor.MiddleLeft;

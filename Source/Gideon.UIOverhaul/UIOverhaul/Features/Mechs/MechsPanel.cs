@@ -39,6 +39,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
     /// <c>Pawn_WorkSettings.SetPriority</c>. The exception is mech hibernation, which is a behaviour change,
     /// is off by default and lives behind the Settings button. See <see cref="Dialog_MechSettings"/>.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class MechsPanel
     {
         private const float Pad = 6f;
@@ -541,11 +542,20 @@ namespace Gideon.UIOverhaul.Features.Mechs
             return Mathf.Clamp(widest + 48f, MinRailWidth, MaxRailWidth);
         }
 
+        /// <summary>
+        /// A group's name in the rail.
+        ///
+        /// <b>The word "Group" is carried on every row rather than left implied.</b> Without it the label is
+        /// a bare index and a mode, and a mechanitor with two empty groups reads as "1 work" over "2 work",
+        /// which looks like the same row printed twice rather than like two groups that both happen to be
+        /// set to work. Every mechanitor starts with two, because the base mechlink grants
+        /// <c>MechControlGroups 2</c>, so that is the first thing anybody sees on this tab.
+        /// </summary>
         private static string GroupLabel(MechGroupEntry group)
         {
             string mode = group.Mode == null ? "no mode" : group.Mode.LabelCap.ToString().ToLowerInvariant();
 
-            return group.Index + "  " + mode;
+            return "Group " + group.Index + "  -  " + mode;
         }
 
         /// <summary>

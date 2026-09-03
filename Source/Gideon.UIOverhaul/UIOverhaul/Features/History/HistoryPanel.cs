@@ -28,6 +28,7 @@ namespace Gideon.UIOverhaul.Features.History
     /// twenty fights, reachable today only through one colonist's character card at a time. This screen is where
     /// a player goes to ask what happened to their colony, so it is where that belongs.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class HistoryPanel
     {
         internal const float WindowWidth = 1280f;

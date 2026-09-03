@@ -345,6 +345,61 @@ namespace Gideon.UIOverhaul.Features.Mechs
 
                 SoundDefOf.Click.PlayOneShotOnCamera();
             }
+
+            Rect move = new Rect(view.x, y + 41f, view.width, 26f);
+            Pawn overseer = mech.GetOverseer();
+
+            if (TabParts.Button(move, "Move to group", palette, overseer != null))
+                MoveMenu(mech, overseer);
+        }
+
+        /// <summary>
+        /// Reassigns this mech to another of its overseer's control groups.
+        ///
+        /// <b>This exists because taking the table away took an affordance with it.</b> RimWorld's own mech
+        /// tab has a <c>ControlGroup</c> column marked <c>paintable</c>, so a player drags down it to move
+        /// several mechs at once. Replacing the table with a deck of cards removed the only place on the
+        /// screen where a mech could change group, which is a regression rather than a simplification.
+        ///
+        /// The assignment itself is <c>MechanitorControlGroup.Assign</c>, the game's own method, which
+        /// unassigns from the previous group and marks the tracker dirty on the way.
+        /// </summary>
+        private static void MoveMenu(Pawn mech, Pawn overseer)
+        {
+            UIGuard.Try("Mechs.MoveToGroup", () =>
+            {
+                Pawn_MechanitorTracker tracker = overseer.mechanitor;
+
+                if (tracker == null || tracker.controlGroups == null)
+                    return;
+
+                MechanitorControlGroup current = mech.GetMechControlGroup();
+                List<FloatMenuOption> options = new List<FloatMenuOption>();
+
+                for (int i = 0; i < tracker.controlGroups.Count; i++)
+                {
+                    MechanitorControlGroup group = tracker.controlGroups[i];
+
+                    if (group == null)
+                        continue;
+
+                    MechanitorControlGroup chosen = group;
+                    string label = "Group " + group.Index
+                                   + (group.WorkMode == null
+                                       ? string.Empty
+                                       : "  -  " + group.WorkMode.LabelCap.ToString().ToLowerInvariant())
+                                   + "  (" + group.MechsForReading.Count + ")";
+
+                    // The group it is already in is listed and disabled rather than left out, so the menu is
+                    // the same length every time and says where the mech currently is.
+                    options.Add(new FloatMenuOption(label, group == current
+                        ? (System.Action) null
+                        : () => chosen.Assign(mech)));
+                }
+
+                if (options.Count > 0)
+                    Find.WindowStack.Add(new FloatMenu(options));
+            }, "That mech could not be moved from here. Selecting it on the map still shows its group.");
         }
 
         // -------------------------------------------------------------------------------------------

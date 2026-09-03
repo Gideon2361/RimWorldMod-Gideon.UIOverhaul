@@ -29,6 +29,7 @@ namespace Gideon.UIOverhaul.Features.Mods
     /// This is not a tab and does not behave like one: there is no colony behind it, so nothing here can name a
     /// map or a pawn, and leaving is a transaction rather than a close. See <see cref="ModsReflection"/>.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class ModsScreen
     {
         private const float Pad = 8f;

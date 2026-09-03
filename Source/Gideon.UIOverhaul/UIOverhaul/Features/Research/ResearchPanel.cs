@@ -30,6 +30,7 @@ namespace Gideon.UIOverhaul.Features.Research
     /// seventy percent is a node whose text no longer fits it. The overview draws blocks instead of nodes, which
     /// is what a zoomed-out tech tree is for anyway: the shape of it, and where the work is.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class ResearchPanel
     {
         private const float DetailWidth = 250f;
