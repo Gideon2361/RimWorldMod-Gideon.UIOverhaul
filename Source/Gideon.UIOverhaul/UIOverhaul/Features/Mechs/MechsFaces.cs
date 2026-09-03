@@ -29,7 +29,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
         internal const UIFace Mono = UIFace.IBMPlexMono;
 
         /// <summary>
-        /// This tab's color: a warm pewter, defaulting to <c>#CCBCAD</c>.
+        /// This tab's color: a pale gunmetal, defaulting to <c>#9FC6CE</c>.
         ///
         /// <b>It never encodes a state.</b> Charge, integrity and bandwidth all carry meaning-bearing colors
         /// already, and a work priority carries the same three the pawns tab spends on priorities. This draws
@@ -39,7 +39,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
         /// </summary>
         internal static Color AccentOf(UIColorPaletteDef palette)
         {
-            return palette == null ? new Color(0.800f, 0.737f, 0.678f) : palette.TabMechs;
+            return palette == null ? new Color(0.624f, 0.776f, 0.808f) : palette.TabMechs;
         }
 
         /// <summary>Point sizes, on the same scale the rest of the mod counts in.</summary>

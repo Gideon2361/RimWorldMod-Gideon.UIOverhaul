@@ -36,7 +36,7 @@ namespace Gideon.UIOverhaul.Features.History
         internal const UIFace Mono = UIFace.IBMPlexMono;
 
         /// <summary>
-        /// This tab's color: a muted cyan, defaulting to <c>#72B3C0</c>.
+        /// This tab's color: a pewter, defaulting to <c>#CCBCAD</c>.
         ///
         /// <b>It never draws inside the axes.</b> The chart series own the plot; this draws only on the chrome
         /// around it, which is what lets the series be gold without arguing with the title above them. See
@@ -45,7 +45,7 @@ namespace Gideon.UIOverhaul.Features.History
         /// </summary>
         internal static Color AccentOf(UIColorPaletteDef palette)
         {
-            return palette == null ? new Color(0.447f, 0.702f, 0.753f) : palette.TabHistory;
+            return palette == null ? new Color(0.800f, 0.737f, 0.678f) : palette.TabHistory;
         }
 
         /// <summary>
