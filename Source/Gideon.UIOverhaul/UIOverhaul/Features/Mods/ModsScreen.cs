@@ -200,7 +200,14 @@ namespace Gideon.UIOverhaul.Features.Mods
                 // so warming the wrong one warms nothing.
                 int size = Mathf.Max(1, Mathf.RoundToInt(UIFonts.ToPixels(ModsFaces.Size.RowName)));
 
+                System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+
                 font.RequestCharactersInTexture(new string(characters), size, synthesize);
+
+                clock.Stop();
+
+                ModsProbe.Warmed(font, characters.Length, size,
+                    clock.ElapsedTicks / (System.Diagnostics.Stopwatch.Frequency / 1000000L));
             }, "Mod names are rasterised as they scroll into view this session, which can stutter when "
                + "switching between sections of the list.");
         }
@@ -216,6 +223,14 @@ namespace Gideon.UIOverhaul.Features.Mods
             detailScroll = Vector2.zero;
 
             ModsRoster.Rebuild();
+
+            ModsProbe.Opened();
+        }
+
+        /// <summary>Called when the page closes, so the probe stops attributing font work to this screen.</summary>
+        internal static void Closed()
+        {
+            ModsProbe.Closed();
         }
 
         internal static void Draw(Page_ModsConfig page, Rect rect)
@@ -225,12 +240,16 @@ namespace Gideon.UIOverhaul.Features.Mods
             if (palette == null)
                 return;
 
+            ModsProbe.FrameStart();
+
             // The roster is rebuilt by every mutation rather than every frame; this only covers a first draw
             // that somehow arrived without one, which would otherwise be an empty screen.
             if (ModsRoster.Rows.Count == 0 && ModsRoster.InstalledCount == 0)
                 ModsRoster.Rebuild();
 
             Warm();
+
+            ModsProbe.Mark("warm");
 
             Header(new Rect(rect.x, rect.y, rect.width, HeaderHeight), palette);
 
@@ -242,20 +261,31 @@ namespace Gideon.UIOverhaul.Features.Mods
                 y += BandHeight + Pad;
             }
 
+            ModsProbe.Mark("header");
+
             float bottom = rect.yMax - BarHeight - Pad;
 
             Rect body = new Rect(rect.x, y, rect.width, bottom - y);
 
             Rail(new Rect(body.x, body.y, RailWidth, body.height), palette);
 
+            ModsProbe.Mark("rail");
+
             float listX = body.x + RailWidth + Pad;
             float listWidth = body.width - RailWidth - DetailWidth - Pad - Pad;
 
             List(new Rect(listX, body.y, listWidth, body.height), page, palette);
 
+            ModsProbe.Mark("list");
+
             Detail(new Rect(listX + listWidth + Pad, body.y, DetailWidth, body.height), page, palette);
 
+            ModsProbe.Mark("detail");
+
             Bar(new Rect(rect.x, rect.yMax - BarHeight, rect.width, BarHeight), page, palette);
+
+            ModsProbe.Mark("bar");
+            ModsProbe.FrameEnd(scope, Shown.Count, ModsRoster.Rows.Count);
         }
 
         // -------------------------------------------------------------------------------------------
@@ -498,6 +528,8 @@ namespace Gideon.UIOverhaul.Features.Mods
             // draw range came out empty and the list looked broken rather than short.
             if (!picked.NullOrEmpty() && picked != scope)
             {
+                ModsProbe.Ask("scope " + scope + " -> " + picked);
+
                 scope = picked;
                 listScroll = Vector2.zero;
             }
@@ -638,6 +670,12 @@ namespace Gideon.UIOverhaul.Features.Mods
 
             if (ModsRoster.Version == filledVersion && scope == filledScope && needle == filledSearch)
                 return;
+
+            // Noted rather than timed on its own: the point of the sentinel is to prove whether the frame
+            // that stutters is the frame that refilters, which the phase timings alone cannot say because
+            // the refilter hides inside the list phase.
+            ModsProbe.Ask("refiltered (version " + filledVersion + " -> " + ModsRoster.Version
+                          + ", scope " + (filledScope ?? "-") + " -> " + scope + ")");
 
             filledVersion = ModsRoster.Version;
             filledScope = scope;

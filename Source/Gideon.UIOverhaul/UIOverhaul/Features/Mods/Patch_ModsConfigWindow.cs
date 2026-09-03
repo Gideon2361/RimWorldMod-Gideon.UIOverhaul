@@ -51,4 +51,22 @@ namespace Gideon.UIOverhaul.Features.Mods
             UIGuard.Try("Mods.Opened", ModsScreen.Opened);
         }
     }
+
+    /// <summary>
+    /// Tells our screen the page has gone, which only the probe currently cares about.
+    ///
+    /// <b>It has to be told rather than work it out.</b> Nothing else here runs when the page closes, so a
+    /// probe watching a static font event would go on attributing every atlas rebuild in the game to a
+    /// screen that is no longer on the stack.
+    ///
+    /// Vanilla's <c>PostClose</c> commits the mod list; a postfix runs after that and cannot disturb it.
+    /// </summary>
+    [HarmonyPatch(typeof(Page_ModsConfig), nameof(Page_ModsConfig.PostClose))]
+    internal static class Patch_Page_ModsConfig_PostClose
+    {
+        public static void Postfix()
+        {
+            UIGuard.Try("Mods.Closed", ModsScreen.Closed);
+        }
+    }
 }
