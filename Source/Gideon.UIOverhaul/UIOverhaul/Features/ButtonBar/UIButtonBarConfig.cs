@@ -208,6 +208,16 @@ namespace Gideon.UIOverhaul.Features.ButtonBar
             if (string.Equals(defName, Ideoligions.IdeoTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
                 return !Ideoligions.IdeoTabs.Available;
 
+            // Vanilla's mechs tab, when ours is present. Same reason as the quests pair.
+            if (string.Equals(defName, Mechs.MechTabs.VanillaDefName, StringComparison.OrdinalIgnoreCase))
+                return Mechs.MechTabs.Available;
+
+            // And ours when it is not, which is either a def that failed to load or an install without
+            // Biotech. Either way the button would open a screen with no mechanitors in it, so it is absent
+            // rather than empty, exactly as the ideoligions one is.
+            if (string.Equals(defName, Mechs.MechTabs.OurDefName, StringComparison.OrdinalIgnoreCase))
+                return !Mechs.MechTabs.Available;
+
             if (!string.Equals(defName, "Animals", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(defName, "Wildlife", StringComparison.OrdinalIgnoreCase))
                 return false;

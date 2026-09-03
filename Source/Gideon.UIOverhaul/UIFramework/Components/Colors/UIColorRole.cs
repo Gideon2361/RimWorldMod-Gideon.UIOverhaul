@@ -217,6 +217,38 @@ namespace Gideon.UIFramework.Components.Colors
         TabResearch,
 
         /// <summary>
+        /// The Mechs tab's own color, the tenth identity. A pale gunmetal, defaulting to <c>#9FC6CE</c>.
+        ///
+        /// <b>The first one that could not be placed on hue.</b> Nine tabs and six meaning-carrying roles put
+        /// fifteen points on the wheel: 9, 18, 45, 47, 87, 120, 171, 207, 211, 211, 235, 264, 267, 305 and
+        /// 336. The widest space left between any two of them is 51 degrees, from <see cref="Success"/> at
+        /// 120 to <see cref="TabPower"/> at 171, which would put a jade at about 145.
+        ///
+        /// <b>And that gap is blocked, for the reason it was blocked for <see cref="TabResearch"/>.</b> This
+        /// is a tab about stored charge, and charge is already green: <c>ChargePill</c> paints
+        /// <see cref="Success"/> for a store that is gaining and this screen stacks eight of those pills in a
+        /// column. A jade title over them is exactly the confusion the per-tab identities exist to prevent.
+        ///
+        /// <b>Every other gap is narrower than the tightest pair already shipped.</b>
+        /// <see cref="TabQuests"/> at 211 and <see cref="TabResearch"/> at 235 live 24 degrees apart and that
+        /// is the current floor; the best unblocked space left runs 47 to 87, which offers 20 and is a muddy
+        /// chartreuse between a wheat and a sage.
+        ///
+        /// <b>So it takes 190 degrees and stays pale.</b> The nine before it carry between 44 and 86 points
+        /// of chroma; this carries 47, the bottom of that band. What makes 190 work is the company it keeps:
+        /// <see cref="TabPower"/> at 171 has 59 points and <see cref="Accent"/> at 207 has 140 and is the
+        /// most saturated thing in the mod. Against a blue that vivid a pale cyan does not read as a
+        /// competing blue, it reads as metal, which is what the subject is. The only color control on
+        /// RimWorld's own mech tab is a button asking the player to pick one, because mechs do not have one.
+        ///
+        /// <b>The collision to survive is <see cref="TextSecondary"/>,</b> at <c>#9EA6B2</c>, a cool grey at
+        /// 216 degrees that is on this screen constantly. Cleared three ways: 26 degrees of hue, twice the
+        /// saturation at 0.23 against 0.11, and a clearly higher value at 0.81 against 0.70. The title also
+        /// carries Oswald at 15.75pt against the mono at 8.25pt, which is most of it on its own.
+        /// </summary>
+        TabMechs,
+
+        /// <summary>
         /// Translucent wash laid over a control the cursor is on. Alpha is part of the value: these
         /// three roles are drawn on top of whatever is already there, not instead of it.
         /// </summary>

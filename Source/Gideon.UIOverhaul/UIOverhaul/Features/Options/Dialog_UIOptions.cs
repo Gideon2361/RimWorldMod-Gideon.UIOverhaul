@@ -3837,6 +3837,24 @@ namespace Gideon.UIOverhaul.Features.Options
 
             y += 6f;
 
+            // Only where there are mechs to hibernate. Without Biotech there is no mechanitor, no work mode
+            // and no think tree branch for this to sit in front of, so the switch would be inert.
+            if (ModsConfig.BiotechActive)
+            {
+                GroupLabel(view, ref y, palette, "Mechs");
+
+                WidgetToggle(view, ref y, palette, settings, Indent,
+                    "Enable mech hibernation", settings.mechHibernation,
+                    value => settings.mechHibernation = value,
+                    "When mechs have no work to do, they will save performance by hibernating for 1200 ticks "
+                    + "instead of polling the job board every tick.  Mechs will hibernate in-place, but you "
+                    + "can create an area named MechHibernateZone and they will go there to hibernate "
+                    + "instead.\n\nThe mech tab's own Settings button carries this too, and it can tell you "
+                    + "whether that area actually exists on the map you are looking at.");
+
+                y += 6f;
+            }
+
             GroupLabel(view, ref y, palette, "Research bands");
 
             if (SmallButton(new Rect(Indent, y, 200f, RowHeight), "Open research bands", palette))

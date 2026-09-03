@@ -378,6 +378,21 @@ namespace Gideon.UIOverhaul.Features.Options
         public bool showBlastRadius = true;
 
         /// <summary>
+        /// Whether a work mech with nothing to do waits at length instead of wandering and re-scanning.
+        ///
+        /// <b>Off by default, which is not this file's usual answer.</b> The convention here is that a setting
+        /// defaults on when it costs nothing until it is needed. This one visibly changes what mechs do the
+        /// moment it is switched on: they stop milling around the colony between jobs and stand still instead.
+        /// That is the point of it and it is still a change, so the player asks for it.
+        ///
+        /// What it buys: RimWorld's mech think tree ends an idle player mech at
+        /// <c>JobGiver_WanderColony</c>, so the mech takes a short walk, the walk ends, and the tree runs from
+        /// the top again including two full passes of <c>JobGiver_Work</c>. Hibernating replaces the wander
+        /// with one long wait. See <c>JobGiver_MechHibernate</c> and Defs/Jobs_MechHibernate.xml.
+        /// </summary>
+        public bool mechHibernation;
+
+        /// <summary>
         /// Whether a pawn somebody is offering is described beside the letter that offers them.
         ///
         /// On by default. The letters this reaches ask the player to accept, refuse, ransom or pick between

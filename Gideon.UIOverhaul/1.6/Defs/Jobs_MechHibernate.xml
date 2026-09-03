@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Defs>
+
+  <!--
+    A work mech waiting at length instead of asking for work again straight away.
+
+    What this is for. A work mech with nothing to do does not stand still today: the bottom of
+    RimWorld's Mechanoid think tree hands an idle player mech JobGiver_WanderColony, so it takes a
+    short walk, the walk ends, and the whole tree runs from the top again including JobGiver_Work
+    twice, once in emergency mode and once not. Each of those is a full pass over every work giver
+    the mech has. This replaces the wander with one long wait, which cuts how often that happens and
+    stops the milling about.
+
+    Deliberately NOT JobDefOf.SelfShutdown. That is the obvious candidate and it is wrong:
+    Need_MechEnergy.IsSelfShutdown tests CurJobDef == JobDefOf.SelfShutdown and a mech in that state
+    gains BaseGainPerDaySelfShutdown energy. Hibernation is a performance setting and must not hand
+    out free charge. On this def the mech stays on the ordinary idle fall rate of 3 per day, which is
+    exactly what it pays for standing around now.
+
+    driverClass is vanilla's own JobDriver_Wait, unmodified. It branches on the job def in only one
+    place, for Wait_Combat, so ours behaves as a plain wait; and it runs CheckForAutoAttack every
+    tick, which is why a hibernating mech still shoots at anything that walks up to it.
+
+    isIdle is true so the game counts this as idle time rather than as work, which keeps the idle
+    energy fall rate and keeps a hibernating mech out of the "doing something" reckoning.
+
+    suspendable false matches vanilla's Wait: there is nothing to resume, and a suspended wait would
+    only be restarted from the top anyway.
+
+    No expiryInterval here. The giver sets it per job, because the length is the setting's whole
+    point and belongs where it can be read rather than in a def a player would have to decompile.
+
+    Referenced from C# as MechDefOf.Gideon_MechHibernate.
+  -->
+  <JobDef>
+    <defName>Gideon_MechHibernate</defName>
+    <driverClass>JobDriver_Wait</driverClass>
+    <reportString>hibernating.</reportString>
+    <isIdle>true</isIdle>
+    <suspendable>false</suspendable>
+    <carryThingAfterJob>true</carryThingAfterJob>
+    <dropThingBeforeJob>false</dropThingBeforeJob>
+  </JobDef>
+
+</Defs>

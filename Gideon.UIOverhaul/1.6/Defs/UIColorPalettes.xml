@@ -42,6 +42,14 @@
          wrong, because success is at 120 and this is the tab that spends success green on the word Done.
          So the next gap takes it, an iris at 235 between the quests blue and the violet of the dead. -->
     <tabResearch>#8B90CC</tabResearch>
+
+    <!-- The tenth identity, and the first that could not be placed on hue at all. Nine tabs and six
+         meaning carrying roles fill the wheel; the widest gap left is a jade near 145, and it is wrong
+         for the same reason it was wrong for research, because this tab stacks a column of charge pills
+         and success green already means gaining. Every other gap is tighter than the tightest pair
+         already shipped. So this takes 190 degrees and stays pale: 47 points of chroma against the 44 to
+         86 the others carry, which beside an accent at 140 reads as metal rather than as a blue. -->
+    <tabMechs>#9FC6CE</tabMechs>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 
@@ -118,7 +126,7 @@
     <pressedOverlay>#0000001F</pressedOverlay>
     <selectionOverlay>#2F7FD024</selectionOverlay>
 
-    <!-- The nine role based tab identities, deepened for this theme. They live on the shared template as
+    <!-- The ten role based tab identities, deepened for this theme. They live on the shared template as
          their dark values, and a violet picked to read on near black is washed out on near white, so each
          one is restated here rather than inherited. -->
     <tabTheDead>#7A56A8</tabTheDead>
@@ -130,6 +138,7 @@
     <tabPawns>#9A4568</tabPawns>
     <tabHospital>#99458C</tabHospital>
     <tabResearch>#4A4F94</tabResearch>
+    <tabMechs>#37737F</tabMechs>
   </Gideon.UIFramework.Defs.UIColorPaletteDef>
 
 </Defs>
