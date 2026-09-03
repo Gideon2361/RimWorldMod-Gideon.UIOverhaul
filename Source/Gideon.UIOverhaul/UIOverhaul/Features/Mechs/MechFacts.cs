@@ -310,25 +310,5 @@ namespace Gideon.UIOverhaul.Features.Mechs
             }, false, null);
         }
 
-        /// <summary>
-        /// A work type's name shortened to a chip, uppercased.
-        ///
-        /// Four letters is what fits two chips and a count in a 210 pixel column at 7.5pt. The full name is
-        /// on the card in the detail pane and in the row's tooltip, so nothing is only ever available here.
-        /// </summary>
-        internal static string Abbreviate(WorkTypeDef work)
-        {
-            if (work == null)
-                return string.Empty;
-
-            string label = work.labelShort.NullOrEmpty() ? work.defName : work.labelShort;
-
-            if (label.NullOrEmpty())
-                return string.Empty;
-
-            label = label.Trim();
-
-            return (label.Length <= 5 ? label : label.Substring(0, 4)).ToUpperInvariant();
-        }
     }
 }
