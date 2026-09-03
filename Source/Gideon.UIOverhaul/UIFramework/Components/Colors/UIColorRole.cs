@@ -244,63 +244,59 @@ namespace Gideon.UIFramework.Components.Colors
         TabFactions,
 
         /// <summary>
-        /// The History tab's own color, the eleventh of the per-tab identities. A muted cyan, defaulting to
-        /// <c>#72B3C0</c>.
+        /// The History tab's own color, the eleventh of the per-tab identities. A pewter, defaulting to
+        /// <c>#CCBCAD</c>.
         ///
-        /// <b>This was drawn at 145 and moved, because <see cref="TabFactions"/> got there first.</b> Two
-        /// tabs reached that arc in the same week by the same argument, independently, which is the clearest
-        /// evidence yet both that the argument was right and that the ring has run out of good answers.
-        /// Factions had shipped; this moved.
+        /// <b>Moved twice, and the second move is the interesting one.</b> Drawn at 145 first and moved
+        /// when <see cref="TabFactions"/> got there. Drawn at 190 next, a muted cyan, and moved again when
+        /// <see cref="TabMechs"/> wanted that arc and had the better claim to it: a pale ice at 190 sitting
+        /// beside <see cref="Accent"/> reads as metal, which is what that tab is about, and this one is not
+        /// about anything cold.
         ///
-        /// <b>Which leaves 190, and it is a tighter fit than anything above it.</b> Eighteen degrees from
-        /// <see cref="TabPower"/> at 172 and nineteen from <see cref="TabQuests"/> at 209, against the twenty
-        /// five and twenty seven Factions kept. That is the honest cost, and it is paid rather than dodged
-        /// because every alternative is worse: the purple arc at 286 is nineteen degrees from
-        /// <see cref="Mood"/>, which this tab plots as an entire graph, and the citron at 64 is eighteen from
-        /// <see cref="Warning"/> with <see cref="TabGrowing"/> already sitting on that hue.
+        /// <b>So this is the first identity placed off the hue circle rather than on it.</b> That circle
+        /// was full at eleven -- the note here used to say so, and to predict that the next tab would need
+        /// a second channel. The second channel is chroma, and this tab took it rather than the tab that
+        /// found it. It carries 31 points against the 44 to 86 every other identity carries, which is what
+        /// lets it sit eleven degrees from <see cref="TabBills"/> and eighteen from <see cref="TabGrowing"/>
+        /// and still read as a different kind of thing: a pale stone between a terracotta and a wheat. The
+        /// same trick <see cref="TabGrowing"/> plays against <see cref="Warning"/> two degrees away, at a
+        /// wider margin.
         ///
-        /// <b>What makes 190 survivable is saturation and the plot.</b> It sits at 38 percent against the
-        /// power teal's 27, and no two identities are ever on screen together. More to the point, what this
-        /// tab actually shows is a gold ramp: the four chart series run 40 to 45 degrees, so a cool identity is
-        /// as far from the data as the wheel allows -- which is the separation that matters most on a screen
-        /// whose entire content is colored quantities.
+        /// <b>Pewter is also what the subject wants.</b> A history tab is a record being read back, and
+        /// pewter is the color of something dug up and cleaned off. That is a weaker argument than the
+        /// geometry above and it is the reason this tab took the pewter rather than the mech tab, which had
+        /// an equal claim on chroma and a better one on 190.
         ///
-        /// <b>It never draws inside the axes.</b> The series own the plot; this draws only on the chrome
-        /// around it -- the header mark and title, the range segments, the rail selection and the open row.
-        /// The same rule <see cref="TabResearch"/> keeps from its band colors.
-        ///
-        /// <b>The ring is full at eleven.</b> A twelfth identity cannot be placed more than eighteen degrees
-        /// from its neighbours anywhere, so the next tab either shares an arc on purpose or this system needs
-        /// a second channel to tell tabs apart by.
+        /// <b>The one thing to watch is the plot.</b> This tab's four chart series are gold, 40 to 45
+        /// degrees, and this now sits at 29. They are not confusable, because the identity never draws
+        /// inside the axes: the series own the plot and this draws only on the chrome around it -- the
+        /// header mark and title, the range segments, the rail selection and the open row. A 31 chroma grey
+        /// beside a saturated data series is the frame, not the data. The same rule
+        /// <see cref="TabResearch"/> keeps from its band colors.
         /// </summary>
         TabHistory,
 
         /// <summary>
-        /// The Mechs tab's own color, the twelfth of the per-tab identities. A warm pewter, defaulting to
-        /// <c>#CCBCAD</c>.
+        /// The Mechs tab's own color, the twelfth of the per-tab identities. A pale gunmetal, defaulting to
+        /// <c>#9FC6CE</c>.
         ///
         /// <b><see cref="TabHistory"/> called the ring full at eleven and said the next tab would need a
-        /// second channel to be told apart by. This is that tab, and this is that channel.</b> It was drawn
-        /// at 190 first, on the same reasoning History used, and moved when it turned out History was already
-        /// there: at 41 percent saturation against this one's 15 the two were still the same color at a
-        /// glance, and in the light theme <c>#2C6F7D</c> and <c>#37737F</c> were four percent apart.
+        /// second channel. It was right, and then it took that channel itself.</b> Both tabs were drawn at
+        /// 190; this one has the better claim to it, because a pale ice sitting beside <see cref="Accent"/>
+        /// reads as metal and that is exactly the subject. History moved to a pewter off the circle, which
+        /// suits a record being read back, and left this arc alone.
         ///
-        /// <b>So this one is not placed on an arc at all.</b> Twenty nine degrees, carrying 31 points of
-        /// chroma against the 44 to 86 every identity above it carries. It sits between
-        /// <see cref="TabBills"/> at 18 and <see cref="TabGrowing"/> at 47, eleven and eighteen degrees off,
-        /// and is told apart from both by being under half as colored: a pale stone between a clay and a
-        /// wheat. That is the trick <see cref="TabGrowing"/> already plays against <see cref="Warning"/> two
-        /// degrees away, at a wider margin.
+        /// <b>What makes 190 work is the company it keeps.</b> This is an ice carrying 47 points of chroma,
+        /// the bottom of the range every identity here occupies. <see cref="TabPower"/> at 171 has 59
+        /// points and <see cref="Accent"/> at 207 has 140 and is the most saturated thing in the mod.
+        /// Against a blue that vivid a pale cyan does not read as a competing blue. It reads as metal,
+        /// which is what the subject is: the only color control on RimWorld's own mech tab is a button
+        /// asking the player to choose one for them, because mechs do not have one.
         ///
-        /// <b>Warm rather than cold, and not only because cold was taken.</b> The entire grey ramp in this
-        /// palette sits at 216 degrees -- <see cref="TextSecondary"/>, <see cref="TextDisabled"/> and
-        /// <see cref="ControlBackgroundFaded"/> are all the same cool hue -- so a near-neutral placed
-        /// anywhere cold is the one thing that could be mistaken for the text beside it. At 29 degrees it
-        /// cannot: warm grey against cool grey is legible even at this chroma.
-        ///
-        /// <b>And it is right for the subject.</b> A mech is unpainted metal. The only color control on
-        /// RimWorld's own mech tab is a button asking the player to choose one for them, because they do not
-        /// have one.
+        /// <b>The collision to watch is <see cref="TextSecondary"/>,</b> at <c>#9EA6B2</c>, a cool grey at
+        /// 216 degrees that is on this screen constantly. Cleared three ways: 26 degrees of hue, twice the
+        /// saturation at 0.23 against 0.11, and a clearly higher value at 0.81 against 0.70. The title also
+        /// carries Oswald at 15.75pt against the mono at 8.25pt, which is most of it on its own.
         ///
         /// <b>It never encodes a state.</b> Charge, integrity and bandwidth all carry meaning-bearing colors
         /// on that screen, and a work priority carries the three the pawns tab spends on priorities. This
