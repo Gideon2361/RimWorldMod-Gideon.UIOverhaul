@@ -86,7 +86,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
 
             y += 28f;
 
-            Widgets.DrawLineHorizontal(inRect.x, y, inRect.width);
+            Widgets.DrawBoxSolid(new Rect(inRect.x, y, inRect.width, 1f), palette.Border);
 
             y += 12f;
 

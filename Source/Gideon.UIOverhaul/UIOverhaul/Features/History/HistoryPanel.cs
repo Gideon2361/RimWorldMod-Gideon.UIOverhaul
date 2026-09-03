@@ -28,6 +28,7 @@ namespace Gideon.UIOverhaul.Features.History
     /// twenty fights, reachable today only through one colonist's character card at a time. This screen is where
     /// a player goes to ask what happened to their colony, so it is where that belongs.
     /// </summary>
+    [StaticConstructorOnStartup]
     internal static class HistoryPanel
     {
         internal const float WindowWidth = 1280f;
@@ -515,6 +516,7 @@ namespace Gideon.UIOverhaul.Features.History
 
             RangeControl(new Rect(head.xMax - 356f, head.y, 356f, head.height), palette);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -629,6 +631,7 @@ namespace Gideon.UIOverhaul.Features.History
 
             Search.Draw(new Rect(head.xMax - 220f, head.y, 220f, ControlHeight), palette);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -715,6 +718,7 @@ namespace Gideon.UIOverhaul.Features.History
         private static void Columns(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(rect.x, rect.yMax, rect.width);
             GUI.color = Color.white;
 
@@ -949,6 +953,7 @@ namespace Gideon.UIOverhaul.Features.History
             TabParts.RowLabel(new Rect(head.x, head.y, head.width, head.height), "Battles",
                 palette.TextPrimary, GameFont.Small, HistoryFaces.Condensed, HistoryFaces.Size.Row);
 
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(inner.x, head.yMax + 5f, inner.width);
             GUI.color = Color.white;
 
@@ -986,6 +991,7 @@ namespace Gideon.UIOverhaul.Features.History
         private static void BattleColumns(Rect rect, UIColorPaletteDef palette)
         {
             Widgets.DrawBoxSolid(rect, palette.SurfaceSunken);
+            GUI.color = palette.Border;
             Widgets.DrawLineHorizontal(rect.x, rect.yMax, rect.width);
             GUI.color = Color.white;
 

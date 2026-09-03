@@ -28,13 +28,33 @@ namespace Gideon.UIOverhaul.Features.History
         /// <summary>
         /// Pixels per sample.
         ///
-        /// Two rather than one: at one the stacked bands cost a thousand fills a frame for a result nobody can
-        /// tell apart from this, and the outline is drawn as real segments on top either way, which is where
-        /// the crispness a reader actually notices comes from.
+        /// <b>One, and it was two.</b> At two, a sloping band climbed in two pixel treads, which reads as
+        /// stepping on any gradient the eye follows down. One column per screen pixel is as smooth as an
+        /// axis aligned fill can be, and the extra fills are cheap next to what the sampling already costs.
+        ///
+        /// The seams were a separate fault and are fixed in <see cref="Bands"/>: the columns used to start
+        /// at the plot's own fractional x, so every rect landed on a half pixel and the rasteriser left a
+        /// hairline showing between one and the next, which is what made the bands look dashed.
         /// </summary>
-        private const float Step = 2f;
+        private const float Step = 1f;
 
         private const float AxisWidth = 52f;
+
+        /// <summary>
+        /// Closest two letter dots may be drawn, in pixels.
+        ///
+        /// Four, against a dot six wide: near enough that a busy stretch still reads as busy, far enough
+        /// that the dots stay countable instead of fusing into one stripe.
+        /// </summary>
+        private const float DotSpacing = 4f;
+
+        /// <summary>
+        /// Which dot slots along the ribbon are already taken, cleared each time it is drawn.
+        ///
+        /// A field rather than a local, because this runs every frame and a set allocated per frame is
+        /// garbage the collector has to walk on a screen that is already sampling a curve per pixel.
+        /// </summary>
+        private static readonly HashSet<int> occupied = new HashSet<int>();
 
         private const float DayRowHeight = 15f;
 
@@ -306,10 +326,28 @@ namespace Gideon.UIOverhaul.Features.History
             if (total < 0)
                 return;
 
-            for (float x = plot.x; x < plot.xMax; x += Step)
+            // Whole pixels, and one column per pixel.
+            //
+            // <b>The seams were the reason the bands looked dashed.</b> The columns were two wide and started
+            // at the plot's own x, which is fractional after the window is laid out, so every rect landed on a
+            // half pixel and the rasteriser left a hairline of the surface behind showing between one column
+            // and the next. Rounding both edges makes adjacent columns share an edge exactly.
+            //
+            // <b>And one pixel per column is what takes the staircase out.</b> At two, a slope climbed in
+            // two pixel treads that read as stepping on any gradient the eye follows; at one it is the same
+            // resolution as the screen, which is as smooth as an axis aligned fill can be.
+            int first = Mathf.FloorToInt(plot.x);
+            int last = Mathf.CeilToInt(plot.xMax);
+
+            for (int px = first; px < last; px++)
             {
-                float day = Mathf.Lerp(fromDay, toDay, (x - plot.x) / plot.width);
+                float x = px;
                 float width = Mathf.Min(Step, plot.xMax - x);
+
+                if (width <= 0f)
+                    break;
+
+                float day = Mathf.Lerp(fromDay, toDay, (x - plot.x) / plot.width);
                 float running = 0f;
                 float lowY = YFor(plot, low, low, high);
 
@@ -400,9 +438,14 @@ namespace Gideon.UIOverhaul.Features.History
                         Text.Anchor = TextAnchor.MiddleRight;
                         GUI.color = palette.TextDisabled;
 
-                        UITextControl.Label(new Rect(forgotten.x, forgotten.y, forgotten.width - 7f,
-                                forgotten.height), "OLDER THAN THE ARCHIVE KEEPS",
-                            HistoryFaces.Mono, HistoryFaces.Size.Axis);
+                        // In the lower half, because tale labels take the upper half. Both were centred in
+                        // the whole ribbon and drew straight through each other: the caption is as wide as
+                        // twenty eight characters of mono and a tale inside the forgotten stretch is exactly
+                        // where it lands. Splitting the band vertically means neither has to know about the
+                        // other, which is sturdier than throttling one against the other's edge.
+                        UITextControl.Label(new Rect(forgotten.x, forgotten.y + forgotten.height * 0.5f,
+                                forgotten.width - 7f, forgotten.height * 0.5f),
+                            "OLDER THAN THE ARCHIVE KEEPS", HistoryFaces.Mono, HistoryFaces.Size.Axis);
 
                         GUI.color = color;
                         Text.Anchor = anchor;
@@ -423,6 +466,8 @@ namespace Gideon.UIOverhaul.Features.History
             bool over = Mouse.IsOver(ribbon);
             float lastLabelEdge = float.MinValue;
 
+            occupied.Clear();
+
             // Tales last, so a labelled mark is never drawn under a dot.
             for (int pass = 0; pass < 2; pass++)
             {
@@ -436,6 +481,22 @@ namespace Gideon.UIOverhaul.Features.History
                     float x = XFor(ribbon, moment.Day, fromDay, toDay);
 
                     if (x < ribbon.x - 4f || x > ribbon.xMax + 4f)
+                        continue;
+
+                    // <b>Dots are thinned, and they were not.</b> The archive holds two hundred entries and
+                    // a busy hundred days puts them closer together than the six pixel dot is wide, so they
+                    // fused into a solid stripe of colour that read as a rendering fault rather than as a
+                    // busy season. One dot per slot of four pixels keeps the density legible as density.
+                    //
+                    // <b>By slot rather than by distance from the last one drawn.</b> The moment list is
+                    // letters, then battles, then tales, appended in that order and never sorted, so a
+                    // running comparison would be measuring against whatever happened to come before rather
+                    // than against the neighbour on screen, and would drop dots unpredictably.
+                    //
+                    // Letters only. A battle is a red bar and a tale is a labelled tick the player can
+                    // click; both are rare and both say something a dot does not.
+                    if (!moment.Tale && moment.Battle == null
+                                     && !occupied.Add(Mathf.FloorToInt(x / DotSpacing)))
                         continue;
 
                     Rect hit = Mark(ribbon, plot, x, moment, palette, ref lastLabelEdge);
