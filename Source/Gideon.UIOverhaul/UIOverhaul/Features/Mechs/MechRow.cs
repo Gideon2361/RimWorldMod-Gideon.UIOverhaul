@@ -15,10 +15,9 @@ namespace Gideon.UIOverhaul.Features.Mechs
     /// <summary>
     /// One mech on the deck: who it is, what it is set to do, how charged it is and what shape it is in.
     ///
-    /// <b>The second line is the work priorities.</b> RimWorld's table has no column for them because it has
-    /// no screen for them at all, and they have been in every save since Biotech shipped, driving every work
-    /// mech on the map. Two chips and a count of the rest, ordered by priority, so eight mechs can be read
-    /// without selecting any of them.
+    /// <b>Work priorities are not on the row.</b> They are read in the detail pane and compared across
+    /// mechs in the by work view, both on cards carrying the full work name, because that is what the
+    /// pawns tab does and its card grid exists precisely to stop a work label being cut short.
     ///
     /// <b>The shutdown line is drawn on the trough, not on the fill.</b>
     /// <c>Need_MechEnergy.ShutdownUntil</c> is 15, a constant in the game with no representation anywhere in
@@ -26,11 +25,6 @@ namespace Gideon.UIOverhaul.Features.Mechs
     /// </summary>
     internal static class MechRow
     {
-        /// <summary>Most priority chips a row shows before it starts counting instead.</summary>
-        private const int Chips = 2;
-
-        private static readonly List<WorkTypeDef> ordered = new List<WorkTypeDef>();
-
         private static readonly StringBuilder tip = new StringBuilder();
 
         internal static void Draw(Rect rect, Pawn mech, UIColorPaletteDef palette, bool prioritiesLive,
@@ -59,8 +53,8 @@ namespace Gideon.UIOverhaul.Features.Mechs
             // whatever <c>GUI.color</c> happens to be, which is white unless the caller sets it, so every
             // row carried a bright line across it that read as a rendering fault rather than as a divider.
             //
-            // Removed rather than recolored: a forty pixel row with a portrait, a name and a second line of
-            // chips has enough structure of its own, and the hover and selection washes are what actually
+            // Removed rather than recolored: a forty pixel row with a portrait, a name and a second line
+            // has enough structure of its own, and the hover and selection washes are what actually
             // tell one row from the next. The two rules that remain on this screen are structural, separate
             // the card's header band from its rows, and are drawn in Border.
             float x = rect.x + 10f;
@@ -73,10 +67,23 @@ namespace Gideon.UIOverhaul.Features.Mechs
 
             x = portrait.xMax + 10f;
 
-            Identity(new Rect(x, rect.y, MechsPanel.Name, rect.height), mech, palette, prioritiesLive,
-                emphasis);
+            Identity(new Rect(x, rect.y, MechsPanel.Name, rect.height), mech, palette);
 
             x += MechsPanel.Name + 10f;
+
+            // The by work view's own column: this mech's priority for the work type the card is about.
+            //
+            // <b>It is here rather than a reading because this is where setting it across mechs belongs.</b>
+            // The pawns tab keeps per pawn detail in a card grid and sends comparison to the work tab; the
+            // by work view is this tab's work tab, so the number on it is editable for the same reason the
+            // work tab's cells are. The card's heading already names the work type in full, so the box
+            // carries the figure alone and nothing is abbreviated to make room.
+            if (emphasis != null)
+            {
+                x = PriorityBox(new Rect(x, rect.center.y - MechsPanel.PriorityBoxSize * 0.5f,
+                    MechsPanel.PriorityBoxSize, MechsPanel.PriorityBoxSize), mech, emphasis, palette,
+                    prioritiesLive);
+            }
 
             Figure(new Rect(x, rect.y, MechsPanel.Cost, rect.height),
                 MechFacts.BandwidthCost(mech) + " bw", palette.TextSecondary);
@@ -132,8 +139,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
         // Name and work
         // -------------------------------------------------------------------------------------------
 
-        private static void Identity(Rect rect, Pawn mech, UIColorPaletteDef palette, bool prioritiesLive,
-            WorkTypeDef emphasis)
+        private static void Identity(Rect rect, Pawn mech, UIColorPaletteDef palette)
         {
             TextAnchor anchor = Text.Anchor;
             Color color = GUI.color;
@@ -147,106 +153,28 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Text.Anchor = anchor;
             GUI.color = color;
 
-            Rect line = new Rect(rect.x, rect.y + 20f, rect.width, 15f);
-
-            float x = line.x;
-
-            if (MechFacts.IsWorkMech(mech))
-                x = Priorities(line, x, mech, palette, prioritiesLive, emphasis);
-
-            Trailing(new Rect(x, line.y, Mathf.Max(0f, line.xMax - x), line.height), mech, palette,
-                x > line.x);
-        }
-
-        /// <summary>Up to two priority chips, then a count of the rest. Returns the x it ends at.</summary>
-        private static float Priorities(Rect line, float x, Pawn mech, UIColorPaletteDef palette,
-            bool prioritiesLive, WorkTypeDef emphasis)
-        {
-            Order(mech, emphasis);
-
-            int drawn = 0;
-
-            for (int i = 0; i < ordered.Count && drawn < Chips; i++)
-            {
-                WorkTypeDef work = ordered[i];
-                int priority = MechFacts.PriorityOf(mech, work);
-
-                string text = MechFacts.Abbreviate(work) + " " + priority;
-                float width = TabParts.PillWidth(text, 9999f, MechsFaces.Mono, MechsFaces.Size.Caption);
-
-                if (x + width > line.xMax - 18f)
-                    break;
-
-                Color tint = priority <= 0 ? palette.TextDisabled : WorkPanel.ColorOfPriority(priority, palette);
-
-                if (!prioritiesLive)
-                    tint = new Color(tint.r, tint.g, tint.b, 0.4f);
-
-                TabParts.Pill(line, x, line.y, text, tint, palette, 9999f, null, MechsFaces.Mono,
-                    MechsFaces.Size.Caption);
-
-                x += width + 3f;
-                drawn++;
-            }
-
-            if (drawn < ordered.Count)
-            {
-                string more = "+" + (ordered.Count - drawn);
-                float width = TabParts.PillWidth(more, 9999f, MechsFaces.Mono, MechsFaces.Size.Caption);
-
-                if (x + width <= line.xMax)
-                {
-                    TabParts.Pill(line, x, line.y, more, palette.TextDisabled, palette, 9999f, null,
-                        MechsFaces.Mono, MechsFaces.Size.Caption);
-
-                    x += width + 3f;
-                }
-            }
-
-            return x;
+            Trailing(new Rect(rect.x, rect.y + 20f, rect.width, 15f), mech, palette);
         }
 
         /// <summary>
-        /// The mech's work types, most urgent first.
+        /// The second line: what kind of mech this is, and the group's own name for it.
         ///
-        /// Priority 0 means switched off and sorts last rather than first, so the two chips a row has room
-        /// for are the two things this mech actually does. In the by-work view the work type whose card this
-        /// is comes first whatever its number, since that is the column the reader is scanning.
+        /// <b>No work types here, and there were.</b> The row used to carry them as four letter chips, which
+        /// is the one thing the pawns tab's card grid was built to avoid: its <c>MinCardWidth</c> is sized
+        /// for the longest work label precisely so a name is never cut, and abbreviating "Hauling" to HAUL
+        /// is that fault taken further. A mech's priorities are read in the detail pane, on the same cards
+        /// with the same full names the pawns tab uses, and compared across mechs in the by work view.
         /// </summary>
-        private static void Order(Pawn mech, WorkTypeDef emphasis)
-        {
-            ordered.Clear();
-
-            List<WorkTypeDef> works = MechFacts.WorkTypes(mech);
-
-            if (works == null)
-                return;
-
-            ordered.AddRange(works);
-
-            ordered.SortBy(work =>
-            {
-                if (work == emphasis)
-                    return -1;
-
-                int priority = MechFacts.PriorityOf(mech, work);
-
-                return priority <= 0 ? 999 : priority;
-            });
-        }
-
-        /// <summary>The weight class, or the group's tag for this mech when it has one.</summary>
-        private static void Trailing(Rect rect, Pawn mech, UIColorPaletteDef palette, bool afterChips)
+        private static void Trailing(Rect rect, Pawn mech, UIColorPaletteDef palette)
         {
             if (rect.width < 20f)
                 return;
 
-            string tag = MechFacts.Tag(mech);
             string weight = MechFacts.WeightClass(mech);
+            string tag = MechFacts.Tag(mech);
 
-            string text = tag.NullOrEmpty()
-                ? (afterChips ? weight : weight + (MechFacts.IsWorkMech(mech) ? string.Empty : "  -  combat"))
-                : tag;
+            string text = weight + (MechFacts.IsWorkMech(mech) ? string.Empty : "  -  combat")
+                                 + (tag.NullOrEmpty() ? string.Empty : "  -  " + tag);
 
             if (text.NullOrEmpty())
                 return;
@@ -257,8 +185,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             Text.Anchor = TextAnchor.MiddleLeft;
             GUI.color = palette.TextDisabled;
 
-            UITextControl.LabelEllipses(new Rect(rect.x + (afterChips ? 3f : 0f), rect.y, rect.width, rect.height),
-                text, MechsFaces.Mono, MechsFaces.Size.Figure);
+            UITextControl.LabelEllipses(rect, text, MechsFaces.Mono, MechsFaces.Size.Figure);
 
             Text.Anchor = anchor;
             GUI.color = color;
@@ -267,6 +194,61 @@ namespace Gideon.UIOverhaul.Features.Mechs
         // -------------------------------------------------------------------------------------------
         // Figures and controls
         // -------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// One editable priority, for the work type a by work card is about. Returns the x it ends at.
+        ///
+        /// The same range, the same wrap and the same buttons as the detail pane and the pawns tab: left
+        /// click raises, right click lowers, and the circuit passes through 0 for off.
+        /// </summary>
+        private static float PriorityBox(Rect box, Pawn mech, WorkTypeDef work, UIColorPaletteDef palette,
+            bool live)
+        {
+            int priority = MechFacts.PriorityOf(mech, work);
+            bool over = Mouse.IsOver(box);
+
+            UIElementPainter.OutlineRounded(box, palette.Border,
+                priority == 0 ? palette.SurfaceRaised : palette.SurfaceSunken);
+
+            if (over)
+                Widgets.DrawBoxSolid(box, palette.HoverOverlay);
+
+            TextAnchor anchor = Text.Anchor;
+            Color color = GUI.color;
+
+            Color tint = priority <= 0 ? palette.TextDisabled : WorkPanel.ColorOfPriority(priority, palette);
+
+            Text.Anchor = TextAnchor.MiddleCenter;
+            GUI.color = live ? tint : new Color(tint.r, tint.g, tint.b, 0.45f);
+
+            UITextControl.Label(box, priority.ToString(), MechsFaces.Mono, MechsFaces.Size.Priority);
+
+            Text.Anchor = anchor;
+            GUI.color = color;
+
+            TooltipHandler.TipRegion(box, (TipSignal) (WorkPanel.LabelOf(work)
+                + "\n\nLeft click raises the priority, right click lowers it."
+                + (live
+                    ? string.Empty
+                    : "\n\nIdle right now: this mech's group is not in work mode.")));
+
+            if (over && Event.current.type == EventType.MouseDown)
+            {
+                int next = priority + (Event.current.button == 1 ? -1 : 1);
+
+                if (next > WorkPriorityRange.Lowest)
+                    next = 0;
+                else if (next < 0)
+                    next = WorkPriorityRange.Lowest;
+
+                MechFacts.SetPriority(mech, work, next);
+
+                SoundDefOf.Tick_High.PlayOneShotOnCamera();
+                Event.current.Use();
+            }
+
+            return box.xMax + 10f;
+        }
 
         private static void Figure(Rect rect, string text, Color color)
         {

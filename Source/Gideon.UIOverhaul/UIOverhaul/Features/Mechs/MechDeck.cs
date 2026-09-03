@@ -576,7 +576,7 @@ namespace Gideon.UIOverhaul.Features.Mechs
             float x = rect.x + 10f + MechsPanel.Portrait + 10f;
 
             UITextControl.Label(new Rect(x, rect.y, MechsPanel.Name, rect.height),
-                "MECH AND WORK PRIORITIES", MechsFaces.Mono, MechsFaces.Size.Caption);
+                "MECH", MechsFaces.Mono, MechsFaces.Size.Caption);
 
             x += MechsPanel.Name + 10f;
 
